@@ -3,12 +3,12 @@ import { calculateAnnuityPayment, calculateInterest, compareScenarios, generateB
 import type { EarlyRepayment, GracePeriod, LoanConfig } from './types'
 
 const config: LoanConfig = {
-  principal: 3_000_000, annualRate: 12, issueDate: '2024-01-01', firstPaymentDate: '2024-02-15', termMonths: 120,
+  principal: 3_000_000, annualRate: 12, issueDate: '2024-01-01', firstPaymentDate: '2024-02-15', firstPaymentInterestOnly: false, termMonths: 120,
   paymentDay: 15, paymentType: 'annuity', frequency: 'monthly', currency: 'RUB', rounding: 'kopecks', closeThreshold: 300,
   oneTimeFee: 0, monthlyFee: 0, earlyRepaymentFeePercent: 0,
   interest: { method: 'annuity', dayCountBasis: 'actualActual', includePaymentDate: false, balanceMoment: 'startOfDay' }
 }
-const early = (patch: Partial<EarlyRepayment> = {}): EarlyRepayment => ({ id: 'e1', date: '2024-08-15', amount: 300_000, strategy: 'reduceTerm', source: 'own', sameDayOrder: 'regularFirst', interestFirst: true, ...patch })
+const early = (patch: Partial<EarlyRepayment> = {}): EarlyRepayment => ({ id: 'e1', date: '2024-08-15', amount: 300_000, amountMode: 'extra', strategy: 'reduceTerm', source: 'own', sameDayOrder: 'regularFirst', interestFirst: true, ...patch })
 
 describe('loan engine', () => {
   it('рассчитывает аннуитетный платёж', () => expect(calculateAnnuityPayment(1_000_000, 12, 12).toNumber()).toBeCloseTo(88848.79, 2))
@@ -16,7 +16,14 @@ describe('loan engine', () => {
   it('сокращает срок при досрочном платеже', () => { const base=generateBaseSchedule(config); const s=generateBaseSchedule(config,{earlyRepayments:[early()]}); expect(s.length).toBeLessThan(base.length) })
   it('уменьшает платёж при сохранении срока', () => { const s=generateBaseSchedule(config,{earlyRepayments:[early({strategy:'reducePayment'})]}); expect(s[7].payment).toBeLessThan(s[0].payment); expect(s.length).toBeGreaterThan(100) })
   it('применяет досрочный платёж в дату регулярного', () => { const s=generateBaseSchedule(config,{earlyRepayments:[early()]}); expect(s.find(x=>x.date==='2024-08-15')?.earlyPayment).toBe(300000) })
-  it('применяет досрочный платёж между датами', () => { const s=generateBaseSchedule(config,{earlyRepayments:[early({date:'2024-08-02'})]}); expect(s.find(x=>x.date==='2024-08-15')?.event).toContain('срока') })
+  it('применяет досрочный платёж между датами', () => { const s=generateBaseSchedule(config,{earlyRepayments:[early({date:'2024-08-02'})]}); expect(s.find(x=>x.date==='2024-08-02')?.event).toContain('срока') })
+  it('выводит досрочный платёж отдельной строкой в фактическую дату', () => {
+    const s=generateBaseSchedule(config,{earlyRepayments:[early({date:'2024-08-02'})]})
+    const row=s.find(x=>x.date==='2024-08-02')
+    expect(row?.earlyPayment).toBe(300000)
+    expect(row?.days).toBeGreaterThan(0)
+    expect(s.find(x=>x.date==='2024-08-15')!.days).toBe(13)
+  })
   it('поддерживает несколько досрочных платежей', () => { const s=generateBaseSchedule(config,{earlyRepayments:[early(),early({id:'e2',date:'2025-02-15',amount:200000})]}); expect(s.reduce((a,x)=>a+x.earlyPayment,0)).toBe(500000) })
   it('учитывает льготный период', () => { const grace:GracePeriod={id:'g',startDate:'2024-03-01',endDate:'2024-04-30',type:'interestOnly',extendTerm:true,accrueInterest:true,capitalizeInterest:false}; const s=generateBaseSchedule(config,{gracePeriods:[grace]}); expect(s[1].principal).toBe(0); expect(s[1].event).toContain('проценты') })
   it('работает с нулевой ставкой', () => { const s=generateBaseSchedule({...config,annualRate:0}); expect(s[0].interest).toBe(0); expect(s[0].payment).toBe(25000) })
@@ -38,6 +45,43 @@ describe('loan engine', () => {
     const earlier=generateBaseSchedule(daily,{earlyRepayments:[early({date:'2024-03-01'})]})
     const later=generateBaseSchedule(daily,{earlyRepayments:[early({date:'2024-03-14'})]})
     expect(earlier.reduce((s,x)=>s+x.interest,0)).toBeLessThan(later.reduce((s,x)=>s+x.interest,0))
+  })
+
+  it('совпадает с банковским графиком после всех досрочных платежей', () => {
+    const bank:LoanConfig={...config,principal:5917734,annualRate:6,issueDate:'2025-11-26',firstPaymentDate:'2025-12-26',firstPaymentInterestOnly:true,termMonths:360,paymentDay:26,interest:{...config.interest,method:'daily',dayCountBasis:'actual365'}}
+    const bankEarly:EarlyRepayment[] = [
+      early({id:'b1',date:'2025-11-28',amount:35480}),
+      early({id:'b2',date:'2026-01-26',amount:44184.80,amountMode:'total'}),
+      early({id:'b3',date:'2026-02-26',amount:71008.67,amountMode:'total'}),
+      early({id:'b4',date:'2026-03-27',amount:12342.60}),
+      early({id:'b5',date:'2026-04-26',amount:53350.43,amountMode:'total'}),
+      early({id:'b6',date:'2026-05-26',amount:75182.14,amountMode:'total'})
+    ]
+    const s=generateBaseSchedule(bank,{earlyRepayments:bankEarly})
+    const expected = [
+      ['2025-11-28',33534.44,1945.56,35480.00,5884199.56],
+      ['2025-12-26',0.00,27083.44,27083.44,5884199.56],
+      ['2026-01-26',14199.56,29985.24,44184.80,5870000.00],
+      ['2026-02-26',41095.79,29912.88,71008.67,5828904.21],
+      ['2026-03-26',8650.88,26828.93,35479.81,5820253.33],
+      ['2026-03-27',11385.85,956.75,12342.60,5808867.48],
+      ['2026-04-26',24703.96,28646.47,53350.43,5784163.52],
+      ['2026-05-26',46657.50,28524.64,75182.14,5737506.02],
+      ['2026-06-26',6242.11,29237.70,35479.81,5731263.91],
+      ['2026-07-26',7216.04,28263.77,35479.81,5724047.87],
+      ['2026-08-26',6310.69,29169.12,35479.81,5717737.18],
+      ['2026-09-26',6342.85,29136.96,35479.81,5711394.33],
+      ['2026-10-26',7314.03,28165.78,35479.81,5704080.30],
+      ['2026-11-26',6412.44,29067.37,35479.81,5697667.86],
+      ['2026-12-26',7381.72,28098.09,35479.81,5690286.14]
+    ] as const
+    expected.forEach(([date,principal,interest,total,closing],index) => {
+      expect(s[index].date).toBe(date)
+      expect(s[index].principal).toBe(principal)
+      expect(s[index].interest).toBe(interest)
+      expect(s[index].payment + s[index].earlyPayment).toBeCloseTo(total,2)
+      expect(s[index].closingBalance).toBe(closing)
+    })
   })
 
   it('учитывает порядок операций в дату регулярного платежа', () => {

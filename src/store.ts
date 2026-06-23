@@ -3,7 +3,7 @@ import { persist } from 'zustand/middleware'
 import type { EarlyRepayment, GracePeriod, LoanConfig } from './loanEngine'
 
 export const defaultConfig: LoanConfig = {
-  principal: 7200000, annualRate: 12.4, issueDate: '2026-06-23', firstPaymentDate: '2026-07-15', termMonths: 240,
+  principal: 7200000, annualRate: 12.4, issueDate: '2026-06-23', firstPaymentDate: '2026-07-15', firstPaymentInterestOnly: true, termMonths: 240,
   paymentDay: 15, paymentType: 'annuity', frequency: 'monthly', currency: 'RUB', rounding: 'kopecks', closeThreshold: 300,
   oneTimeFee: 0, monthlyFee: 0, earlyRepaymentFeePercent: 0,
   interest: { method: 'daily', dayCountBasis: 'actualActual', includePaymentDate: false, balanceMoment: 'startOfDay' }
@@ -31,7 +31,7 @@ interface LoanState {
 
 export const useLoanStore = create<LoanState>()(persist((set) => ({
   config: defaultConfig,
-  repayments: [{ id: 'seed-1', date: '2027-01-15', amount: 350000, strategy: 'reduceTerm', source: 'own', sameDayOrder: 'regularFirst', interestFirst: true, comment: 'Годовой бонус' }],
+  repayments: [{ id: 'seed-1', date: '2027-01-15', amount: 350000, amountMode: 'extra', strategy: 'reduceTerm', source: 'own', sameDayOrder: 'regularFirst', interestFirst: true, comment: 'Годовой бонус' }],
   gracePeriods: [], selectedScenario: 'reduceTerm', termUnit: 'months', displayDecimals: 2, theme: 'emerald',
   updateConfig: (patch) => set(s => ({ config: { ...s.config, ...patch } })),
   updateInterest: (patch) => set(s => ({ config: { ...s.config, interest: { ...s.config.interest, ...patch } } })),

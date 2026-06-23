@@ -17,6 +17,7 @@ export interface LoanConfig {
   annualRate: number
   issueDate: string
   firstPaymentDate: string
+  firstPaymentInterestOnly: boolean
   termMonths: number
   paymentDay: number
   paymentType: PaymentType
@@ -34,6 +35,7 @@ export interface EarlyRepayment {
   id: string
   date: string
   amount: number
+  amountMode?: 'extra' | 'total'
   strategy: RepaymentStrategy
   source: EarlySource
   sameDayOrder: 'regularFirst' | 'earlyFirst'
