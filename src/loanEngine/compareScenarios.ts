@@ -9,8 +9,9 @@ function toResult(id: string, name: string, strategy: ScenarioResult['strategy']
   const closingDate = last?.date ?? config.issueDate
   let recalculationIndex = -1
   schedule.forEach((row, index) => { if (row.event.includes('уменьшение платежа')) recalculationIndex = index })
-  const paymentAfterRecalculation = recalculationIndex >= 0 ? schedule.slice(recalculationIndex + 1).find(x => x.payment > 0)?.payment : undefined
-  const monthlyPayment = paymentAfterRecalculation ?? schedule.find(x => x.payment > 0)?.payment ?? 0
+  const isRegularPayment = (row: (typeof schedule)[number]) => row.payment > 0 && !row.event.includes('Первый платёж · только проценты') && !row.event.includes('Льготный период')
+  const paymentAfterRecalculation = recalculationIndex >= 0 ? schedule.slice(recalculationIndex + 1).find(isRegularPayment)?.payment : undefined
+  const monthlyPayment = paymentAfterRecalculation ?? schedule.find(isRegularPayment)?.payment ?? schedule.find(x => x.payment > 0)?.payment ?? 0
   const termMonths = Math.max(0, differenceInCalendarMonths(parseISO(closingDate), parseISO(config.issueDate)))
   return { id, name, strategy, schedule, monthlyPayment, totalPaid, totalInterest, overpayment: Math.max(0, totalPaid - config.principal), closingDate, termMonths, interestSavings: base ? base.totalInterest - totalInterest : 0, monthsSaved: base ? Math.max(0, differenceInCalendarMonths(parseISO(base.closingDate), parseISO(closingDate))) : 0 }
 }

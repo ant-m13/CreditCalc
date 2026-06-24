@@ -86,6 +86,14 @@ describe('loan engine', () => {
     })
   })
 
+  it('не принимает первый платёж только по процентам за обычный ежемесячный платёж', () => {
+    const bank:LoanConfig={...config,principal:5917734,annualRate:6,issueDate:'2025-11-26',firstPaymentDate:'2025-12-26',firstPaymentInterestOnly:true,termMonths:360,paymentDay:26,interest:{...config.interest,method:'daily',dayCountBasis:'actualActual'}}
+    const bankEarly:EarlyRepayment[]=[early({id:'b1',date:'2025-11-28',amount:35480,amountMode:'total'}),early({id:'b2',date:'2026-01-26',amount:8704.99})]
+    const result=compareScenarios(bank,bankEarly).scenarios.find(s=>s.id==='reduceTerm')!
+    expect(result.schedule.find(row=>row.date==='2025-12-26')?.payment).toBe(27083.44)
+    expect(result.monthlyPayment).toBe(35479.81)
+  })
+
   it('учитывает порядок операций в дату регулярного платежа', () => {
     const earlyFirst=generateBaseSchedule(config,{earlyRepayments:[early({date:'2024-08-15',strategy:'reducePayment',sameDayOrder:'earlyFirst'})]})
     const regularFirst=generateBaseSchedule(config,{earlyRepayments:[early({date:'2024-08-15',strategy:'reducePayment',sameDayOrder:'regularFirst'})]})
