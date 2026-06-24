@@ -1,0 +1,55 @@
+import type { EarlyRepayment, GracePeriod, LoanConfig } from './loanEngine'
+import { defaultConfig } from './store'
+
+export interface LoanBackupData {
+  config: LoanConfig
+  repayments: EarlyRepayment[]
+  gracePeriods: GracePeriod[]
+  selectedScenario: string
+  termUnit: 'months' | 'years'
+  displayDecimals: 0 | 2
+  theme: 'emerald' | 'ocean' | 'violet' | 'graphite'
+}
+
+const isObject = (value: unknown): value is Record<string, unknown> => Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+const isDate = (value: unknown): value is string => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(Date.parse(`${value}T00:00:00`))
+const oneOf = <T extends string>(value: unknown, values: readonly T[]): value is T => typeof value === 'string' && values.includes(value as T)
+const finite = (value: unknown, minimum = 0) => typeof value === 'number' && Number.isFinite(value) && value >= minimum
+
+export function parseLoanBackup(text: string): LoanBackupData {
+  let raw: unknown
+  try { raw = JSON.parse(text) } catch { throw new Error('Файл не является корректным JSON') }
+  if (!isObject(raw) || !isObject(raw.config)) throw new Error('В файле отсутствуют параметры кредита')
+
+  const source = raw.config
+  const interest = isObject(source.interest) ? source.interest : {}
+  const config = { ...defaultConfig, ...source, interest: { ...defaultConfig.interest, ...interest } } as LoanConfig
+  if (!finite(config.principal) || !finite(config.annualRate) || !finite(config.termMonths, 1) || !finite(config.paymentDay, 1) || config.paymentDay > 31) throw new Error('Параметры кредита содержат недопустимые числа')
+  if (!isDate(config.issueDate) || !isDate(config.firstPaymentDate)) throw new Error('Проверьте даты выдачи и первого платежа')
+  if (!oneOf(config.paymentType, ['annuity', 'differentiated']) || !oneOf(config.frequency, ['monthly', 'biweekly', 'quarterly']) || !oneOf(config.rounding, ['kopecks', 'rubles', 'bank'])) throw new Error('Файл содержит неизвестный тип расчёта')
+  if (!oneOf(config.interest.method, ['annuity', 'daily']) || !oneOf(config.interest.dayCountBasis, ['365', '366', '360', 'actual365', 'actualActual']) || !oneOf(config.interest.balanceMoment, ['startOfDay', 'endOfDay'])) throw new Error('Файл содержит неизвестное правило начисления процентов')
+
+  const repaymentsRaw = raw.repayments ?? []
+  if (!Array.isArray(repaymentsRaw)) throw new Error('Список досрочных платежей повреждён')
+  const repayments = repaymentsRaw.map((item, index) => {
+    if (!isObject(item) || typeof item.id !== 'string' || !isDate(item.date) || !finite(item.amount) || !oneOf(item.strategy, ['reduceTerm', 'reducePayment', 'full', 'custom']) || !oneOf(item.source, ['own', 'subsidy', 'insurance', 'other']) || !oneOf(item.sameDayOrder, ['regularFirst', 'earlyFirst']) || typeof item.interestFirst !== 'boolean') throw new Error(`Ошибка в досрочном платеже №${index + 1}`)
+    if (item.amountMode !== undefined && !oneOf(item.amountMode, ['extra', 'total'])) throw new Error(`Ошибка в досрочном платеже №${index + 1}`)
+    return item as unknown as EarlyRepayment
+  })
+
+  const graceRaw = raw.gracePeriods ?? []
+  if (!Array.isArray(graceRaw)) throw new Error('Список льготных периодов повреждён')
+  const gracePeriods = graceRaw.map((item, index) => {
+    if (!isObject(item) || typeof item.id !== 'string' || !isDate(item.startDate) || !isDate(item.endDate) || !oneOf(item.type, ['full', 'interestOnly', 'reduced', 'custom']) || typeof item.extendTerm !== 'boolean' || typeof item.accrueInterest !== 'boolean' || typeof item.capitalizeInterest !== 'boolean') throw new Error(`Ошибка в льготном периоде №${index + 1}`)
+    if (item.paymentAmount !== undefined && !finite(item.paymentAmount)) throw new Error(`Ошибка в льготном периоде №${index + 1}`)
+    return item as unknown as GracePeriod
+  })
+
+  const settings = isObject(raw.settings) ? raw.settings : raw
+  const scenarioFromLegacyExport = isObject(raw.scenario) && typeof raw.scenario.id === 'string' ? raw.scenario.id : undefined
+  const selectedScenario = typeof raw.selectedScenario === 'string' ? raw.selectedScenario : scenarioFromLegacyExport ?? 'reduceTerm'
+  const termUnit = oneOf(settings.termUnit, ['months', 'years']) ? settings.termUnit : 'months'
+  const displayDecimals = settings.displayDecimals === 0 ? 0 : 2
+  const theme = oneOf(settings.theme, ['emerald', 'ocean', 'violet', 'graphite']) ? settings.theme : 'emerald'
+  return { config, repayments, gracePeriods, selectedScenario, termUnit, displayDecimals, theme }
+}

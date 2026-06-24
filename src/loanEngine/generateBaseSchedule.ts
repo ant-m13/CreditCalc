@@ -39,8 +39,23 @@ export function generateBaseSchedule(config: LoanConfig, options: Options = {}):
   let cumulativeInterest = new Decimal(0)
   let deferredInterest = new Decimal(0)
   let repaymentIndex = 0
-  let rowNumber = 0
-  const schedule: PaymentScheduleItem[] = []
+  let rowNumber = 1
+  const schedule: PaymentScheduleItem[] = [{
+    number: 1,
+    date: config.issueDate,
+    days: 0,
+    openingBalance: num(balance, config.rounding),
+    payment: 0,
+    interest: 0,
+    principal: 0,
+    earlyPayment: 0,
+    closingBalance: num(balance, config.rounding),
+    cumulativeInterest: 0,
+    cumulativeSavings: 0,
+    fee: 0,
+    comment: '',
+    event: 'Выдача кредита'
+  }]
 
   const eventLabel = (strategy: RepaymentStrategy, fullyClosed: boolean) => strategy === 'reduceTerm'
     ? 'Пересчёт · сокращение срока'

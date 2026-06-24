@@ -20,6 +20,7 @@ interface LoanState {
   updateConfig: (patch: Partial<LoanConfig>) => void
   updateInterest: (patch: Partial<LoanConfig['interest']>) => void
   addRepayment: (repayment: EarlyRepayment) => void
+  updateRepayment: (repayment: EarlyRepayment) => void
   removeRepayment: (id: string) => void
   addGrace: (grace: GracePeriod) => void
   removeGrace: (id: string) => void
@@ -27,6 +28,7 @@ interface LoanState {
   setTermUnit: (unit: 'months' | 'years') => void
   setDisplayDecimals: (value: 0 | 2) => void
   setTheme: (theme: LoanState['theme']) => void
+  replaceData: (data: Pick<LoanState, 'config' | 'repayments' | 'gracePeriods' | 'selectedScenario' | 'termUnit' | 'displayDecimals' | 'theme'>) => void
 }
 
 export const useLoanStore = create<LoanState>()(persist((set) => ({
@@ -36,11 +38,24 @@ export const useLoanStore = create<LoanState>()(persist((set) => ({
   updateConfig: (patch) => set(s => ({ config: { ...s.config, ...patch } })),
   updateInterest: (patch) => set(s => ({ config: { ...s.config, interest: { ...s.config.interest, ...patch } } })),
   addRepayment: (repayment) => set(s => ({ repayments: [...s.repayments, repayment] })),
+  updateRepayment: (repayment) => set(s => ({ repayments: s.repayments.map(item => item.id === repayment.id ? repayment : item) })),
   removeRepayment: (id) => set(s => ({ repayments: s.repayments.filter(r => r.id !== id) })),
   addGrace: (grace) => set(s => ({ gracePeriods: [...s.gracePeriods, grace] })),
   removeGrace: (id) => set(s => ({ gracePeriods: s.gracePeriods.filter(g => g.id !== id) })),
   selectScenario: (id) => set({ selectedScenario: id }),
   setTermUnit: (termUnit) => set({ termUnit }),
   setDisplayDecimals: (displayDecimals) => set({ displayDecimals }),
-  setTheme: (theme) => set({ theme })
-}), { name: 'ipoteka-calculator-v1' }))
+  setTheme: (theme) => set({ theme }),
+  replaceData: (data) => set(data)
+}), {
+  name: 'ipoteka-calculator-v1',
+  version: 2,
+  migrate: (persisted) => {
+    const state = persisted as Partial<LoanState>
+    return {
+      ...state,
+      config: { ...defaultConfig, ...state.config, firstPaymentInterestOnly: true },
+      repayments: state.repayments ?? []
+    }
+  }
+}))
