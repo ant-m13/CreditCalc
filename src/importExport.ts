@@ -8,6 +8,8 @@ export interface LoanBackupData {
   selectedScenario: string
   termUnit: 'months' | 'years'
   displayDecimals: 0 | 2
+  appFontSize?: 'normal' | 'large' | 'xlarge'
+  scheduleFontSize?: 'normal' | 'large' | 'xlarge'
   theme: 'emerald' | 'ocean' | 'violet' | 'graphite'
 }
 
@@ -50,6 +52,8 @@ export function parseLoanBackup(text: string): LoanBackupData {
   const selectedScenario = typeof raw.selectedScenario === 'string' ? raw.selectedScenario : scenarioFromLegacyExport ?? 'reduceTerm'
   const termUnit = oneOf(settings.termUnit, ['months', 'years']) ? settings.termUnit : 'months'
   const displayDecimals = settings.displayDecimals === 0 ? 0 : 2
+  const appFontSize = oneOf(settings.appFontSize, ['normal', 'large', 'xlarge']) ? settings.appFontSize : 'normal'
+  const scheduleFontSize = oneOf(settings.scheduleFontSize, ['normal', 'large', 'xlarge']) ? settings.scheduleFontSize : 'large'
   const theme = oneOf(settings.theme, ['emerald', 'ocean', 'violet', 'graphite']) ? settings.theme : 'emerald'
-  return { config, repayments, gracePeriods, selectedScenario, termUnit, displayDecimals, theme }
+  return { config, repayments, gracePeriods, selectedScenario, termUnit, displayDecimals, appFontSize, scheduleFontSize, theme }
 }

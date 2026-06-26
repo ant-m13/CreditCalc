@@ -22,3 +22,15 @@
 .event{grid-template-columns:53px 1fr auto}.event-actions{display:flex;align-items:center;gap:2px}
 .bank-schedule th,.bank-schedule td{text-align:right}.bank-schedule th:first-child,.bank-schedule td:first-child{text-align:center}.bank-schedule th:nth-child(2),.bank-schedule td:nth-child(2){text-align:left}.bank-schedule th:last-child,.bank-schedule td:last-child{text-align:right}.bank-schedule thead tr:first-child th:nth-child(3){text-align:center}
 .file-input{display:none}.export-icon.import{background:#e4f4f7;color:#26778a}.import-status{margin-top:16px;padding:12px 14px;border-radius:9px;display:flex;align-items:center;gap:8px;font-size:10px}.import-status svg{width:16px}.import-status.success{background:#e4f6ef;color:#087458}.import-status.error{background:#fff0ee;color:#a54f42}
+
+/* Более читаемая главная и график */
+.app-shell[data-ui-font="large"] main{zoom:1.07}.app-shell[data-ui-font="xlarge"] main{zoom:1.14}
+.current-debt-grid{display:grid;grid-template-columns:1.35fr 1fr 1fr 1fr;gap:14px;margin:16px 0 28px}.current-debt{background:#f9fcfb;border:1px solid var(--line);border-radius:14px;padding:18px}.current-debt.main{background:linear-gradient(125deg,#f5fbf8,#e8f7f1);border-color:#cfe9e0}.current-debt span,.current-debt b,.current-debt small{display:block}.current-debt span{font-size:9px;text-transform:uppercase;letter-spacing:.1em;color:#738680;font-weight:800}.current-debt b{font-size:22px;letter-spacing:-.03em;margin:8px 0 5px}.current-debt.main b{font-size:28px;color:#0b755a}.current-debt small{font-size:9px;line-height:1.45;color:#74877f}.hero-ring span{max-width:92px;margin:auto;line-height:1.3}
+.schedule-head{gap:16px;align-items:flex-start}.schedule-tools{display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end}.schedule-tools input{width:190px;border:1px solid #d5e2de;background:white;border-radius:9px;padding:10px 11px;outline:none;color:#203630;font-size:12px}.schedule-tools input:focus{border-color:#0b9873;box-shadow:0 0 0 3px #0b987312}
+.bank-schedule tfoot td{position:sticky;bottom:0;background:#e8f5f0;color:#17352d;font-weight:800;border-top:2px solid #bfe2d6}.bank-schedule tr:target,.bank-schedule tr[id^="schedule-row-"]:target{outline:2px solid var(--green);outline-offset:-2px}
+.app-shell[data-schedule-font="normal"] .bank-schedule td{font-size:10px}.app-shell[data-schedule-font="normal"] .bank-schedule th{font-size:8px}
+.app-shell[data-schedule-font="large"] .bank-schedule td{font-size:12px;padding:13px 14px}.app-shell[data-schedule-font="large"] .bank-schedule th{font-size:9px;padding:12px 14px}
+.app-shell[data-schedule-font="xlarge"] .bank-schedule td{font-size:14px;padding:15px 16px}.app-shell[data-schedule-font="xlarge"] .bank-schedule th{font-size:10px;padding:14px 16px}
+
+@media(max-width:950px){.current-debt-grid{grid-template-columns:1fr 1fr}.schedule-head{display:block}.schedule-tools{justify-content:flex-start;margin-top:14px}.app-shell[data-ui-font="large"] main,.app-shell[data-ui-font="xlarge"] main{zoom:1}}
+@media(max-width:620px){.current-debt-grid{grid-template-columns:1fr}.schedule-tools input{width:100%}.schedule-tools .ghost{flex:1}}
