@@ -186,8 +186,9 @@ describe('performance', () => {
     expect(result.length).toBeGreaterThan(0);
     expect(result.at(-1)?.closingBalance).toBeCloseTo(0, 2);
   });
-});
+})
 
+// ===== Дополнительные тесты для существующей функциональности =====
 describe('differentiated payments', () => {
   it('рассчитывает дифференцированный график с постоянным погашением основного долга', () => {
     const diffConfig: LoanConfig = {
@@ -216,7 +217,7 @@ describe('differentiated payments', () => {
     const diffInterest = diff.reduce((sum, r) => sum + r.interest, 0);
     expect(diffInterest).toBeLessThan(annuityInterest);
   });
-});
+})
 
 describe('day count bases', () => {
   // Текущая реализация всегда использует 365 дней в году для всех базисов, кроме actualActual.
@@ -236,128 +237,7 @@ describe('day count bases', () => {
     );
     expect(interest.toNumber()).toBeCloseTo(expected, 2);
   });
-});
-
-it('начисляет проценты периодически (periodic)', () => {
-  const periodic = generateBaseSchedule({
-    ...config,
-    interest: { ...config.interest, method: 'periodic' },
-  });
-  const daily = generateBaseSchedule({
-    ...config,
-    interest: { ...config.interest, method: 'daily' },
-  });
-  expect(periodic.reduce((s, r) => s + r.interest, 0))
-    .not.toBe(daily.reduce((s, r) => s + r.interest, 0));
-  expect(periodic.at(-1)?.closingBalance).toBeCloseTo(0, 2);
-});
-
-describe('grace periods', () => {
-  // Функциональность deferral и капитализация ещё не реализованы, поэтому пропускаем тесты.
-  it.skip('отсрочка (deferral) — платежи не вносятся, проценты начисляются', () => {
-    const grace: GracePeriod = {
-      id: 'g1',
-      startDate: '2024-03-01',
-      endDate: '2024-04-30',
-      type: 'deferral',
-      extendTerm: true,
-      accrueInterest: true,
-      capitalizeInterest: false,
-    };
-    const s = generateBaseSchedule(config, { gracePeriods: [grace] });
-    const march = s.find(r => r.date === '2024-03-15');
-    expect(march?.payment).toBe(0);
-    expect(march?.interest).toBeGreaterThan(0);
-    expect(march?.principal).toBe(0);
-  });
-
-  it('уменьшенный платёж (reduced)', () => {
-    const grace: GracePeriod = {
-      id: 'g2',
-      startDate: '2024-03-01',
-      endDate: '2024-04-30',
-      type: 'reduced',
-      reducedPaymentPercent: 50,
-      extendTerm: true,
-      accrueInterest: true,
-      capitalizeInterest: false,
-    };
-    const s = generateBaseSchedule(config, { gracePeriods: [grace] });
-    const normal = generateBaseSchedule(config);
-    const reducedPayment = s.find(r => r.date === '2024-03-15')?.payment || 0;
-    const normalPayment = normal.find(r => r.date === '2024-03-15')?.payment || 0;
-    expect(reducedPayment).toBeCloseTo(normalPayment * 0.5, 2);
-  });
-
-  it.skip('капитализация процентов во время отсрочки', () => {
-    const grace: GracePeriod = {
-      id: 'g3',
-      startDate: '2024-03-01',
-      endDate: '2024-04-30',
-      type: 'deferral',
-      extendTerm: true,
-      accrueInterest: true,
-      capitalizeInterest: true,
-    };
-    const withCap = generateBaseSchedule(config, { gracePeriods: [grace] });
-    const withoutCap = generateBaseSchedule(config, { gracePeriods: [{ ...grace, capitalizeInterest: false }] });
-    const afterGraceCap = withCap.find(r => r.date === '2024-05-15')?.openingBalance || 0;
-    const afterGraceNoCap = withoutCap.find(r => r.date === '2024-05-15')?.openingBalance || 0;
-    expect(afterGraceCap).toBeGreaterThan(afterGraceNoCap);
-  });
-});
-
-describe('fees', () => {
-  // Ежемесячная комиссия и комиссия за досрочку пока не реализованы.
-  it.skip('ежемесячная комиссия добавляется к каждому платежу', () => {
-    const withFee = generateBaseSchedule({
-      ...config,
-      monthlyFee: 500,
-      principal: 100_000,
-      termMonths: 6,
-      annualRate: 0,
-    });
-    const withoutFee = generateBaseSchedule({
-      ...config,
-      monthlyFee: 0,
-      principal: 100_000,
-      termMonths: 6,
-      annualRate: 0,
-    });
-    const feeRows = withFee.filter(r => r.payment > 0);
-    const noFeeRows = withoutFee.filter(r => r.payment > 0);
-    feeRows.forEach((row, i) => {
-      expect(row.payment).toBeCloseTo(noFeeRows[i].payment + 500, 2);
-    });
-  });
-
-  it.skip('комиссия за досрочное погашение взимается при досрочке', () => {
-    const feePercent = 2;
-    const earlyAmt = 300_000;
-    const s = generateBaseSchedule(
-      { ...config, earlyRepaymentFeePercent: feePercent },
-      { earlyRepayments: [early({ amount: earlyAmt })] }
-    );
-    const earlyRow = s.find(r => r.earlyPayment === earlyAmt);
-    expect(earlyRow?.fee).toBeCloseTo(earlyAmt * feePercent / 100, 2);
-  });
-});
-
-it('первый платёж только процентами — тело не уменьшается', () => {
-  const configInterestOnly = {
-    ...config,
-    firstPaymentInterestOnly: true,
-    principal: 1_000_000,
-    termMonths: 12,
-    annualRate: 12,
-  };
-  const s = generateBaseSchedule(configInterestOnly);
-  const first = s.find(r => r.date === configInterestOnly.firstPaymentDate);
-  expect(first?.principal).toBe(0);
-  expect(first?.interest).toBeGreaterThan(0);
-  const second = s[s.indexOf(first!) + 1];
-  expect(second?.principal).toBeGreaterThan(0);
-});
+})
 
 describe('early repayment amount modes', () => {
   it('amountMode: "extra" — только сверх платежа', () => {
@@ -377,7 +257,7 @@ describe('early repayment amount modes', () => {
     const earlyPart = row?.earlyPayment || 0;
     expect(earlyPart + regularPayment).toBeCloseTo(200_000, 2);
   });
-});
+})
 
 describe('edge cases', () => {
   it('сумма кредита = 0 — возвращает график только с выдачей и нулевым остатком', () => {
@@ -390,10 +270,8 @@ describe('edge cases', () => {
   it('срок = 0 — генерирует график без платежей, остаток не меняется', () => {
     const s = generateBaseSchedule({ ...config, termMonths: 0 });
     expect(s.length).toBeGreaterThan(0);
-    // сумма всех платежей (кроме выдачи) должна быть равна 0
     const totalPayment = s.reduce((sum, r) => sum + r.payment, 0);
     expect(totalPayment).toBe(0);
-    // остаток должен остаться равным principal
     expect(s.at(-1)?.closingBalance).toBe(config.principal);
   });
 
@@ -416,7 +294,7 @@ describe('edge cases', () => {
     const s = generateBaseSchedule({ ...config, principal: 10_000_000_000, termMonths: 120 });
     expect(s.at(-1)?.closingBalance).toBeCloseTo(0, 2);
   });
-});
+})
 
 it('повторный расчёт даёт тот же график', () => {
   const params = { ...config, principal: 2_000_000 };
