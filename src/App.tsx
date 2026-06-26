@@ -1,20 +1,14 @@
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
-import { Area, AreaChart, Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
+import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { addMonths, format, parseISO } from 'date-fns'
 import { ru } from 'date-fns/locale'
-import { ArrowDownToLine, CalendarDays, Check, ChevronDown, CircleHelp, Clock3, FileJson, Landmark, Menu, Pencil, Plus, Printer, ReceiptText, Settings2, ShieldCheck, Sparkles, Target, Trash2, TrendingDown, Upload, WalletCards, X } from 'lucide-react'
+import { ArrowDownToLine, CalendarDays, Check, CircleHelp, Clock3, FileJson, Landmark, Menu, Pencil, Plus, Printer, ReceiptText, Settings2, ShieldCheck, Sparkles, Target, Trash2, TrendingDown, Upload, WalletCards, X } from 'lucide-react'
 import { calculateInterest, compareScenarios, validateScenario, type EarlyRepayment, type GracePeriod, type LoanConfig, type PaymentScheduleItem } from './loanEngine'
 import { parseLoanBackup } from './importExport'
 import { useLoanStore } from './store'
-
-let currentMoneyDecimals: 0 | 2 = 2
-let currentCurrency = 'RUB'
-const money = (v: number, compact = false) => new Intl.NumberFormat('ru-RU', { style: 'currency', currency: currentCurrency, minimumFractionDigits: compact ? 0 : currentMoneyDecimals, maximumFractionDigits: compact ? 0 : currentMoneyDecimals, notation: compact ? 'compact' : 'standard' }).format(v)
-const currencySymbol = () => new Intl.NumberFormat('ru-RU', { style: 'currency', currency: currentCurrency }).formatToParts(0).find(part => part.type === 'currency')?.value ?? currentCurrency
-const shortDate = (s: string) => format(parseISO(s), 'dd MMM yyyy', { locale: ru })
-const plural = (n: number, one: string, few: string, many: string) => n % 10 === 1 && n % 100 !== 11 ? one : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 10 || n % 100 >= 20) ? few : many
-const fmtMonths = (n: number) => { const years = Math.floor(n / 12), months = n % 12; return [years ? `${years} ${plural(years, 'год', 'года', 'лет')}` : '', months ? `${months} ${plural(months, 'месяц', 'месяца', 'месяцев')}` : ''].filter(Boolean).join(' ') || '0 месяцев' }
-const fmtMonthsFull = (n: number) => `${fmtMonths(n)} (${n} ${plural(n, 'месяц', 'месяца', 'месяцев')})`
+import { Schedule } from './components/Schedule'
+import { FontControls } from './components/FontControls'
+import { configureFormatters, currencySymbol, fmtMonths, fmtMonthsFull, money, plural, shortDate } from './formatters'
 const todayISO = () => format(new Date(), 'yyyy-MM-dd')
 const currentDebt = (schedule: PaymentScheduleItem[], config: LoanConfig, today = todayISO()) => {
   if (!schedule.length || today < config.issueDate) return { date: today, principal: 0, interest: 0, total: 0, fromDate: config.issueDate }
@@ -48,8 +42,7 @@ function NumberInput({ value, onCommit, ...props }: { value: number; onCommit: (
 
 function App() {
   const store = useLoanStore()
-  currentMoneyDecimals = store.displayDecimals
-  currentCurrency = store.config.currency
+  configureFormatters(store.displayDecimals, store.config.currency)
   const [section, setSection] = useState('overview')
   const [showEarly, setShowEarly] = useState(false)
   const [editingEarly, setEditingEarly] = useState<EarlyRepayment | null>(null)
@@ -66,7 +59,22 @@ function App() {
   const selected = comparison.scenarios.find(s => s.id === store.selectedScenario) ?? comparison.scenarios[1]
   const base = comparison.scenarios[0]
   const errors = validateScenario(store.config, store.repayments, store.gracePeriods)
-  const chartData = useMemo(() => selected.schedule.filter((_, i) => i % Math.max(1, Math.floor(selected.schedule.length / 36)) === 0).map((row, i) => ({ date: format(parseISO(row.date), 'MMM yy', { locale: ru }), balance: row.closingBalance, interest: row.interest, principal: row.principal, base: base.schedule[Math.min(i * Math.max(1, Math.floor(selected.schedule.length / 36)), base.schedule.length - 1)]?.closingBalance ?? 0 })), [selected, base])
+  const overviewChartData = useMemo(() => {
+    const baseStep = Math.max(1, Math.floor(base.schedule.length / 48))
+    const dates = new Set(base.schedule.filter((_, i) => i % baseStep === 0).map(row => row.date))
+    if (base.schedule.at(-1)) dates.add(base.schedule.at(-1)!.date)
+    if (selected.schedule.at(-1)) dates.add(selected.schedule.at(-1)!.date)
+    const balanceAt = (schedule: PaymentScheduleItem[], date: string) => {
+      let balance = schedule[0]?.closingBalance ?? 0
+      for (const row of schedule) {
+        if (row.date > date) break
+        balance = row.closingBalance
+      }
+      return balance
+    }
+    const selectedClosingDate = selected.schedule.at(-1)?.date ?? ''
+    return [...dates].sort().map(date => ({ date: format(parseISO(date), 'MMM yy', { locale: ru }), base: balanceAt(base.schedule, date), balance: date <= selectedClosingDate ? balanceAt(selected.schedule, date) : null }))
+  }, [selected, base])
 
   const download = (kind: 'csv' | 'json' | 'xls') => {
     const schedule = selected.schedule
@@ -93,7 +101,7 @@ function App() {
 
   const nav = [
     ['overview', Landmark, 'Обзор'], ['settings', Settings2, 'Параметры'], ['early', TrendingDown, 'Досрочные'],
-    ['grace', CalendarDays, 'Льготные периоды'], ['schedule', ReceiptText, 'График платежей'], ['analytics', Sparkles, 'Аналитика'], ['export', ArrowDownToLine, 'Экспорт']
+    ['grace', CalendarDays, 'Льготные периоды'], ['schedule', ReceiptText, 'График платежей'], ['export', ArrowDownToLine, 'Импорт/экспорт']
   ] as const
   const openEarly = (repayment: EarlyRepayment | null = null) => { setEditingEarly(repayment); setShowEarly(true) }
   const closeEarly = () => { setShowEarly(false); setEditingEarly(null) }
@@ -105,15 +113,14 @@ function App() {
       <div className="sidebar-note"><ShieldCheck size={20}/><div><b>Расчёт локально</b><span>Ваши данные не покидают устройство</span></div></div>
     </aside>
     <main>
-      <header><button className="icon-btn menu-btn" onClick={() => setMobileNav(true)}><Menu/></button><div><p>Финансовый план</p><h1>{section === 'overview' ? 'Ваша ипотека' : nav.find(x => x[0] === section)?.[2]}</h1></div><div className="header-actions"><span className="status-dot"><i/> Данные сохранены</span><button className="ghost" onClick={() => window.print()}><Printer size={16}/> Печать</button><button className="primary" onClick={() => openEarly()}><Plus size={17}/> Досрочный платёж</button></div></header>
+      <header><button className="icon-btn menu-btn" onClick={() => setMobileNav(true)}><Menu/></button><div className="header-title"><p>Финансовый план</p><h1>{section === 'overview' ? 'Ваша ипотека' : nav.find(x => x[0] === section)?.[2]}</h1></div><FontControls appFontSize={store.appFontSize} scheduleFontSize={store.scheduleFontSize} setAppFontSize={store.setAppFontSize} setScheduleFontSize={store.setScheduleFontSize}/><div className="header-actions"><span className="status-dot"><i/> Данные сохранены</span><button className="ghost print-action" onClick={() => window.print()}><Printer size={16}/> Печать</button><button className="primary add-payment-action" onClick={() => openEarly()}><Plus size={17}/> Досрочный платёж</button></div></header>
       <div className="content">
         {errors.length > 0 && <div className="alert">{errors.join(' · ')}</div>}
-        {section === 'overview' && <Overview config={store.config} repayments={store.repayments} comparison={comparison} selected={selected} chartData={chartData} onSelect={store.selectScenario} onOpen={() => openEarly()}/>}
+        {section === 'overview' && <Overview config={store.config} repayments={store.repayments} comparison={comparison} selected={selected} chartData={overviewChartData} onSelect={store.selectScenario} onOpen={() => openEarly()}/>}
         {section === 'settings' && <Settings config={store.config} update={store.updateConfig} updateInterest={store.updateInterest} termUnit={store.termUnit} setTermUnit={store.setTermUnit} displayDecimals={store.displayDecimals} setDisplayDecimals={store.setDisplayDecimals} appFontSize={store.appFontSize} setAppFontSize={store.setAppFontSize} scheduleFontSize={store.scheduleFontSize} setScheduleFontSize={store.setScheduleFontSize} theme={store.theme} setTheme={store.setTheme}/>}
         {section === 'early' && <EarlyList items={store.repayments} remove={store.removeRepayment} edit={openEarly} open={() => openEarly()}/>}
         {section === 'grace' && <GraceList items={store.gracePeriods} remove={store.removeGrace} open={() => setShowGrace(true)}/>} 
-        {section === 'schedule' && <Schedule schedule={selected.schedule} rows={rows} setRows={setRows} more={() => setRows(r => r + 24)}/>}
-        {section === 'analytics' && <Analytics comparison={comparison} chartData={chartData}/>} 
+        {section === 'schedule' && <Schedule schedule={selected.schedule} baseSchedule={base.schedule} rows={rows} setRows={setRows} more={() => setRows(r => r + 24)}/>}
         {section === 'export' && <ExportPanel download={download} importJson={importJson} status={importStatus}/>}
       </div>
     </main>
@@ -158,37 +165,6 @@ function Settings({ config, update, updateInterest, termUnit, setTermUnit, displ
 
 function EarlyList({ items, remove, edit, open }: { items: EarlyRepayment[]; remove: (id: string) => void; edit: (item: EarlyRepayment) => void; open: () => void }) { return <section className="panel list-panel"><div className="panel-head"><div><h3>Досрочные платежи</h3><p>Каждое событие автоматически пересчитывает график</p></div><button className="primary" onClick={open}><Plus/> Добавить</button></div>{items.length ? <div className="event-list">{items.map(x => <div className="event" key={x.id}><div className="date-tile"><b>{format(parseISO(x.date),'dd')}</b><span>{format(parseISO(x.date),'MMM yy',{locale:ru})}</span></div><div><b>{money(x.amount)}</b><span>{x.strategy === 'reduceTerm' ? 'Сокращение срока' : x.strategy === 'reducePayment' ? 'Уменьшение платежа' : 'Полное погашение'} · {x.amountMode === 'total' ? 'общая сумма из графика' : 'досрочная часть'} · {x.source === 'own' ? 'Собственные средства' : 'Целевой источник'}</span>{x.comment && <small>{x.comment}</small>}</div><div className="event-actions"><button className="icon-btn" aria-label={`Редактировать платёж ${shortDate(x.date)}`} onClick={() => edit(x)}><Pencil/></button><button className="icon-btn danger" aria-label={`Удалить платёж ${shortDate(x.date)}`} onClick={() => remove(x.id)}><Trash2/></button></div></div>)}</div> : <Empty icon={<TrendingDown/>} title="Пока нет досрочных платежей" action={open}/>}<div className="tip"><CircleHelp/> Введите фактическую досрочную сумму. Для 26.01.2026 это 8 704,99 ₽; обычный платёж приложение добавит само.</div></section> }
 function GraceList({ items, remove, open }: { items: GracePeriod[]; remove: (id: string) => void; open: () => void }) { return <section className="panel list-panel"><div className="panel-head"><div><h3>Льготные периоды</h3><p>Отсрочка, проценты или индивидуальный платёж</p></div><button className="primary" onClick={open}><Plus/> Добавить</button></div>{items.length ? <div className="event-list">{items.map(x => <div className="event" key={x.id}><div className="date-tile"><CalendarDays/></div><div><b>{shortDate(x.startDate)} — {shortDate(x.endDate)}</b><span>{x.type === 'full' ? 'Полная отсрочка' : x.type === 'interestOnly' ? 'Только проценты' : 'Особый платёж'} · {x.extendTerm ? 'с продлением срока' : 'без продления'}</span></div><button className="icon-btn danger" onClick={() => remove(x.id)}><Trash2/></button></div>)}</div> : <Empty icon={<CalendarDays/>} title="Льготные периоды не добавлены" action={open}/>}<div className="tip"><CircleHelp/> После льготного периода сначала могут погашаться отложенные платежи и проценты.</div></section> }
-
-function Schedule({ schedule, rows, setRows, more }: { schedule: PaymentScheduleItem[]; rows: number; setRows: React.Dispatch<React.SetStateAction<number>>; more: () => void }) {
-  const [jump, setJump] = useState('')
-  const [pendingRow, setPendingRow] = useState<number | null>(null)
-  const totals = schedule.reduce((sum, row) => ({ principal: sum.principal + row.principal, interest: sum.interest + row.interest, total: sum.total + row.payment + row.earlyPayment }), { principal: 0, interest: 0, total: 0 })
-  const normalizeJump = (value: string) => {
-    const trimmed = value.trim()
-    const dateMatch = trimmed.match(/^(\d{2})\.(\d{2})\.(\d{4})$/)
-    if (dateMatch) return `${dateMatch[3]}-${dateMatch[2]}-${dateMatch[1]}`
-    return trimmed
-  }
-  const jumpTo = () => {
-    const query = normalizeJump(jump)
-    if (!query) return
-    const index = schedule.findIndex(row => row.date === query || row.date.startsWith(`${query}-`) || row.date.startsWith(query))
-    if (index < 0) return
-    setRows(Math.max(rows, index + 1))
-    setPendingRow(schedule[index].number)
-  }
-  useEffect(() => {
-    if (pendingRow === null) return
-    const timer = window.setTimeout(() => {
-      document.getElementById(`schedule-row-${pendingRow}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-      setPendingRow(null)
-    }, 80)
-    return () => window.clearTimeout(timer)
-  }, [pendingRow, rows])
-  return <section className="panel table-panel"><div className="panel-head schedule-head"><div><h3>График платежей</h3><p>{schedule.length} строк · закрытие {schedule.at(-1) ? shortDate(schedule.at(-1)!.date) : '—'}</p></div><div className="schedule-tools"><input value={jump} onChange={event => setJump(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') jumpTo() }} placeholder="Дата, месяц или год"/><button className="ghost" onClick={jumpTo}>Перейти</button><button className="ghost" onClick={() => setRows(schedule.length)}>Показать всё</button></div></div><div className="table-wrap"><table className="bank-schedule"><thead><tr><th rowSpan={2}>№ п/п</th><th rowSpan={2}>Дата</th><th colSpan={3}>Сумма платежа</th><th rowSpan={2}>Остаток задолженности</th></tr><tr><th>По кредиту</th><th>По процентам</th><th>Итого</th></tr></thead><tbody>{schedule.slice(0, rows).map(r => <tr id={`schedule-row-${r.number}`} key={`${r.number}-${r.date}`} className={r.event ? 'recalc-row' : ''}><td>{r.number}</td><td>{shortDate(r.date)}</td><td>{money(r.principal)}</td><td>{money(r.interest)}</td><td>{money(r.payment + r.earlyPayment)}</td><td><b>{money(r.closingBalance)}</b></td></tr>)}</tbody><tfoot><tr><td colSpan={2}>Итого за весь срок</td><td>{money(totals.principal)}</td><td>{money(totals.interest)}</td><td>{money(totals.total)}</td><td>{money(schedule.at(-1)?.closingBalance ?? 0)}</td></tr></tfoot></table></div>{rows < schedule.length && <button className="load-more" onClick={more}>Показать ещё <ChevronDown/></button>}</section>
-}
-
-function Analytics({ comparison, chartData }: any) { const savings = comparison.scenarios.slice(1).map((s: any) => ({ name: s.name, value: s.interestSavings, months: s.monthsSaved })); return <><div className="metric-grid"><div className="metric"><span>Максимальная экономия</span><b>{money(comparison.bestSavings.interestSavings, true)}</b><small>{comparison.bestSavings.name}</small></div><div className="metric"><span>Самое быстрое закрытие</span><b>{comparison.fastest.monthsSaved} мес.</b><small>{comparison.fastest.name}</small></div><div className="metric"><span>Минимальный платёж</span><b>{money(comparison.lowestPayment.monthlyPayment)}</b><small>{comparison.lowestPayment.name}</small></div></div><div className="analytics-grid"><section className="panel chart-panel"><div className="panel-head"><div><h3>Структура платежей</h3><p>Проценты и основной долг во времени</p></div></div><ResponsiveContainer width="100%" height={290}><BarChart data={chartData}><CartesianGrid stroke="#e3ece9" vertical={false}/><XAxis dataKey="date"/><YAxis tickFormatter={v => `${Math.round(v/1000)}к`}/><Tooltip formatter={(v:unknown)=>money(Number(v ?? 0))}/><Legend/><Bar dataKey="interest" name="Проценты" stackId="a" fill="#f2b84b"/><Bar dataKey="principal" name="Основной долг" stackId="a" fill="var(--green)" radius={[3,3,0,0]}/></BarChart></ResponsiveContainer></section><section className="panel chart-panel"><div className="panel-head"><div><h3>Экономия по стратегиям</h3><p>Снижение процентной переплаты</p></div></div><ResponsiveContainer width="100%" height={290}><BarChart data={savings} layout="vertical"><CartesianGrid stroke="#e3ece9" horizontal={false}/><XAxis type="number" tickFormatter={v => `${Math.round(v/1000000)}м`}/><YAxis dataKey="name" type="category" width={115}/><Tooltip formatter={(v:unknown)=>money(Number(v ?? 0))}/><Bar dataKey="value" name="Экономия" fill="var(--green)" radius={[0,6,6,0]}/></BarChart></ResponsiveContainer></section></div></> }
 
 function ExportPanel({ download, importJson, status }: { download: (x: 'csv'|'json'|'xls') => void; importJson: (file: File) => void; status: { kind: 'success' | 'error'; text: string } | null }) {
   const inputRef = useRef<HTMLInputElement>(null)
