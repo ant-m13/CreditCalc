@@ -1,50 +1,45 @@
-export const APP_VERSION = '1.1.0'
+import changelogMarkdown from '../CHANGELOG.md?raw'
 
-export const CHANGELOG = [
-  {
-    date: '29.06.2026',
-    version: '1.1.0',
-    title: 'Несколько кредитов и история изменений',
-    items: [
-      'Добавлено хранение нескольких кредитов с быстрым переключением.',
-      'Экспорт и ссылка теперь могут формироваться для выбранного кредита.',
-      'При загрузке расчёта из ссылки можно создать новый кредит или заменить текущий.',
-      'Добавлен видимый номер версии приложения и отдельная страница изменений.',
-      'Технические значения в пояснении графика заменены на понятные русские формулировки.'
-    ]
-  },
-  {
-    date: '28.06.2026',
-    version: '1.0.0',
-    title: 'Расчёт с досрочными платежами',
-    items: [
-      'Добавлен график платежей в формате банковского графика.',
-      'Добавлены досрочные платежи в любую дату, правила повторяющихся досрочных платежей и импорт/экспорт JSON.',
-      'Добавлены ссылка на расчёт, объяснение строк графика, итоги по графику и настройки размера шрифта.'
-    ]
-  },
-  {
-    date: '26.06.2026',
-    version: '0.5.0',
-    title: 'Улучшение внешнего вида',
-    items: [
-      'Улучшение внешнего вида'
-    ]
-  },
-  {
-    date: '24.06.2026',
-    version: '0.2.0',
-    title: 'Экспорт импорт данных',
-    items: [
-      'Добавлены эспорт/импорт данных'
-    ]
-  },
-  {
-    date: '23.06.2026',
-    version: '0.1.0',
-    title: 'Первая версия',
-    items: [
-      'Первая версия.'
-    ]
+export const APP_VERSION = __APP_VERSION__
+export const BUILD_DATE = __BUILD_DATE__
+
+export interface ChangelogEntry {
+  date: string
+  version: string
+  title: string
+  items: string[]
+}
+
+export const formatBuildDate = (value = BUILD_DATE) => {
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? '—' : date.toLocaleString('ru-RU', { dateStyle: 'short', timeStyle: 'short' })
+}
+
+export function parseChangelog(markdown: string): ChangelogEntry[] {
+  const lines = markdown.split(/\r?\n/)
+  const entries: ChangelogEntry[] = []
+  let current: ChangelogEntry | null = null
+
+  for (const line of lines) {
+    const versionMatch = line.match(/^##\s+(.+?)\s+—\s+(.+)$/)
+    if (versionMatch) {
+      current = { version: versionMatch[1].trim(), date: versionMatch[2].trim(), title: '', items: [] }
+      entries.push(current)
+      continue
+    }
+
+    if (!current) continue
+    const titleMatch = line.match(/^###\s+(.+)$/)
+    if (titleMatch) {
+      current.title = titleMatch[1].trim()
+      continue
+    }
+
+    const itemMatch = line.match(/^-\s+(.+)$/)
+    if (itemMatch) current.items.push(itemMatch[1].trim())
   }
-] as const
+
+  return entries
+}
+
+export const CHANGELOG = parseChangelog(changelogMarkdown)

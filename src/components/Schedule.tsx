@@ -3,12 +3,14 @@ import type React from 'react'
 import { format, parseISO } from 'date-fns'
 import { ru } from 'date-fns/locale'
 import { ChevronDown } from 'lucide-react'
-import type { PaymentScheduleItem } from '../loanEngine'
+import type { EarlyRepayment, PaymentScheduleItem } from '../loanEngine'
 import { fmtMonthsFull, money, shortDate } from '../formatters'
+import { dayCountBasisLabel, roundingName } from '../labels'
 
 interface ScheduleProps {
   schedule: PaymentScheduleItem[]
   baseSchedule: PaymentScheduleItem[]
+  repayments: EarlyRepayment[]
   rows: number
   setRows: React.Dispatch<React.SetStateAction<number>>
   more: () => void
@@ -29,18 +31,6 @@ const matchesAmount = (row: PaymentScheduleItem, amount: number) => {
   const values = [row.principal, row.interest, rowTotal(row), row.closingBalance]
   return values.some(value => Math.abs(value - amount) < 0.01)
 }
-const dayCountBasisName = (value: string) => ({
-  actualActual: 'Фактическое число дней / фактическая длина года',
-  actual365: 'Фактическое число дней / 365 дней',
-  '365': '365 дней в году',
-  '366': '366 дней в году',
-  '360': '360 дней в году'
-}[value] ?? value)
-const roundingName = (value: string) => ({
-  kopecks: 'До копеек',
-  rubles: 'До рублей',
-  bank: 'Банковское округление'
-}[value] ?? value)
 const operationOrderName = (value: string) => value
   .replaceAll('earlyFirst', 'сначала досрочный платёж')
   .replaceAll('regularFirst', 'после регулярного платежа')
@@ -49,18 +39,25 @@ const operationOrderName = (value: string) => value
 function AuditDetails({ row }: { row: PaymentScheduleItem }) {
   if (!row.audit) return null
   const audit = row.audit
-  return <tr className="audit-row"><td colSpan={6}><div className="audit-card"><b>Формула строки №{row.number}</b><dl><div><dt>Период начисления</dt><dd>{shortDate(audit.periodStart)} — {shortDate(audit.periodEnd)}</dd></div><div><dt>Дней</dt><dd>{audit.days}</dd></div><div><dt>База года</dt><dd>{dayCountBasisName(audit.dayCountBasis)}</dd></div><div><dt>Остаток для процентов</dt><dd>{money(audit.interestBalance)}</dd></div><div><dt>Проценты до округления</dt><dd>{money(audit.interestBeforeRounding)}</dd></div><div><dt>Округление</dt><dd>{roundingName(audit.rounding)}</dd></div><div><dt>Порядок операций</dt><dd>{operationOrderName(audit.operationOrder)}</dd></div></dl></div></td></tr>
+  return <tr className="audit-row"><td colSpan={6}><div className="audit-card"><b>Формула строки №{row.number}</b><dl><div><dt>Период начисления</dt><dd>{shortDate(audit.periodStart)} — {shortDate(audit.periodEnd)}</dd></div><div><dt>Дней</dt><dd>{audit.days}</dd></div><div><dt>База года</dt><dd>{dayCountBasisLabel(audit.dayCountBasis)}</dd></div><div><dt>Остаток для процентов</dt><dd>{money(audit.interestBalance)}</dd></div><div><dt>Проценты до округления</dt><dd>{money(audit.interestBeforeRounding)}</dd></div><div><dt>Округление</dt><dd>{roundingName(audit.rounding)}</dd></div><div><dt>Порядок операций</dt><dd>{operationOrderName(audit.operationOrder)}</dd></div></dl></div></td></tr>
+}
+
+function AuditCard({ row }: { row: PaymentScheduleItem }) {
+  if (!row.audit) return null
+  const audit = row.audit
+  return <div className="audit-card"><b>Формула строки №{row.number}</b><dl><div><dt>Период начисления</dt><dd>{shortDate(audit.periodStart)} — {shortDate(audit.periodEnd)}</dd></div><div><dt>Дней</dt><dd>{audit.days}</dd></div><div><dt>База года</dt><dd>{dayCountBasisLabel(audit.dayCountBasis)}</dd></div><div><dt>Остаток для процентов</dt><dd>{money(audit.interestBalance)}</dd></div><div><dt>Проценты до округления</dt><dd>{money(audit.interestBeforeRounding)}</dd></div><div><dt>Округление</dt><dd>{roundingName(audit.rounding)}</dd></div><div><dt>Порядок операций</dt><dd>{operationOrderName(audit.operationOrder)}</dd></div></dl></div>
 }
 
 function ScheduleTable({ rows, expandedRows, toggleRow }: { rows: PaymentScheduleItem[]; expandedRows: Set<number>; toggleRow: (number: number) => void }) {
   return <table className="bank-schedule"><thead><tr><th rowSpan={2}>№ п/п</th><th rowSpan={2}>Дата</th><th colSpan={3}>Сумма платежа</th><th rowSpan={2}>Остаток задолженности</th></tr><tr><th>По кредиту</th><th>По процентам</th><th>Итого</th></tr></thead><tbody>{rows.flatMap(row => [<tr id={`schedule-row-${row.number}`} key={`${row.number}-${row.date}`} className={row.event ? 'recalc-row' : ''}><td><button className="audit-toggle" onClick={() => toggleRow(row.number)} aria-label={`Показать формулу строки ${row.number}`}>{expandedRows.has(row.number) ? '−' : '+'}</button>{row.number}</td><td>{shortDate(row.date)}</td><td>{money(row.principal)}</td><td>{money(row.interest)}</td><td>{money(rowTotal(row))}</td><td><b>{money(row.closingBalance)}</b></td></tr>, ...(expandedRows.has(row.number) ? [<AuditDetails row={row} key={`audit-${row.number}-${row.date}`}/>] : [])])}</tbody></table>
 }
 
-export function Schedule({ schedule, baseSchedule, rows, setRows, more }: ScheduleProps) {
+export function Schedule({ schedule, baseSchedule, repayments, rows, setRows, more }: ScheduleProps) {
   const [jump, setJump] = useState('')
   const [yearFilter, setYearFilter] = useState('all')
   const [amountSearch, setAmountSearch] = useState('')
   const [monthsCollapsed, setMonthsCollapsed] = useState(false)
+  const [mobileTableMode, setMobileTableMode] = useState(false)
   const [openMonths, setOpenMonths] = useState<Set<string>>(new Set())
   const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set())
   const [pendingRow, setPendingRow] = useState<number | null>(null)
@@ -68,6 +65,10 @@ export function Schedule({ schedule, baseSchedule, rows, setRows, more }: Schedu
   const closingDate = schedule.at(-1)?.date
   const savedRows = closingDate ? baseSchedule.filter(row => rowTotal(row) > 0 && row.date > closingDate) : []
   const savedTotals = savedRows.reduce((sum, row) => ({ principal: sum.principal + row.principal, interest: sum.interest + row.interest, total: sum.total + rowTotal(row) }), { principal: 0, interest: 0, total: 0 })
+  const today = format(new Date(), 'yyyy-MM-dd')
+  const nextRow = schedule.find(row => row.date >= today) ?? schedule.at(-1)
+  const nextEarly = repayments.find(item => item.date >= today)
+  const currentBalance = [...schedule].reverse().find(row => row.date <= today)?.closingBalance ?? schedule[0]?.openingBalance ?? 0
   const years = useMemo(() => [...new Set(schedule.map(row => row.date.slice(0, 4)))], [schedule])
   const amount = parseAmount(amountSearch)
   const filteredSchedule = useMemo(() => schedule.filter(row => (yearFilter === 'all' || row.date.startsWith(yearFilter)) && (amount === null || matchesAmount(row, amount))), [schedule, yearFilter, amount])
@@ -106,6 +107,15 @@ export function Schedule({ schedule, baseSchedule, rows, setRows, more }: Schedu
     setMonthsCollapsed(false)
     setPendingRow(schedule[index].number)
   }
+  const quickJump = (query: string) => {
+    const index = schedule.findIndex(row => row.date === query || row.date.startsWith(query))
+    if (index < 0) return
+    setRows(Math.max(rows, index + 1))
+    setYearFilter('all')
+    setAmountSearch('')
+    setMonthsCollapsed(false)
+    setPendingRow(schedule[index].number)
+  }
   const toggleMonth = (key: string) => setOpenMonths(current => {
     const next = new Set(current)
     if (next.has(key)) next.delete(key)
@@ -122,7 +132,8 @@ export function Schedule({ schedule, baseSchedule, rows, setRows, more }: Schedu
   useEffect(() => {
     if (pendingRow === null) return
     const timer = window.setTimeout(() => {
-      document.getElementById(`schedule-row-${pendingRow}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      const target = document.getElementById(`mobile-schedule-row-${pendingRow}`) ?? document.getElementById(`schedule-row-${pendingRow}`)
+      target?.scrollIntoView({ behavior: 'smooth', block: 'center' })
       setPendingRow(null)
     }, 80)
     return () => window.clearTimeout(timer)
@@ -130,10 +141,12 @@ export function Schedule({ schedule, baseSchedule, rows, setRows, more }: Schedu
 
   return <section className="panel table-panel">
     <div className="panel-head schedule-head"><div><h3>График платежей</h3><p>{schedule.length} строк · показано {visibleRows.length} · закрытие {schedule.at(-1) ? shortDate(schedule.at(-1)!.date) : '—'}</p></div><div className="schedule-tools"><input value={jump} onChange={event => setJump(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') jumpTo() }} placeholder="Дата, месяц или год"/><button className="ghost" onClick={jumpTo}>Перейти</button><button className="ghost" onClick={() => setRows(schedule.length)}>Показать всё</button></div></div>
+    <div className="mobile-schedule-bar"><div><span>Остаток долга</span><b>{money(currentBalance)}</b></div><div className="mobile-quick-actions"><button className="ghost compact" onClick={() => quickJump(today.slice(0,4))}>Текущий год</button>{nextRow && <button className="ghost compact" onClick={() => quickJump(nextRow.date)}>Следующий платёж</button>}{nextEarly && <button className="ghost compact" onClick={() => quickJump(nextEarly.date)}>Досрочные</button>}<button className="ghost compact" onClick={() => setMobileTableMode(value => !value)}>{mobileTableMode ? 'Карточки' : 'Таблица'}</button></div></div>
     <div className="schedule-filters"><label><span>Год</span><select value={yearFilter} onChange={event => setYearFilter(event.target.value)}><option value="all">Все годы</option>{years.map(year => <option value={year} key={year}>{year}</option>)}</select></label><label><span>Поиск суммы</span><input inputMode="decimal" value={amountSearch} onChange={event => setAmountSearch(event.target.value)} placeholder="Например 35479,81"/></label><button className="ghost" onClick={() => { setYearFilter('all'); setAmountSearch(''); setMonthsCollapsed(false); setOpenMonths(new Set()) }}>Сбросить</button><label className="schedule-collapse-toggle"><input type="checkbox" checked={monthsCollapsed} onChange={event => setMonthsCollapsed(event.target.checked)}/><span>Свернуть месяцы</span></label></div>
-    <div className="table-wrap">
+    <div className={mobileTableMode ? 'table-wrap force-mobile-table' : 'table-wrap'}>
       {monthsCollapsed ? <table className="bank-schedule"><thead><tr><th>Месяц</th><th>Строк</th><th>По кредиту</th><th>По процентам</th><th>Итого</th><th>Действие</th></tr></thead><tbody>{groupedRows.map(group => <tr key={group.key} className="month-row"><td>{group.title}</td><td>{group.rows.length}</td><td>{money(group.totals.principal)}</td><td>{money(group.totals.interest)}</td><td>{money(group.totals.total)}</td><td><button className="ghost compact" onClick={() => toggleMonth(group.key)}>{openMonths.has(group.key) ? 'Свернуть' : 'Открыть'}</button></td></tr>).flatMap((row, index) => openMonths.has(groupedRows[index].key) ? [row, ...groupedRows[index].rows.map(item => <tr id={`schedule-row-${item.number}`} key={`${item.number}-${item.date}`} className={item.event ? 'recalc-row detail-row' : 'detail-row'}><td><button className="audit-toggle" onClick={() => toggleRow(item.number)}>{expandedRows.has(item.number) ? '−' : '+'}</button>{shortDate(item.date)}</td><td>№ {item.number}</td><td>{money(item.principal)}</td><td>{money(item.interest)}</td><td>{money(rowTotal(item))}</td><td>{money(item.closingBalance)}</td></tr>)] : [row])}</tbody></table> : <ScheduleTable rows={visibleRows} expandedRows={expandedRows} toggleRow={toggleRow}/>}
     </div>
+    {!mobileTableMode && !monthsCollapsed && <div className="mobile-schedule-cards">{visibleRows.map(row => <article id={`mobile-schedule-row-${row.number}`} key={`card-${row.number}-${row.date}`} className={row.event ? 'schedule-card recalc-row' : 'schedule-card'}><div><span>№ {row.number}</span><b>{shortDate(row.date)}</b></div><dl><div><dt>По кредиту</dt><dd>{money(row.principal)}</dd></div><div><dt>Проценты</dt><dd>{money(row.interest)}</dd></div><div><dt>Итого</dt><dd>{money(rowTotal(row))}</dd></div><div><dt>Остаток</dt><dd>{money(row.closingBalance)}</dd></div></dl>{row.audit && <button className="ghost compact" onClick={() => toggleRow(row.number)}>{expandedRows.has(row.number) ? 'Скрыть формулу' : 'Показать формулу'}</button>}{expandedRows.has(row.number) && <div className="mobile-audit"><AuditCard row={row}/></div>}</article>)}</div>}
     {!monthsCollapsed && <table className="schedule-totals bank-schedule"><tfoot><tr><td colSpan={2}>Итого за весь срок</td><td>{money(totals.principal)}</td><td>{money(totals.interest)}</td><td>{money(totals.total)}</td><td>{money(schedule.at(-1)?.closingBalance ?? 0)}</td></tr></tfoot></table>}
     {yearFilter === 'all' && amount === null && rows < schedule.length && <button className="load-more" onClick={more}>Показать ещё <ChevronDown/></button>}
     {savedRows.length > 0 && <div className="saved-period"><div className="saved-period-head"><div><span className="eyebrow">Сокращённый срок</span><h4>Платежи исходного графика, которые больше не нужны</h4><p>Эти строки показывают хвост первоначального срока после даты закрытия выбранного сценария. В итоги выше они не входят.</p></div><b>{fmtMonthsFull(savedRows.length)}</b></div><div className="table-wrap"><table className="bank-schedule saved-schedule"><thead><tr><th rowSpan={2}>№ п/п</th><th rowSpan={2}>Дата</th><th colSpan={3}>Сумма платежа по исходному графику</th><th rowSpan={2}>Остаток задолженности</th></tr><tr><th>По кредиту</th><th>По процентам</th><th>Итого</th></tr></thead><tbody>{savedRows.map(row => <tr key={`saved-${row.number}-${row.date}`}><td>{row.number}</td><td>{shortDate(row.date)}</td><td>{money(row.principal)}</td><td>{money(row.interest)}</td><td>{money(rowTotal(row))}</td><td><b>{money(row.closingBalance)}</b></td></tr>)}</tbody><tfoot><tr><td colSpan={2}>Сэкономленные платежи</td><td>{money(savedTotals.principal)}</td><td>{money(savedTotals.interest)}</td><td>{money(savedTotals.total)}</td><td>—</td></tr></tfoot></table></div></div>}
