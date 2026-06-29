@@ -1,9 +1,11 @@
 import type { EarlyRepayment, GracePeriod, LoanConfig } from './loanEngine'
 import { defaultConfig } from './loanDefaults'
+import type { RepaymentRule } from './repaymentRules'
 
 export interface LoanBackupData {
   config: LoanConfig
   repayments: EarlyRepayment[]
+  repaymentRules: RepaymentRule[]
   gracePeriods: GracePeriod[]
   selectedScenario: string
   termUnit: 'months' | 'years'
@@ -51,6 +53,16 @@ export function parseLoanBackupObject(raw: unknown): LoanBackupData {
     return item as unknown as GracePeriod
   })
 
+  const rulesRaw = raw.repaymentRules ?? []
+  if (!Array.isArray(rulesRaw)) throw new Error('Список правил досрочных платежей повреждён')
+  const repaymentRules = rulesRaw.map((item, index) => {
+    if (!isObject(item) || typeof item.id !== 'string' || typeof item.name !== 'string' || !oneOf(item.type, ['monthlyFixed', 'annualBonus', 'paymentPercent']) || !isDate(item.startDate) || !isDate(item.endDate) || !oneOf(item.strategy, ['reduceTerm', 'reducePayment', 'full', 'custom']) || !oneOf(item.source, ['own', 'subsidy', 'insurance', 'other']) || !oneOf(item.sameDayOrder, ['regularFirst', 'earlyFirst']) || typeof item.interestFirst !== 'boolean' || !Array.isArray(item.skipMonths) || !item.skipMonths.every(month => typeof month === 'string' && /^\d{4}-\d{2}$/.test(month))) throw new Error(`Ошибка в правиле досрочных платежей №${index + 1}`)
+    if (item.amount !== undefined && !finite(item.amount)) throw new Error(`Ошибка в правиле досрочных платежей №${index + 1}`)
+    if (item.percent !== undefined && !finite(item.percent)) throw new Error(`Ошибка в правиле досрочных платежей №${index + 1}`)
+    if (item.comment !== undefined && typeof item.comment !== 'string') throw new Error(`Ошибка в правиле досрочных платежей №${index + 1}`)
+    return item as unknown as RepaymentRule
+  })
+
   const settings = isObject(raw.settings) ? raw.settings : raw
   const scenarioFromLegacyExport = isObject(raw.scenario) && typeof raw.scenario.id === 'string' ? raw.scenario.id : undefined
   const selectedScenario = typeof raw.selectedScenario === 'string' ? raw.selectedScenario : scenarioFromLegacyExport ?? 'reduceTerm'
@@ -59,5 +71,5 @@ export function parseLoanBackupObject(raw: unknown): LoanBackupData {
   const appFontSize = oneOf(settings.appFontSize, ['normal', 'large', 'xlarge']) ? settings.appFontSize : 'normal'
   const scheduleFontSize = oneOf(settings.scheduleFontSize, ['normal', 'large', 'xlarge']) ? settings.scheduleFontSize : 'large'
   const theme = oneOf(settings.theme, ['emerald', 'ocean', 'violet', 'graphite']) ? settings.theme : 'emerald'
-  return { config, repayments, gracePeriods, selectedScenario, termUnit, displayDecimals, appFontSize, scheduleFontSize, theme }
+  return { config, repayments, repaymentRules, gracePeriods, selectedScenario, termUnit, displayDecimals, appFontSize, scheduleFontSize, theme }
 }

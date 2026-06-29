@@ -1,5 +1,6 @@
 import type { EarlyRepayment, GracePeriod, LoanConfig } from './loanEngine'
 import { parseLoanBackupObject, type LoanBackupData } from './importExport'
+import type { RepaymentRule } from './repaymentRules'
 
 export const SHARE_PREFIX = 'v1.'
 export const MAX_ENCODED_PAYLOAD_LENGTH = 120_000
@@ -9,6 +10,7 @@ export interface SharedCalculationV1 {
   version: 1
   config: LoanConfig
   repayments: EarlyRepayment[]
+  repaymentRules: RepaymentRule[]
   gracePeriods: GracePeriod[]
   selectedScenario: string
   settings: {
@@ -20,7 +22,7 @@ export interface SharedCalculationV1 {
   }
 }
 
-export type SnapshotSource = Pick<LoanBackupData, 'config' | 'repayments' | 'gracePeriods' | 'selectedScenario' | 'termUnit' | 'displayDecimals' | 'theme'> & Partial<Pick<LoanBackupData, 'appFontSize' | 'scheduleFontSize'>>
+export type SnapshotSource = Pick<LoanBackupData, 'config' | 'repayments' | 'gracePeriods' | 'selectedScenario' | 'termUnit' | 'displayDecimals' | 'theme'> & Partial<Pick<LoanBackupData, 'appFontSize' | 'scheduleFontSize' | 'repaymentRules'>>
 
 const bytesToBase64Url = (bytes: Uint8Array) => {
   let binary = ''
@@ -73,6 +75,7 @@ export function createLoanSnapshot(source: SnapshotSource): SharedCalculationV1 
     version: 1,
     config: source.config,
     repayments: source.repayments,
+    repaymentRules: source.repaymentRules ?? [],
     gracePeriods: source.gracePeriods,
     selectedScenario: source.selectedScenario,
     settings: {

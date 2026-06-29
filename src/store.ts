@@ -2,11 +2,13 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import type { EarlyRepayment, GracePeriod, LoanConfig } from './loanEngine'
 import { defaultConfig } from './loanDefaults'
+import type { RepaymentRule } from './repaymentRules'
 export { defaultConfig } from './loanDefaults'
 
 interface LoanState {
   config: LoanConfig
   repayments: EarlyRepayment[]
+  repaymentRules: RepaymentRule[]
   gracePeriods: GracePeriod[]
   selectedScenario: string
   termUnit: 'months' | 'years'
@@ -19,6 +21,9 @@ interface LoanState {
   addRepayment: (repayment: EarlyRepayment) => void
   updateRepayment: (repayment: EarlyRepayment) => void
   removeRepayment: (id: string) => void
+  addRepaymentRule: (rule: RepaymentRule) => void
+  updateRepaymentRule: (rule: RepaymentRule) => void
+  removeRepaymentRule: (id: string) => void
   addGrace: (grace: GracePeriod) => void
   removeGrace: (id: string) => void
   selectScenario: (id: string) => void
@@ -27,7 +32,7 @@ interface LoanState {
   setAppFontSize: (value: LoanState['appFontSize']) => void
   setScheduleFontSize: (value: LoanState['scheduleFontSize']) => void
   setTheme: (theme: LoanState['theme']) => void
-  replaceData: (data: Pick<LoanState, 'config' | 'repayments' | 'gracePeriods' | 'selectedScenario' | 'termUnit' | 'displayDecimals' | 'theme'> & Partial<Pick<LoanState, 'appFontSize' | 'scheduleFontSize'>>) => void
+  replaceData: (data: Pick<LoanState, 'config' | 'repayments' | 'gracePeriods' | 'selectedScenario' | 'termUnit' | 'displayDecimals' | 'theme'> & Partial<Pick<LoanState, 'appFontSize' | 'scheduleFontSize' | 'repaymentRules'>>) => void
 }
 
 const sortRepayments = (repayments: EarlyRepayment[]) =>
@@ -36,12 +41,16 @@ const sortRepayments = (repayments: EarlyRepayment[]) =>
 export const useLoanStore = create<LoanState>()(persist((set) => ({
   config: defaultConfig,
   repayments: [{ id: 'seed-1', date: '2027-01-15', amount: 350000, amountMode: 'extra', strategy: 'reduceTerm', source: 'own', sameDayOrder: 'regularFirst', interestFirst: true, comment: 'Годовой бонус' }],
+  repaymentRules: [],
   gracePeriods: [], selectedScenario: 'reduceTerm', termUnit: 'months', displayDecimals: 2, appFontSize: 'normal', scheduleFontSize: 'large', theme: 'emerald',
   updateConfig: (patch) => set(s => ({ config: { ...s.config, ...patch } })),
   updateInterest: (patch) => set(s => ({ config: { ...s.config, interest: { ...s.config.interest, ...patch } } })),
   addRepayment: (repayment) => set(s => ({ repayments: sortRepayments([...s.repayments, repayment]) })),
   updateRepayment: (repayment) => set(s => ({ repayments: sortRepayments(s.repayments.map(item => item.id === repayment.id ? repayment : item)) })),
   removeRepayment: (id) => set(s => ({ repayments: s.repayments.filter(r => r.id !== id) })),
+  addRepaymentRule: (rule) => set(s => ({ repaymentRules: [...s.repaymentRules, rule].sort((a, b) => a.startDate.localeCompare(b.startDate) || a.id.localeCompare(b.id)) })),
+  updateRepaymentRule: (rule) => set(s => ({ repaymentRules: s.repaymentRules.map(item => item.id === rule.id ? rule : item).sort((a, b) => a.startDate.localeCompare(b.startDate) || a.id.localeCompare(b.id)) })),
+  removeRepaymentRule: (id) => set(s => ({ repaymentRules: s.repaymentRules.filter(rule => rule.id !== id) })),
   addGrace: (grace) => set(s => ({ gracePeriods: [...s.gracePeriods, grace] })),
   removeGrace: (id) => set(s => ({ gracePeriods: s.gracePeriods.filter(g => g.id !== id) })),
   selectScenario: (id) => set({ selectedScenario: id }),
@@ -50,7 +59,7 @@ export const useLoanStore = create<LoanState>()(persist((set) => ({
   setAppFontSize: (appFontSize) => set({ appFontSize }),
   setScheduleFontSize: (scheduleFontSize) => set({ scheduleFontSize }),
   setTheme: (theme) => set({ theme }),
-  replaceData: (data) => set({ ...data, repayments: sortRepayments(data.repayments) })
+  replaceData: (data) => set({ ...data, repayments: sortRepayments(data.repayments), repaymentRules: data.repaymentRules ?? [] })
 }), {
   name: 'ipoteka-calculator-v1',
   version: 3,
@@ -60,6 +69,7 @@ export const useLoanStore = create<LoanState>()(persist((set) => ({
       ...state,
       config: { ...defaultConfig, ...state.config, firstPaymentInterestOnly: true },
       repayments: sortRepayments(state.repayments ?? []),
+      repaymentRules: state.repaymentRules ?? [],
       appFontSize: state.appFontSize ?? 'normal',
       scheduleFontSize: state.scheduleFontSize ?? 'large'
     }

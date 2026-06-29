@@ -3,6 +3,7 @@ import { defaultConfig } from './loanDefaults'
 import { parseLoanBackup } from './importExport'
 import { buildShareUrl, createLoanSnapshot, decodeSharedCalculation, encodeSharedCalculation, parseLoanSnapshot, readSharedCalculationFromLocation } from './shareCalculation'
 import type { EarlyRepayment, GracePeriod, LoanConfig } from './loanEngine'
+import type { RepaymentRule } from './repaymentRules'
 
 const config: LoanConfig = {
   ...defaultConfig,
@@ -37,9 +38,16 @@ const gracePeriods: GracePeriod[] = [
   { id: 'g4', startDate: '2026-07-01', endDate: '2026-07-31', type: 'custom', paymentAmount: 500, extendTerm: false, accrueInterest: false, capitalizeInterest: false }
 ]
 
+const repaymentRules: RepaymentRule[] = [
+  { id: 'rule-1', name: '20 000 каждый месяц', type: 'monthlyFixed', startDate: '2026-02-26', endDate: '2027-02-26', amount: 20000, strategy: 'reduceTerm', source: 'own', sameDayOrder: 'regularFirst', interestFirst: true, skipMonths: ['2026-08'], comment: 'Автоплатёж' },
+  { id: 'rule-2', name: 'Премия', type: 'annualBonus', startDate: '2026-12-15', endDate: '2028-12-15', amount: 150000, strategy: 'reduceTerm', source: 'own', sameDayOrder: 'earlyFirst', interestFirst: true, skipMonths: [] },
+  { id: 'rule-3', name: '10% от платежа', type: 'paymentPercent', startDate: '2026-02-26', endDate: '2026-12-26', percent: 10, strategy: 'reducePayment', source: 'other', sameDayOrder: 'regularFirst', interestFirst: true, skipMonths: [] }
+]
+
 const snapshot = () => createLoanSnapshot({
   config,
   repayments,
+  repaymentRules,
   gracePeriods,
   selectedScenario: 'combined',
   termUnit: 'years',
@@ -54,6 +62,7 @@ describe('ссылка на расчёт', () => {
     const decoded = await decodeSharedCalculation(await encodeSharedCalculation(snapshot()))
     expect(decoded.config.principal).toBe(5_917_734)
     expect(decoded.repayments).toHaveLength(3)
+    expect(decoded.repaymentRules).toHaveLength(3)
     expect(decoded.gracePeriods).toHaveLength(4)
   })
 
@@ -70,6 +79,11 @@ describe('ссылка на расчёт', () => {
   it('восстанавливает несколько льготных периодов всех типов', async () => {
     const decoded = await decodeSharedCalculation(await encodeSharedCalculation(snapshot()))
     expect(decoded.gracePeriods).toEqual(gracePeriods)
+  })
+
+  it('восстанавливает правила досрочных платежей', async () => {
+    const decoded = await decodeSharedCalculation(await encodeSharedCalculation(snapshot()))
+    expect(decoded.repaymentRules).toEqual(repaymentRules)
   })
 
   it('сохраняет selectedScenario и настройки интерфейса', async () => {
