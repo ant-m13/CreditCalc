@@ -1,5 +1,5 @@
 import type { EarlyRepayment, GracePeriod, LoanConfig } from './loanEngine'
-import { defaultConfig } from './store'
+import { defaultConfig } from './loanDefaults'
 
 export interface LoanBackupData {
   config: LoanConfig
@@ -21,6 +21,10 @@ const finite = (value: unknown, minimum = 0) => typeof value === 'number' && Num
 export function parseLoanBackup(text: string): LoanBackupData {
   let raw: unknown
   try { raw = JSON.parse(text) } catch { throw new Error('Файл не является корректным JSON') }
+  return parseLoanBackupObject(raw)
+}
+
+export function parseLoanBackupObject(raw: unknown): LoanBackupData {
   if (!isObject(raw) || !isObject(raw.config)) throw new Error('В файле отсутствуют параметры кредита')
 
   const source = raw.config

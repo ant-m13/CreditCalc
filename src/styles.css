@@ -21,7 +21,7 @@
 
 .event{grid-template-columns:53px 1fr auto}.event-actions{display:flex;align-items:center;gap:2px}
 .bank-schedule th,.bank-schedule td{text-align:right}.bank-schedule th:first-child,.bank-schedule td:first-child{text-align:center}.bank-schedule th:nth-child(2),.bank-schedule td:nth-child(2){text-align:left}.bank-schedule th:last-child,.bank-schedule td:last-child{text-align:right}.bank-schedule thead tr:first-child th:nth-child(3){text-align:center}
-.file-input{display:none}.export-icon.import{background:#e4f4f7;color:#26778a}.import-status{margin-top:16px;padding:12px 14px;border-radius:9px;display:flex;align-items:center;gap:8px;font-size:10px}.import-status svg{width:16px}.import-status.success{background:#e4f6ef;color:#087458}.import-status.error{background:#fff0ee;color:#a54f42}
+.file-input{display:none}.export-icon.import{background:#e4f4f7;color:#26778a}.export-icon.link{background:#eaf0ff;color:#3a62c7}.import-status{margin-top:16px;padding:12px 14px;border-radius:9px;display:flex;align-items:center;gap:8px;font-size:10px}.import-status svg{width:16px}.import-status.success{background:#e4f6ef;color:#087458}.import-status.error{background:#fff0ee;color:#a54f42}.share-warning{margin:0 0 16px;color:#50665f;font-size:11px;line-height:1.55}.share-summary{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin:0}.share-summary div{background:white;border:1px solid #dfe8e5;border-radius:9px;padding:10px}.share-summary dt{font-size:8px;color:#788a84;text-transform:uppercase;letter-spacing:.08em}.share-summary dd{margin:4px 0 0;font-size:12px;font-weight:800;color:#203630}
 
 /* Более читаемая главная и график */
 .app-shell[data-ui-font="large"] main{zoom:1.07}.app-shell[data-ui-font="xlarge"] main{zoom:1.14}

@@ -1,13 +1,8 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import type { EarlyRepayment, GracePeriod, LoanConfig } from './loanEngine'
-
-export const defaultConfig: LoanConfig = {
-  principal: 7200000, annualRate: 12.4, issueDate: '2026-06-23', firstPaymentDate: '2026-07-15', firstPaymentInterestOnly: true, termMonths: 240,
-  paymentDay: 15, paymentType: 'annuity', frequency: 'monthly', currency: 'RUB', rounding: 'kopecks', closeThreshold: 300,
-  oneTimeFee: 0, monthlyFee: 0, earlyRepaymentFeePercent: 0,
-  interest: { method: 'daily', dayCountBasis: 'actualActual', includePaymentDate: false, balanceMoment: 'startOfDay' }
-}
+import { defaultConfig } from './loanDefaults'
+export { defaultConfig } from './loanDefaults'
 
 interface LoanState {
   config: LoanConfig

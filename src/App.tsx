@@ -2,13 +2,14 @@ import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { addMonths, format, parseISO } from 'date-fns'
 import { ru } from 'date-fns/locale'
-import { ArrowDownToLine, CalendarDays, Check, CircleHelp, Clock3, FileJson, Landmark, Menu, Pencil, Plus, Printer, ReceiptText, Settings2, ShieldCheck, Sparkles, Target, Trash2, TrendingDown, Upload, WalletCards, X } from 'lucide-react'
+import { ArrowDownToLine, CalendarDays, Check, CircleHelp, Clock3, FileJson, Landmark, Link2, Menu, Pencil, Plus, Printer, ReceiptText, Settings2, ShieldCheck, Sparkles, Target, Trash2, TrendingDown, Upload, WalletCards, X } from 'lucide-react'
 import { calculateInterest, compareScenarios, validateScenario, type EarlyRepayment, type GracePeriod, type LoanConfig, type PaymentScheduleItem } from './loanEngine'
-import { parseLoanBackup } from './importExport'
+import { parseLoanBackup, type LoanBackupData } from './importExport'
 import { useLoanStore } from './store'
 import { Schedule } from './components/Schedule'
 import { FontControls } from './components/FontControls'
 import { configureFormatters, currencySymbol, fmtMonths, fmtMonthsFull, money, plural, shortDate } from './formatters'
+import { buildShareUrl, createLoanSnapshot, decodeSharedCalculation, readSharedCalculationFromLocation } from './shareCalculation'
 const todayISO = () => format(new Date(), 'yyyy-MM-dd')
 const currentDebt = (schedule: PaymentScheduleItem[], config: LoanConfig, today = todayISO()) => {
   if (!schedule.length || today < config.issueDate) return { date: today, principal: 0, interest: 0, total: 0, fromDate: config.issueDate }
@@ -50,6 +51,7 @@ function App() {
   const [mobileNav, setMobileNav] = useState(false)
   const [rows, setRows] = useState(18)
   const [importStatus, setImportStatus] = useState<{ kind: 'success' | 'error'; text: string } | null>(null)
+  const [sharedCalculation, setSharedCalculation] = useState<LoanBackupData | null>(null)
   // Keep typing responsive: the form updates immediately, while the four full
   // schedules are recalculated as a lower-priority render.
   const calculationConfig = useDeferredValue(store.config)
@@ -79,7 +81,7 @@ function App() {
   const download = (kind: 'csv' | 'json' | 'xls') => {
     const schedule = selected.schedule
     let body = '', type = '', ext = kind
-    if (kind === 'json') { body = JSON.stringify({ version: 1, exportedAt: new Date().toISOString(), config: store.config, repayments: store.repayments, gracePeriods: store.gracePeriods, selectedScenario: store.selectedScenario, settings: { termUnit: store.termUnit, displayDecimals: store.displayDecimals, appFontSize: store.appFontSize, scheduleFontSize: store.scheduleFontSize, theme: store.theme } }, null, 2); type = 'application/json' }
+    if (kind === 'json') { body = JSON.stringify({ ...createLoanSnapshot({ config: store.config, repayments: store.repayments, gracePeriods: store.gracePeriods, selectedScenario: store.selectedScenario, termUnit: store.termUnit, displayDecimals: store.displayDecimals, appFontSize: store.appFontSize, scheduleFontSize: store.scheduleFontSize, theme: store.theme }), exportedAt: new Date().toISOString() }, null, 2); type = 'application/json' }
     else {
       const table = [['№ п/п','Дата','По кредиту','По процентам','Итого','Остаток задолженности'], ...schedule.map(r => [r.number,r.date,r.principal,r.interest,r.payment + r.earlyPayment,r.closingBalance])]
       body = kind === 'csv' ? '\ufeff' + table.map(r => r.join(';')).join('\n') : `<table>${table.map(r => `<tr>${r.map(c => `<td>${c}</td>`).join('')}</tr>`).join('')}</table>`
@@ -97,6 +99,69 @@ function App() {
     } catch (error) {
       setImportStatus({ kind: 'error', text: error instanceof Error ? error.message : 'Не удалось загрузить файл' })
     }
+  }
+
+  const copyText = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text)
+    } catch {
+      const textarea = document.createElement('textarea')
+      textarea.value = text
+      textarea.setAttribute('readonly', '')
+      textarea.style.position = 'fixed'
+      textarea.style.left = '-9999px'
+      document.body.appendChild(textarea)
+      textarea.select()
+      const copied = document.execCommand('copy')
+      textarea.remove()
+      if (!copied) throw new Error('Не удалось скопировать ссылку')
+    }
+  }
+
+  const copyShareLink = async () => {
+    try {
+      const snapshot = createLoanSnapshot({ config: store.config, repayments: store.repayments, gracePeriods: store.gracePeriods, selectedScenario: store.selectedScenario, termUnit: store.termUnit, displayDecimals: store.displayDecimals, appFontSize: store.appFontSize, scheduleFontSize: store.scheduleFontSize, theme: store.theme })
+      const url = await buildShareUrl(snapshot, window.location.href)
+      await copyText(url)
+      setImportStatus({ kind: 'success', text: 'Ссылка на расчёт скопирована' })
+    } catch (error) {
+      setImportStatus({ kind: 'error', text: error instanceof Error ? error.message : 'Не удалось сформировать ссылку на расчёт' })
+    }
+  }
+
+  useEffect(() => {
+    const payload = readSharedCalculationFromLocation(window.location)
+    if (!payload) return
+    let cancelled = false
+    decodeSharedCalculation(payload).then(data => {
+      if (cancelled) return
+      setSharedCalculation(data)
+    }).catch(error => {
+      if (cancelled) return
+      setImportStatus({ kind: 'error', text: error instanceof Error ? error.message : 'Ссылка повреждена. Проверьте ссылку или используйте JSON-файл' })
+    })
+    return () => { cancelled = true }
+  }, [])
+
+  const clearSharedHash = () => {
+    const url = new URL(window.location.href)
+    url.hash = ''
+    window.history.replaceState(null, '', `${url.pathname}${url.search}`)
+  }
+
+  const restoreSharedCalculation = () => {
+    if (!sharedCalculation) return
+    store.replaceData(sharedCalculation)
+    setRows(18)
+    setSharedCalculation(null)
+    setImportStatus({ kind: 'success', text: 'Расчёт загружен из ссылки' })
+    clearSharedHash()
+  }
+
+  const declineSharedCalculation = () => {
+    setSharedCalculation(null)
+    setImportStatus({ kind: 'error', text: 'Загрузка из ссылки отменена. Локальные данные сохранены' })
+    clearSharedHash()
   }
 
   const nav = [
@@ -121,10 +186,11 @@ function App() {
         {section === 'early' && <EarlyList items={store.repayments} remove={store.removeRepayment} edit={openEarly} open={() => openEarly()}/>}
         {section === 'grace' && <GraceList items={store.gracePeriods} remove={store.removeGrace} open={() => setShowGrace(true)}/>} 
         {section === 'schedule' && <Schedule schedule={selected.schedule} baseSchedule={base.schedule} rows={rows} setRows={setRows} more={() => setRows(r => r + 24)}/>}
-        {section === 'export' && <ExportPanel download={download} importJson={importJson} status={importStatus}/>}
+        {section === 'export' && <ExportPanel download={download} importJson={importJson} copyShareLink={copyShareLink} status={importStatus}/>}
       </div>
     </main>
     <PrintReport config={store.config} repayments={store.repayments} comparison={comparison} selected={selected}/>
+    {sharedCalculation && <SharedCalculationModal data={sharedCalculation} restore={restoreSharedCalculation} decline={declineSharedCalculation}/>}
     {showEarly && <EarlyModal close={closeEarly} save={editingEarly ? store.updateRepayment : store.addRepayment} initial={editingEarly} defaultDate={format(addMonths(parseISO(store.config.firstPaymentDate), 1), 'yyyy-MM-dd')}/>}
     {showGrace && <GraceModal close={() => setShowGrace(false)} add={store.addGrace}/>} 
   </div>
@@ -166,9 +232,13 @@ function Settings({ config, update, updateInterest, termUnit, setTermUnit, displ
 function EarlyList({ items, remove, edit, open }: { items: EarlyRepayment[]; remove: (id: string) => void; edit: (item: EarlyRepayment) => void; open: () => void }) { return <section className="panel list-panel"><div className="panel-head"><div><h3>Досрочные платежи</h3><p>Каждое событие автоматически пересчитывает график</p></div><button className="primary" onClick={open}><Plus/> Добавить</button></div>{items.length ? <div className="event-list">{items.map(x => <div className="event" key={x.id}><div className="date-tile"><b>{format(parseISO(x.date),'dd')}</b><span>{format(parseISO(x.date),'MMM yy',{locale:ru})}</span></div><div><b>{money(x.amount)}</b><span>{x.strategy === 'reduceTerm' ? 'Сокращение срока' : x.strategy === 'reducePayment' ? 'Уменьшение платежа' : 'Полное погашение'} · {x.amountMode === 'total' ? 'общая сумма из графика' : 'досрочная часть'} · {x.source === 'own' ? 'Собственные средства' : 'Целевой источник'}</span>{x.comment && <small>{x.comment}</small>}</div><div className="event-actions"><button className="icon-btn" aria-label={`Редактировать платёж ${shortDate(x.date)}`} onClick={() => edit(x)}><Pencil/></button><button className="icon-btn danger" aria-label={`Удалить платёж ${shortDate(x.date)}`} onClick={() => remove(x.id)}><Trash2/></button></div></div>)}</div> : <Empty icon={<TrendingDown/>} title="Пока нет досрочных платежей" action={open}/>}<div className="tip"><CircleHelp/> Введите фактическую досрочную сумму. Для 26.01.2026 это 8 704,99 ₽; обычный платёж приложение добавит само.</div></section> }
 function GraceList({ items, remove, open }: { items: GracePeriod[]; remove: (id: string) => void; open: () => void }) { return <section className="panel list-panel"><div className="panel-head"><div><h3>Льготные периоды</h3><p>Отсрочка, проценты или индивидуальный платёж</p></div><button className="primary" onClick={open}><Plus/> Добавить</button></div>{items.length ? <div className="event-list">{items.map(x => <div className="event" key={x.id}><div className="date-tile"><CalendarDays/></div><div><b>{shortDate(x.startDate)} — {shortDate(x.endDate)}</b><span>{x.type === 'full' ? 'Полная отсрочка' : x.type === 'interestOnly' ? 'Только проценты' : 'Особый платёж'} · {x.extendTerm ? 'с продлением срока' : 'без продления'}</span></div><button className="icon-btn danger" onClick={() => remove(x.id)}><Trash2/></button></div>)}</div> : <Empty icon={<CalendarDays/>} title="Льготные периоды не добавлены" action={open}/>}<div className="tip"><CircleHelp/> После льготного периода сначала могут погашаться отложенные платежи и проценты.</div></section> }
 
-function ExportPanel({ download, importJson, status }: { download: (x: 'csv'|'json'|'xls') => void; importJson: (file: File) => void; status: { kind: 'success' | 'error'; text: string } | null }) {
+function ExportPanel({ download, importJson, copyShareLink, status }: { download: (x: 'csv'|'json'|'xls') => void; importJson: (file: File) => void; copyShareLink: () => void; status: { kind: 'success' | 'error'; text: string } | null }) {
   const inputRef = useRef<HTMLInputElement>(null)
-  return <section className="panel export-panel"><div className="panel-head"><div><h3>Экспорт и импорт расчёта</h3><p>Сохраните резервную копию или восстановите расчёт из JSON</p></div></div><div className="export-grid"><button onClick={() => download('csv')}><span className="export-icon green"><ReceiptText/></span><b>CSV</b><small>График для таблиц</small><ArrowDownToLine/></button><button onClick={() => download('xls')}><span className="export-icon emerald"><Landmark/></span><b>Excel</b><small>Совместимо с .xls</small><ArrowDownToLine/></button><button onClick={() => download('json')}><span className="export-icon violet"><FileJson/></span><b>Сохранить JSON</b><small>Резервная копия всех настроек</small><ArrowDownToLine/></button><button onClick={() => inputRef.current?.click()}><span className="export-icon import"><Upload/></span><b>Загрузить JSON</b><small>Восстановить сохранённый расчёт</small><Upload/></button><button onClick={() => window.print()}><span className="export-icon amber"><Printer/></span><b>PDF / печать</b><small>Печатная версия</small><ArrowDownToLine/></button></div><input ref={inputRef} className="file-input" type="file" accept="application/json,.json" onChange={event => { const file = event.target.files?.[0]; if (file) importJson(file); event.currentTarget.value = '' }}/>{status && <div className={`import-status ${status.kind}`} role="status">{status.kind === 'success' ? <Check/> : <CircleHelp/>}{status.text}</div>}</section>
+  return <section className="panel export-panel"><div className="panel-head"><div><h3>Экспорт и импорт расчёта</h3><p>Сохраните резервную копию, передайте ссылку или восстановите расчёт из JSON</p></div></div><div className="export-grid"><button onClick={() => download('csv')}><span className="export-icon green"><ReceiptText/></span><b>CSV</b><small>График для таблиц</small><ArrowDownToLine/></button><button onClick={() => download('xls')}><span className="export-icon emerald"><Landmark/></span><b>Excel</b><small>Совместимо с .xls</small><ArrowDownToLine/></button><button onClick={() => download('json')}><span className="export-icon violet"><FileJson/></span><b>Сохранить JSON</b><small>Резервная копия всех настроек</small><ArrowDownToLine/></button><button onClick={() => inputRef.current?.click()}><span className="export-icon import"><Upload/></span><b>Загрузить JSON</b><small>Восстановить сохранённый расчёт</small><Upload/></button><button onClick={copyShareLink}><span className="export-icon link"><Link2/></span><b>Ссылка на расчёт</b><small>Передать параметры кредита и досрочные платежи</small><Link2/></button><button onClick={() => window.print()}><span className="export-icon amber"><Printer/></span><b>PDF / печать</b><small>Печатная версия</small><ArrowDownToLine/></button></div><input ref={inputRef} className="file-input" type="file" accept="application/json,.json" onChange={event => { const file = event.target.files?.[0]; if (file) importJson(file); event.currentTarget.value = '' }}/>{status && <div className={`import-status ${status.kind}`} role="status" aria-live="polite">{status.kind === 'success' ? <Check/> : <CircleHelp/>}{status.text}</div>}</section>
+}
+
+function SharedCalculationModal({ data, restore, decline }: { data: LoanBackupData; restore: () => void; decline: () => void }) {
+  return <div className="modal-backdrop"><div className="modal shared-modal"><div className="modal-head"><div><span className="eyebrow">Ссылка на расчёт</span><h2>Восстановить расчёт из ссылки?</h2></div><button className="icon-btn" onClick={decline}><X/></button></div><div className="modal-body"><p className="share-warning">Ссылка содержит параметры кредита, досрочные платежи и льготные периоды. Если восстановить расчёт, текущие локальные данные будут заменены.</p><dl className="share-summary"><div><dt>Сумма кредита</dt><dd>{money(data.config.principal)}</dd></div><div><dt>Ставка</dt><dd>{data.config.annualRate}%</dd></div><div><dt>Дата выдачи</dt><dd>{shortDate(data.config.issueDate)}</dd></div><div><dt>Первый платёж</dt><dd>{shortDate(data.config.firstPaymentDate)}</dd></div><div><dt>Срок</dt><dd>{fmtMonthsFull(data.config.termMonths)}</dd></div><div><dt>Досрочные платежи</dt><dd>{data.repayments.length}</dd></div><div><dt>Льготные периоды</dt><dd>{data.gracePeriods.length}</dd></div><div><dt>Сценарий</dt><dd>{data.selectedScenario}</dd></div></dl></div><div className="modal-actions"><button className="ghost" onClick={decline}>Отказаться</button><button className="primary" onClick={restore}>Восстановить настройки</button></div></div></div>
 }
 
 function PrintReport({ config, repayments, comparison, selected }: any) {
