@@ -34,7 +34,6 @@ const matchesAmount = (row: PaymentScheduleItem, amount: number) => {
 const operationOrderName = (value: string) => value
   .replaceAll('earlyFirst', 'сначала досрочный платёж')
   .replaceAll('regularFirst', 'после регулярного платежа')
-  .replaceAll('Регулярный платёж', 'Регулярный платёж')
 
 function AuditDetails({ row }: { row: PaymentScheduleItem }) {
   if (!row.audit) return null
