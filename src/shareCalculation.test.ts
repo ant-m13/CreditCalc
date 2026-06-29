@@ -45,6 +45,7 @@ const repaymentRules: RepaymentRule[] = [
 ]
 
 const snapshot = () => createLoanSnapshot({
+  name: 'Семейный кредит',
   config,
   repayments,
   repaymentRules,
@@ -61,6 +62,7 @@ describe('ссылка на расчёт', () => {
   it('выполняет полный round-trip encode → decode → validate', async () => {
     const decoded = await decodeSharedCalculation(await encodeSharedCalculation(snapshot()))
     expect(decoded.config.principal).toBe(5_917_734)
+    expect(decoded.name).toBe('Семейный кредит')
     expect(decoded.repayments).toHaveLength(3)
     expect(decoded.repaymentRules).toHaveLength(3)
     expect(decoded.gracePeriods).toHaveLength(4)

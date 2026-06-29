@@ -241,7 +241,7 @@ export function generateBaseSchedule(config: LoanConfig, options: Options = {}):
       closingBalance: num(balance, config.rounding), cumulativeInterest: num(cumulativeInterest, config.rounding), cumulativeSavings: 0,
       fee: num(earlyFees.add(config.monthlyFee).add(regularIndex === 1 ? config.oneTimeFee : 0), config.rounding),
       comment: comments.join('; '), event,
-      audit: audit(rowStart, paymentDate, includeFinalDay, opening, sameDay.length ? `${earlyFirst.length ? 'Сначала досрочные earlyFirst; ' : ''}регулярный платёж; ${regularFirst.length ? 'затем досрочные regularFirst' : 'досрочных в дату платежа нет'}` : 'Регулярный платёж')
+      audit: audit(rowStart, paymentDate, includeFinalDay, opening, sameDay.length ? `${earlyFirst.length ? 'сначала досрочные платежи; ' : ''}регулярный платёж; ${regularFirst.length ? 'затем досрочные платежи' : 'досрочных платежей в дату платежа нет'}` : 'Регулярный платёж')
     })
     previousPaymentDate = paymentDate
     paymentDate = nextPaymentDate(paymentDate, config)

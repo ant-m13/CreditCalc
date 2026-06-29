@@ -8,6 +8,7 @@ export const MAX_JSON_PAYLOAD_LENGTH = 600_000
 
 export interface SharedCalculationV1 {
   version: 1
+  name?: string
   config: LoanConfig
   repayments: EarlyRepayment[]
   repaymentRules: RepaymentRule[]
@@ -22,7 +23,7 @@ export interface SharedCalculationV1 {
   }
 }
 
-export type SnapshotSource = Pick<LoanBackupData, 'config' | 'repayments' | 'gracePeriods' | 'selectedScenario' | 'termUnit' | 'displayDecimals' | 'theme'> & Partial<Pick<LoanBackupData, 'appFontSize' | 'scheduleFontSize' | 'repaymentRules'>>
+export type SnapshotSource = Pick<LoanBackupData, 'config' | 'repayments' | 'gracePeriods' | 'selectedScenario' | 'termUnit' | 'displayDecimals' | 'theme'> & Partial<Pick<LoanBackupData, 'name' | 'appFontSize' | 'scheduleFontSize' | 'repaymentRules'>>
 
 const bytesToBase64Url = (bytes: Uint8Array) => {
   let binary = ''
@@ -73,6 +74,7 @@ const gunzip = async (input: Uint8Array) => {
 export function createLoanSnapshot(source: SnapshotSource): SharedCalculationV1 {
   return {
     version: 1,
+    name: source.name,
     config: source.config,
     repayments: source.repayments,
     repaymentRules: source.repaymentRules ?? [],

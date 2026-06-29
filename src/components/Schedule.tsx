@@ -29,11 +29,27 @@ const matchesAmount = (row: PaymentScheduleItem, amount: number) => {
   const values = [row.principal, row.interest, rowTotal(row), row.closingBalance]
   return values.some(value => Math.abs(value - amount) < 0.01)
 }
+const dayCountBasisName = (value: string) => ({
+  actualActual: 'Фактическое число дней / фактическая длина года',
+  actual365: 'Фактическое число дней / 365 дней',
+  '365': '365 дней в году',
+  '366': '366 дней в году',
+  '360': '360 дней в году'
+}[value] ?? value)
+const roundingName = (value: string) => ({
+  kopecks: 'До копеек',
+  rubles: 'До рублей',
+  bank: 'Банковское округление'
+}[value] ?? value)
+const operationOrderName = (value: string) => value
+  .replaceAll('earlyFirst', 'сначала досрочный платёж')
+  .replaceAll('regularFirst', 'после регулярного платежа')
+  .replaceAll('Регулярный платёж', 'Регулярный платёж')
 
 function AuditDetails({ row }: { row: PaymentScheduleItem }) {
   if (!row.audit) return null
   const audit = row.audit
-  return <tr className="audit-row"><td colSpan={6}><div className="audit-card"><b>Формула строки №{row.number}</b><dl><div><dt>Период начисления</dt><dd>{shortDate(audit.periodStart)} — {shortDate(audit.periodEnd)}</dd></div><div><dt>Дней</dt><dd>{audit.days}</dd></div><div><dt>База года</dt><dd>{audit.dayCountBasis}</dd></div><div><dt>Остаток для процентов</dt><dd>{money(audit.interestBalance)}</dd></div><div><dt>Проценты до округления</dt><dd>{money(audit.interestBeforeRounding)}</dd></div><div><dt>Округление</dt><dd>{audit.rounding}</dd></div><div><dt>Порядок операций</dt><dd>{audit.operationOrder}</dd></div></dl></div></td></tr>
+  return <tr className="audit-row"><td colSpan={6}><div className="audit-card"><b>Формула строки №{row.number}</b><dl><div><dt>Период начисления</dt><dd>{shortDate(audit.periodStart)} — {shortDate(audit.periodEnd)}</dd></div><div><dt>Дней</dt><dd>{audit.days}</dd></div><div><dt>База года</dt><dd>{dayCountBasisName(audit.dayCountBasis)}</dd></div><div><dt>Остаток для процентов</dt><dd>{money(audit.interestBalance)}</dd></div><div><dt>Проценты до округления</dt><dd>{money(audit.interestBeforeRounding)}</dd></div><div><dt>Округление</dt><dd>{roundingName(audit.rounding)}</dd></div><div><dt>Порядок операций</dt><dd>{operationOrderName(audit.operationOrder)}</dd></div></dl></div></td></tr>
 }
 
 function ScheduleTable({ rows, expandedRows, toggleRow }: { rows: PaymentScheduleItem[]; expandedRows: Set<number>; toggleRow: (number: number) => void }) {

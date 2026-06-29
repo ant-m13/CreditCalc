@@ -3,6 +3,7 @@ import { defaultConfig } from './loanDefaults'
 import type { RepaymentRule } from './repaymentRules'
 
 export interface LoanBackupData {
+  name?: string
   config: LoanConfig
   repayments: EarlyRepayment[]
   repaymentRules: RepaymentRule[]
@@ -64,6 +65,7 @@ export function parseLoanBackupObject(raw: unknown): LoanBackupData {
   })
 
   const settings = isObject(raw.settings) ? raw.settings : raw
+  const name = typeof raw.name === 'string' ? raw.name : undefined
   const scenarioFromLegacyExport = isObject(raw.scenario) && typeof raw.scenario.id === 'string' ? raw.scenario.id : undefined
   const selectedScenario = typeof raw.selectedScenario === 'string' ? raw.selectedScenario : scenarioFromLegacyExport ?? 'reduceTerm'
   const termUnit = oneOf(settings.termUnit, ['months', 'years']) ? settings.termUnit : 'months'
@@ -71,5 +73,5 @@ export function parseLoanBackupObject(raw: unknown): LoanBackupData {
   const appFontSize = oneOf(settings.appFontSize, ['normal', 'large', 'xlarge']) ? settings.appFontSize : 'normal'
   const scheduleFontSize = oneOf(settings.scheduleFontSize, ['normal', 'large', 'xlarge']) ? settings.scheduleFontSize : 'large'
   const theme = oneOf(settings.theme, ['emerald', 'ocean', 'violet', 'graphite']) ? settings.theme : 'emerald'
-  return { config, repayments, repaymentRules, gracePeriods, selectedScenario, termUnit, displayDecimals, appFontSize, scheduleFontSize, theme }
+  return { name, config, repayments, repaymentRules, gracePeriods, selectedScenario, termUnit, displayDecimals, appFontSize, scheduleFontSize, theme }
 }
