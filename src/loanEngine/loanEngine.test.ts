@@ -13,6 +13,7 @@ const early = (patch: Partial<EarlyRepayment> = {}): EarlyRepayment => ({ id: 'e
 describe('loan engine', () => {
   it('рассчитывает аннуитетный платёж', () => expect(calculateAnnuityPayment(1_000_000, 12, 12).toNumber()).toBeCloseTo(88848.79, 2))
   it('строит базовый график с выдачей и закрывает долг', () => { const s=generateBaseSchedule(config); expect(s[0]).toMatchObject({number:1,date:'2024-01-01',payment:0,interest:0,principal:0,closingBalance:3000000}); expect(s.length).toBeLessThanOrEqual(121); expect(s.at(-1)?.closingBalance).toBe(0) })
+  it('добавляет пояснение формулы для строк платежей', () => { const row=generateBaseSchedule(config).find(x=>x.payment>0)!; expect(row.audit).toMatchObject({periodStart:'2024-01-01',periodEnd:'2024-02-15',dayCountBasis:'actualActual',rounding:'kopecks'}); expect(row.audit!.interestBeforeRounding).toBeGreaterThan(0) })
   it('сокращает срок при досрочном платеже', () => { const base=generateBaseSchedule(config); const s=generateBaseSchedule(config,{earlyRepayments:[early()]}); expect(s.length).toBeLessThan(base.length) })
   it('уменьшает платёж при сохранении срока', () => { const s=generateBaseSchedule(config,{earlyRepayments:[early({strategy:'reducePayment'})]}); expect(s.find(x=>x.date==='2024-09-15')!.payment).toBeLessThan(s.find(x=>x.date==='2024-02-15')!.payment); expect(s.length).toBeGreaterThan(100) })
   it('применяет досрочный платёж в дату регулярного', () => { const s=generateBaseSchedule(config,{earlyRepayments:[early()]}); expect(s.find(x=>x.date==='2024-08-15')?.earlyPayment).toBe(300000) })

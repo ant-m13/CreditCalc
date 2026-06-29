@@ -69,6 +69,16 @@ export interface PaymentScheduleItem {
   fee: number
   comment: string
   event: string
+  audit?: {
+    periodStart: string
+    periodEnd: string
+    days: number
+    dayCountBasis: DayCountBasis
+    interestBalance: number
+    interestBeforeRounding: number
+    rounding: RoundingMode
+    operationOrder: string
+  }
 }
 
 export interface ScenarioResult {

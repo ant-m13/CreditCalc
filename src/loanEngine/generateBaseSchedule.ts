@@ -67,14 +67,25 @@ export function generateBaseSchedule(config: LoanConfig, options: Options = {}):
 
   for (let regularIndex = 1; regularIndex <= Math.max(maxPeriods + 240, 360) && balance.gt(0); regularIndex++) {
     const periodCalendarDays = Math.max(1, periodDays(previousPaymentDate, paymentDate, false))
-    const accrue = (from: string, to: string, includeTo: boolean, currentBalance: Decimal) => {
+    const accrueRaw = (from: string, to: string, includeTo: boolean, currentBalance: Decimal) => {
       if (to < from || currentBalance.lte(0)) return new Decimal(0)
       if (config.interest.method === 'daily') {
-        return money(calculateInterest(currentBalance, config.annualRate, from, to, { ...config.interest, includePaymentDate: includeTo }), config.rounding)
+        return calculateInterest(currentBalance, config.annualRate, from, to, { ...config.interest, includePaymentDate: includeTo })
       }
       const segmentDays = periodDays(from, to, includeTo)
-      return money(currentBalance.mul(config.annualRate).div(100).div(periodsPerYear(config.frequency)).mul(segmentDays).div(periodCalendarDays), config.rounding)
+      return currentBalance.mul(config.annualRate).div(100).div(periodsPerYear(config.frequency)).mul(segmentDays).div(periodCalendarDays)
     }
+    const accrue = (from: string, to: string, includeTo: boolean, currentBalance: Decimal) => money(accrueRaw(from, to, includeTo, currentBalance), config.rounding)
+    const audit = (from: string, to: string, includeTo: boolean, currentBalance: Decimal, order: string) => ({
+      periodStart: from,
+      periodEnd: to,
+      days: periodDays(from, to, includeTo),
+      dayCountBasis: config.interest.dayCountBasis,
+      interestBalance: num(currentBalance, config.rounding),
+      interestBeforeRounding: accrueRaw(from, to, includeTo, currentBalance).toNumber(),
+      rounding: config.rounding,
+      operationOrder: order
+    })
 
     const applyEarly = (early: EarlyRepayment, interestDue: Decimal, remainingPeriods: number, amountOverride?: Decimal.Value) => {
       const strategy = options.forcedStrategy ?? early.strategy
@@ -128,7 +139,8 @@ export function generateBaseSchedule(config: LoanConfig, options: Options = {}):
         openingBalance: num(opening, config.rounding), payment: 0, interest: num(chargedInterest, config.rounding), principal: num(earlyPrincipal, config.rounding),
         earlyPayment: num(earlyTotal, config.rounding), closingBalance: num(balance, config.rounding),
         cumulativeInterest: num(cumulativeInterest, config.rounding), cumulativeSavings: 0, fee: num(fees, config.rounding),
-        comment: comments.join('; '), event
+        comment: comments.join('; '), event,
+        audit: audit(accrualStart, eventDate, includeEventDay, opening, 'Досрочное погашение между регулярными платежами')
       })
       accrualStart = includeEventDay ? iso(addDays(parseISO(eventDate), 1)) : eventDate
     }
@@ -228,7 +240,8 @@ export function generateBaseSchedule(config: LoanConfig, options: Options = {}):
       interest: num(chargedInterest, config.rounding), principal: num(principalPart.add(earlyPrincipal), config.rounding), earlyPayment: num(earlyTotal, config.rounding),
       closingBalance: num(balance, config.rounding), cumulativeInterest: num(cumulativeInterest, config.rounding), cumulativeSavings: 0,
       fee: num(earlyFees.add(config.monthlyFee).add(regularIndex === 1 ? config.oneTimeFee : 0), config.rounding),
-      comment: comments.join('; '), event
+      comment: comments.join('; '), event,
+      audit: audit(rowStart, paymentDate, includeFinalDay, opening, sameDay.length ? `${earlyFirst.length ? 'Сначала досрочные earlyFirst; ' : ''}регулярный платёж; ${regularFirst.length ? 'затем досрочные regularFirst' : 'досрочных в дату платежа нет'}` : 'Регулярный платёж')
     })
     previousPaymentDate = paymentDate
     paymentDate = nextPaymentDate(paymentDate, config)

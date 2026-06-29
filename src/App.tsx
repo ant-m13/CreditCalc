@@ -1,6 +1,6 @@
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
-import { addMonths, format, parseISO } from 'date-fns'
+import { addMonths, differenceInCalendarMonths, format, parseISO } from 'date-fns'
 import { ru } from 'date-fns/locale'
 import { ArrowDownToLine, CalendarDays, Check, CircleHelp, Clock3, FileJson, Landmark, Link2, Menu, Pencil, Plus, Printer, ReceiptText, Settings2, ShieldCheck, Sparkles, Target, Trash2, TrendingDown, Upload, WalletCards, X } from 'lucide-react'
 import { calculateInterest, compareScenarios, validateScenario, type EarlyRepayment, type GracePeriod, type LoanConfig, type PaymentScheduleItem } from './loanEngine'
@@ -204,6 +204,20 @@ function Overview({ config, repayments, comparison, selected, chartData, onSelec
   const base = comparison.scenarios[0]
   const debt = currentDebt(selected.schedule, config)
   const earlyTotal = repayments.reduce((sum: number, item: EarlyRepayment) => sum + item.amount, 0)
+  const today = todayISO()
+  const currentRow = selected.schedule.filter((row: PaymentScheduleItem) => row.date <= today).at(-1)
+  const principalPaidPercent = Math.min(100, Math.max(0, (config.principal - debt.principal) / Math.max(1, config.principal) * 100))
+  const elapsedMonths = Math.max(0, differenceInCalendarMonths(parseISO(today), parseISO(config.issueDate)))
+  const termPassedPercent = Math.min(100, elapsedMonths / Math.max(1, selected.termMonths) * 100)
+  const interestPaidPercent = Math.min(100, (currentRow?.cumulativeInterest ?? 0) / Math.max(1, selected.totalInterest) * 100)
+  const remainingMonths = Math.max(0, differenceInCalendarMonths(parseISO(selected.closingDate), parseISO(today)))
+  const milestones = [
+    { title: 'Остаток ниже 75%', done: debt.principal <= config.principal * .75 },
+    { title: 'Половина кредита погашена', done: debt.principal <= config.principal * .5 },
+    { title: 'Последний миллион', done: debt.principal <= 1_000_000 },
+    { title: 'Последний год', done: remainingMonths <= 12 },
+    { title: 'Полное закрытие', done: debt.principal <= 0 }
+  ]
   return <>
     <section className="hero-card"><div><span className="eyebrow">Сумма кредита</span><strong>{money(base.schedule[0]?.openingBalance ?? 0)}</strong><div className="hero-meta"><span><WalletCards/>Платёж <b>{money(selected.monthlyPayment)}</b></span><span><CalendarDays/>Закрытие <b>{shortDate(selected.closingDate)}</b></span><span><Clock3/>Срок сценария <b>{fmtMonths(selected.termMonths)}</b></span></div></div><div className="hero-ring"><svg viewBox="0 0 42 42"><circle cx="21" cy="21" r="16"/><circle className="progress" cx="21" cy="21" r="16" strokeDasharray={`${Math.max(2, Math.round(selected.monthsSaved / Math.max(1, base.termMonths) * 100))} 100`}/></svg><div><b>−{selected.monthsSaved}</b><span>{fmtMonthsFull(selected.monthsSaved)}</span></div></div></section>
     <section className="current-debt-grid">
@@ -212,11 +226,16 @@ function Overview({ config, repayments, comparison, selected, chartData, onSelec
       <div className="current-debt"><span>Проценты</span><b>{money(debt.interest)}</b><small>Начислено к сегодняшнему дню</small></div>
       <div className="current-debt"><span>Досрочно добавлено</span><b>{money(earlyTotal)}</b><small>{repayments.length ? `${repayments.length} ${plural(repayments.length, 'операция', 'операции', 'операций')}` : 'Операций нет'}</small></div>
     </section>
+    <section className="panel progress-panel"><div className="panel-head"><div><h3>Прогресс погашения</h3><p>Наглядно показывает, где вы сейчас относительно выбранного сценария</p></div><b>До закрытия: {fmtMonthsFull(remainingMonths)}</b></div><div className="progress-grid"><ProgressBar title="Погашено основного долга" value={principalPaidPercent}/><ProgressBar title="Прошло срока" value={termPassedPercent}/><ProgressBar title="Выплачено процентов" value={interestPaidPercent}/></div><div className="milestone-list">{milestones.map(item => <span key={item.title} className={item.done ? 'done' : ''}>{item.done ? '✓' : '○'} {item.title}</span>)}</div></section>
     <div className="section-heading"><div><span className="eyebrow">Сценарии досрочного погашения</span><h2>Как применять добавленные досрочные платежи</h2></div><p>Выберите вариант сравнения. “По операциям” использует стратегию, указанную в каждой операции.</p></div>
     <div className="scenario-grid">{comparison.scenarios.slice(1).map((s: any, i: number) => <button key={s.id} className={selected.id === s.id ? 'scenario selected' : 'scenario'} onClick={() => onSelect(s.id)}><span className={`scenario-icon c${i}`} >{i === 0 ? <Target/> : i === 1 ? <WalletCards/> : <Sparkles/>}</span><span className="scenario-title">{s.name}{i === 0 && <em>Выгоднее</em>}</span><b>{money(s.monthlyPayment)} <small>/ мес</small></b><span className="scenario-stats"><i>Экономия <strong>{money(s.interestSavings, true)}</strong></i><i>Срок <strong>−{fmtMonthsFull(s.monthsSaved)}</strong></i></span><span className="radio">{selected.id === s.id && <Check size={14}/>}</span></button>)}</div>
     <section className="insight"><div className="insight-icon"><Sparkles/></div><div><span className="eyebrow">Пояснение</span><h3>Сейчас выбран сценарий «{selected.name}»</h3><p>В нём досрочные платежи пересчитывают график как <b>{selected.strategy === 'combined' ? 'указано в каждой операции' : selected.strategy === 'base' ? 'без досрочных платежей' : repaymentStrategyName(selected.strategy)}</b>. Сокращение срока: <b>{fmtMonthsFull(selected.monthsSaved)}</b>, экономия процентов: <b>{money(selected.interestSavings, true)}</b>.</p></div><button className="ghost" onClick={onOpen}>Добавить платёж</button></section>
     <section className="panel chart-panel"><div className="panel-head"><div><h3>Как меняется ваш долг</h3><p>Остаток основного долга по выбранной стратегии</p></div><span className="chart-legend"><i/> Ваш сценарий <i/> Базовый</span></div><ResponsiveContainer width="100%" height={280}><AreaChart data={chartData}><defs><linearGradient id="area" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="var(--green)" stopOpacity={.32}/><stop offset="100%" stopColor="var(--green)" stopOpacity={0}/></linearGradient></defs><CartesianGrid stroke="#dce8e4" vertical={false}/><XAxis dataKey="date" tickLine={false} axisLine={false}/><YAxis tickFormatter={v => `${Math.round(v/1000000)}м`} tickLine={false} axisLine={false}/><Tooltip formatter={(v: unknown, name: unknown) => [money(Number(v ?? 0)), String(name)]}/><Area dataKey="base" name="Базовый график" stroke="#afc2bd" fill="none" strokeDasharray="5 5"/><Area dataKey="balance" name="Ваш сценарий" stroke="var(--green)" strokeWidth={3} fill="url(#area)"/></AreaChart></ResponsiveContainer></section>
   </>
+}
+
+function ProgressBar({ title, value }: { title: string; value: number }) {
+  return <div className="progress-item"><div><span>{title}</span><b>{Math.round(value)}%</b></div><i><em style={{ width: `${Math.min(100, Math.max(0, value))}%` }}/></i></div>
 }
 
 function Settings({ config, update, updateInterest, termUnit, setTermUnit, displayDecimals, setDisplayDecimals, appFontSize, setAppFontSize, scheduleFontSize, setScheduleFontSize, theme, setTheme }: any) {
