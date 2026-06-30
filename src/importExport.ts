@@ -13,13 +13,16 @@ export interface LoanBackupData {
   displayDecimals: 0 | 2
   appFontSize?: 'normal' | 'large' | 'xlarge'
   scheduleFontSize?: 'normal' | 'large' | 'xlarge'
-  theme: 'emerald' | 'ocean' | 'violet' | 'graphite'
+  theme: 'emerald' | 'ocean' | 'violet' | 'graphite' | 'warm' | 'night'
+  customAccentColor?: string
+  useCustomAccentColor?: boolean
 }
 
 const isObject = (value: unknown): value is Record<string, unknown> => Boolean(value) && typeof value === 'object' && !Array.isArray(value)
 const isDate = (value: unknown): value is string => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(Date.parse(`${value}T00:00:00`))
 const oneOf = <T extends string>(value: unknown, values: readonly T[]): value is T => typeof value === 'string' && values.includes(value as T)
 const finite = (value: unknown, minimum = 0) => typeof value === 'number' && Number.isFinite(value) && value >= minimum
+const hexColor = (value: unknown): value is string => typeof value === 'string' && /^#[0-9a-fA-F]{6}$/.test(value)
 
 export function parseLoanBackup(text: string): LoanBackupData {
   let raw: unknown
@@ -72,6 +75,8 @@ export function parseLoanBackupObject(raw: unknown): LoanBackupData {
   const displayDecimals = settings.displayDecimals === 0 ? 0 : 2
   const appFontSize = oneOf(settings.appFontSize, ['normal', 'large', 'xlarge']) ? settings.appFontSize : 'normal'
   const scheduleFontSize = oneOf(settings.scheduleFontSize, ['normal', 'large', 'xlarge']) ? settings.scheduleFontSize : 'large'
-  const theme = oneOf(settings.theme, ['emerald', 'ocean', 'violet', 'graphite']) ? settings.theme : 'emerald'
-  return { name, config, repayments, repaymentRules, gracePeriods, selectedScenario, termUnit, displayDecimals, appFontSize, scheduleFontSize, theme }
+  const theme = oneOf(settings.theme, ['emerald', 'ocean', 'violet', 'graphite', 'warm', 'night']) ? settings.theme : 'emerald'
+  const customAccentColor = hexColor(settings.customAccentColor) ? settings.customAccentColor : '#0b9873'
+  const useCustomAccentColor = typeof settings.useCustomAccentColor === 'boolean' ? settings.useCustomAccentColor : false
+  return { name, config, repayments, repaymentRules, gracePeriods, selectedScenario, termUnit, displayDecimals, appFontSize, scheduleFontSize, theme, customAccentColor, useCustomAccentColor }
 }

@@ -6,6 +6,8 @@ import type { LoanBackupData } from './importExport'
 import type { RepaymentRule } from './repaymentRules'
 export { defaultConfig } from './loanDefaults'
 
+type ThemeName = 'emerald' | 'ocean' | 'violet' | 'graphite' | 'warm' | 'night'
+
 export interface LoanProfile {
   id: string
   name: string
@@ -18,11 +20,13 @@ export interface LoanProfile {
   displayDecimals: 0 | 2
   appFontSize: 'normal' | 'large' | 'xlarge'
   scheduleFontSize: 'normal' | 'large' | 'xlarge'
-  theme: 'emerald' | 'ocean' | 'violet' | 'graphite'
+  theme: ThemeName
+  customAccentColor: string
+  useCustomAccentColor: boolean
 }
 
 type LoanData = Omit<LoanProfile, 'id' | 'name'>
-type LoanImportData = Pick<LoanProfile, 'config' | 'repayments' | 'gracePeriods' | 'selectedScenario' | 'termUnit' | 'displayDecimals' | 'theme'> & Partial<Pick<LoanProfile, 'name' | 'appFontSize' | 'scheduleFontSize' | 'repaymentRules'>>
+type LoanImportData = Pick<LoanProfile, 'config' | 'repayments' | 'gracePeriods' | 'selectedScenario' | 'termUnit' | 'displayDecimals' | 'theme'> & Partial<Pick<LoanProfile, 'name' | 'appFontSize' | 'scheduleFontSize' | 'repaymentRules' | 'customAccentColor' | 'useCustomAccentColor'>>
 
 interface LoanState extends LoanData {
   loans: LoanProfile[]
@@ -43,6 +47,9 @@ interface LoanState extends LoanData {
   setAppFontSize: (value: LoanState['appFontSize']) => void
   setScheduleFontSize: (value: LoanState['scheduleFontSize']) => void
   setTheme: (theme: LoanState['theme']) => void
+  setCustomAccentColor: (color: string) => void
+  setUseCustomAccentColor: (enabled: boolean) => void
+  resetCustomAccentColor: () => void
   switchLoan: (id: string) => void
   createLoan: (name?: string) => void
   renameLoan: (id: string, name: string) => void
@@ -59,6 +66,10 @@ const sortRules = (rules: RepaymentRule[]) =>
   [...rules].sort((a, b) => a.startDate.localeCompare(b.startDate) || a.id.localeCompare(b.id))
 
 const createId = (): string => globalThis.crypto?.randomUUID?.() ?? `loan-${Date.now()}-${Math.random().toString(16).slice(2)}`
+const defaultAccentColor = '#0b9873'
+const themeNames: readonly ThemeName[] = ['emerald', 'ocean', 'violet', 'graphite', 'warm', 'night']
+const normalizeTheme = (value: unknown): ThemeName => typeof value === 'string' && themeNames.includes(value as ThemeName) ? value as ThemeName : 'emerald'
+const normalizeAccentColor = (value: unknown): string => typeof value === 'string' && /^#[0-9a-fA-F]{6}$/.test(value) ? value : defaultAccentColor
 
 const defaultLoanData = (withSeedRepayment = true): LoanData => ({
   config: defaultConfig,
@@ -70,7 +81,9 @@ const defaultLoanData = (withSeedRepayment = true): LoanData => ({
   displayDecimals: 2,
   appFontSize: 'normal',
   scheduleFontSize: 'large',
-  theme: 'emerald'
+  theme: 'emerald',
+  customAccentColor: defaultAccentColor,
+  useCustomAccentColor: false
 })
 
 const normalizeLoanData = (data: Partial<LoanImportData | LoanData>): LoanData => ({
@@ -83,7 +96,9 @@ const normalizeLoanData = (data: Partial<LoanImportData | LoanData>): LoanData =
   displayDecimals: data.displayDecimals ?? 2,
   appFontSize: data.appFontSize ?? 'normal',
   scheduleFontSize: data.scheduleFontSize ?? 'large',
-  theme: data.theme ?? 'emerald'
+  theme: normalizeTheme(data.theme),
+  customAccentColor: normalizeAccentColor(data.customAccentColor),
+  useCustomAccentColor: typeof data.useCustomAccentColor === 'boolean' ? data.useCustomAccentColor : false
 })
 
 const loanFromData = (data: Partial<LoanImportData | LoanData>, name = 'Мой кредит', id = createId()): LoanProfile => ({
@@ -102,7 +117,9 @@ const publicData = (state: LoanData): LoanData => ({
   displayDecimals: state.displayDecimals,
   appFontSize: state.appFontSize,
   scheduleFontSize: state.scheduleFontSize,
-  theme: state.theme
+  theme: state.theme,
+  customAccentColor: state.customAccentColor,
+  useCustomAccentColor: state.useCustomAccentColor
 })
 
 export const loanToBackupData = (loan: LoanProfile): LoanBackupData => ({
@@ -116,7 +133,9 @@ export const loanToBackupData = (loan: LoanProfile): LoanBackupData => ({
   displayDecimals: loan.displayDecimals,
   appFontSize: loan.appFontSize,
   scheduleFontSize: loan.scheduleFontSize,
-  theme: loan.theme
+  theme: loan.theme,
+  customAccentColor: loan.customAccentColor,
+  useCustomAccentColor: loan.useCustomAccentColor
 })
 
 const syncActive = (state: LoanState, patch: Partial<LoanData>): Partial<LoanState> => {
@@ -151,9 +170,12 @@ export const useLoanStore = create<LoanState>()(persist((set) => ({
   selectScenario: (selectedScenario) => set(s => syncActive(s, { selectedScenario })),
   setTermUnit: (termUnit) => set(s => syncActive(s, { termUnit })),
   setDisplayDecimals: (displayDecimals) => set(s => syncActive(s, { displayDecimals })),
-  setAppFontSize: (appFontSize) => set(s => syncActive(s, { appFontSize })),
+  setAppFontSize: (appFontSize) => set(s => syncActive(s, { appFontSize, scheduleFontSize: appFontSize })),
   setScheduleFontSize: (scheduleFontSize) => set(s => syncActive(s, { scheduleFontSize })),
   setTheme: (theme) => set(s => syncActive(s, { theme })),
+  setCustomAccentColor: (customAccentColor) => set(s => syncActive(s, { customAccentColor: normalizeAccentColor(customAccentColor), useCustomAccentColor: true })),
+  setUseCustomAccentColor: (useCustomAccentColor) => set(s => syncActive(s, { useCustomAccentColor })),
+  resetCustomAccentColor: () => set(s => syncActive(s, { customAccentColor: defaultAccentColor, useCustomAccentColor: false })),
   switchLoan: (id) => set(s => switchToLoan(s, id)),
   createLoan: (name = 'Новый кредит') => set(s => {
     const loan = loanFromData(defaultLoanData(false), name)
@@ -171,7 +193,7 @@ export const useLoanStore = create<LoanState>()(persist((set) => ({
   })
 }), {
   name: 'ipoteka-calculator-v1',
-  version: 4,
+  version: 5,
   migrate: (persisted) => {
     const state = persisted as Partial<LoanState>
     const hasLoans = Array.isArray(state.loans) && state.loans.length > 0

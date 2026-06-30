@@ -19,11 +19,13 @@ export interface SharedCalculationV1 {
     displayDecimals: 0 | 2
     appFontSize: 'normal' | 'large' | 'xlarge'
     scheduleFontSize: 'normal' | 'large' | 'xlarge'
-    theme: 'emerald' | 'ocean' | 'violet' | 'graphite'
+    theme: 'emerald' | 'ocean' | 'violet' | 'graphite' | 'warm' | 'night'
+    customAccentColor?: string
+    useCustomAccentColor?: boolean
   }
 }
 
-export type SnapshotSource = Pick<LoanBackupData, 'config' | 'repayments' | 'gracePeriods' | 'selectedScenario' | 'termUnit' | 'displayDecimals' | 'theme'> & Partial<Pick<LoanBackupData, 'name' | 'appFontSize' | 'scheduleFontSize' | 'repaymentRules'>>
+export type SnapshotSource = Pick<LoanBackupData, 'config' | 'repayments' | 'gracePeriods' | 'selectedScenario' | 'termUnit' | 'displayDecimals' | 'theme'> & Partial<Pick<LoanBackupData, 'name' | 'appFontSize' | 'scheduleFontSize' | 'repaymentRules' | 'customAccentColor' | 'useCustomAccentColor'>>
 
 const bytesToBase64Url = (bytes: Uint8Array) => {
   let binary = ''
@@ -85,7 +87,9 @@ export function createLoanSnapshot(source: SnapshotSource): SharedCalculationV1 
       displayDecimals: source.displayDecimals,
       appFontSize: source.appFontSize ?? 'normal',
       scheduleFontSize: source.scheduleFontSize ?? 'large',
-      theme: source.theme
+      theme: source.theme,
+      customAccentColor: source.customAccentColor,
+      useCustomAccentColor: source.useCustomAccentColor
     }
   }
 }
