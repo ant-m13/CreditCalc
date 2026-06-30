@@ -2,5 +2,12 @@ import React from 'react'
 import ReactDOM from 'react-dom/client'
 import App from './App'
 import './styles.css'
+import './styles/themes.css'
+import './styles/forms.css'
+import './styles/overview-schedule.css'
+import './styles/app-ui.css'
+import './styles/components.css'
+import './styles/mobile-schedule.css'
+import './styles/print.css'
 
 ReactDOM.createRoot(document.getElementById('root')!).render(<React.StrictMode><App /></React.StrictMode>)

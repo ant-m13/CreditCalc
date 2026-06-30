@@ -1,8 +1,8 @@
 import { useDeferredValue, useEffect, useMemo, useState, type CSSProperties } from 'react'
 import { addMonths, format, parseISO } from 'date-fns'
 import { ru } from 'date-fns/locale'
-import { ArrowDownToLine, CalendarDays, CircleHelp, History, Landmark, Menu, Moon, Plus, Printer, ReceiptText, Settings2, ShieldCheck, Sparkles, Sun, Trash2, TrendingDown, X } from 'lucide-react'
-import { compareScenarios, validateScenario, type EarlyRepayment, type GracePeriod, type LoanConfig, type PaymentScheduleItem } from './loanEngine'
+import { ArrowDownToLine, CalendarDays, CircleHelp, History, Landmark, Menu, Moon, Plus, Printer, ReceiptText, Settings2, ShieldCheck, Sun, Trash2, TrendingDown, X } from 'lucide-react'
+import { compareScenarios, validateScenario, type EarlyRepayment, type GracePeriod, type PaymentScheduleItem } from './loanEngine'
 import type { LoanBackupData } from './importExport'
 import { loanToBackupData, useLoanStore, type LoanProfile } from './store'
 import { Schedule } from './components/Schedule'
@@ -16,8 +16,9 @@ import { SharedCalculationModal } from './components/SharedCalculationModal'
 import { PrintReport } from './components/PrintReport'
 import { Changelog, WhatsNewModal } from './components/Changelog'
 import { OnboardingModal } from './components/OnboardingModal'
-import { Field } from './components/ui'
-import { configureFormatters, currencySymbol, money, shortDate } from './formatters'
+import { EarlyModal } from './components/EarlyModal'
+import { GraceModal } from './components/GraceModal'
+import { configureFormatters, money, shortDate } from './formatters'
 import { buildShareUrl, createLoanSnapshot, decodeSharedCalculation, readSharedCalculationFromLocation } from './shareCalculation'
 import { expandRepaymentRules } from './repaymentRules'
 import { APP_VERSION } from './version'
@@ -231,19 +232,5 @@ function App() {
 function GraceList({ items, remove, open }: { items: GracePeriod[]; remove: (id: string) => void; open: () => void }) { return <section className="panel list-panel"><div className="panel-head"><div><h3>Льготные периоды</h3><p>Отсрочка, проценты или индивидуальный платёж</p></div><button className="primary" onClick={open}><Plus/> Добавить</button></div>{items.length ? <div className="event-list">{items.map(x => <div className="event" key={x.id}><div className="date-tile"><CalendarDays/></div><div><b>{shortDate(x.startDate)} — {shortDate(x.endDate)}</b><span>{graceTypeName(x.type)} · {x.extendTerm ? 'с продлением срока' : 'без продления'}</span></div><button className="icon-btn danger" onClick={() => remove(x.id)}><Trash2/></button></div>)}</div> : <Empty title="Льготные периоды не добавлены" action={open}/>}<div className="tip"><CircleHelp/> После льготного периода сначала могут погашаться отложенные платежи и проценты.</div></section> }
 
 function Empty({ title, action }: { title: string; action: () => void }) { return <div className="empty"><span><CalendarDays/></span><h3>{title}</h3><p>Добавьте событие, и мы сразу покажем его влияние на кредит.</p><button className="ghost" onClick={action}><Plus/> Добавить</button></div> }
-
-function EarlyModal({ close, save, initial, defaultDate }: { close:()=>void; save:(x:EarlyRepayment)=>void; initial:EarlyRepayment|null; defaultDate:string }) {
-  const [date,setDate]=useState(initial?.date ?? defaultDate), [amount,setAmount]=useState(initial ? String(initial.amount) : '100000'), [strategy,setStrategy]=useState<EarlyRepayment['strategy']>(initial?.strategy ?? 'reduceTerm'), [source,setSource]=useState<EarlyRepayment['source']>(initial?.source ?? 'own'), [comment,setComment]=useState(initial?.comment ?? '')
-  const [amountMode,setAmountMode]=useState<NonNullable<EarlyRepayment['amountMode']>>(initial?.amountMode ?? 'extra')
-  const [sameDayOrder,setSameDayOrder]=useState<EarlyRepayment['sameDayOrder']>(initial?.sameDayOrder ?? 'regularFirst'), [interestFirst,setInterestFirst]=useState(initial?.interestFirst ?? true)
-  const submit=()=>{ const parsed=Number(amount); if(!Number.isFinite(parsed)||parsed<=0)return; save({id:initial?.id ?? crypto.randomUUID(),date,amount:parsed,amountMode,strategy,source,sameDayOrder:amountMode==='total'?'regularFirst':sameDayOrder,interestFirst,comment}); close() }
-  return <div className="modal-backdrop" onMouseDown={e => e.target===e.currentTarget&&close()}><div className="modal"><div className="modal-head"><div><span className="eyebrow">{initial ? 'Редактирование события' : 'Новое событие'}</span><h2>Досрочный платёж</h2></div><button className="icon-btn" onClick={close}><X/></button></div><div className="modal-body"><div className="form-grid"><Field label="Дата"><input type="date" value={date} onChange={e=>setDate(e.target.value)}/></Field><Field label="Сумма"><div className="with-suffix"><input autoFocus type="number" value={amount} onChange={e=>setAmount(e.target.value)}/><i>{currencySymbol()}</i></div></Field><Field label="Как указана сумма"><select value={amountMode} onChange={e=>setAmountMode(e.target.value as NonNullable<EarlyRepayment['amountMode']>)}><option value="extra">Только досрочная часть</option><option value="total">Общая сумма из графика банка</option></select></Field><Field label="Стратегия"><select value={strategy} onChange={e=>setStrategy(e.target.value as EarlyRepayment['strategy'])}><option value="reduceTerm">Уменьшить срок</option><option value="reducePayment">Уменьшить платёж</option><option value="full">Закрыть полностью</option><option value="custom">Комбинированная</option></select></Field><Field label="Источник"><select value={source} onChange={e=>setSource(e.target.value as EarlyRepayment['source'])}><option value="own">Собственные средства</option><option value="subsidy">Маткапитал / субсидия</option><option value="insurance">Страховое возмещение</option><option value="other">Прочее</option></select></Field>{amountMode === 'extra' && <Field label="Порядок в дату платежа"><select value={sameDayOrder} onChange={e=>setSameDayOrder(e.target.value as EarlyRepayment['sameDayOrder'])}><option value="regularFirst">Сначала регулярный платёж</option><option value="earlyFirst">Сначала досрочный платёж</option></select></Field>}<label className="toggle-row"><div><b>Сначала погасить проценты</b><span>Остаток направить в основной долг</span></div><input type="checkbox" checked={interestFirst} onChange={e=>setInterestFirst(e.target.checked)}/></label></div><Field label="Комментарий"><input value={comment} onChange={e=>setComment(e.target.value)} placeholder="Например, премия за год"/></Field><div className="modal-tip"><Sparkles/> Для банковского примера 26.01.2026 укажите досрочную часть 8 704,99 ₽. Итог строки станет 44 184,80 ₽.</div></div><div className="modal-actions"><button className="ghost" onClick={close}>Отмена</button><button className="primary" onClick={submit}>{initial ? 'Сохранить изменения' : 'Добавить и пересчитать'}</button></div></div></div>
-}
-
-function GraceModal({ close, add }: { close:()=>void; add:(x:GracePeriod)=>void }) {
- const [start,setStart]=useState('2027-03-01'),[end,setEnd]=useState('2027-05-31'),[type,setType]=useState<GracePeriod['type']>('interestOnly'),[extend,setExtend]=useState(true)
- const save=()=>{add({id:crypto.randomUUID(),startDate:start,endDate:end,type,extendTerm:extend,accrueInterest:true,capitalizeInterest:false});close()}
- return <div className="modal-backdrop"><div className="modal"><div className="modal-head"><div><span className="eyebrow">Условия договора</span><h2>Льготный период</h2></div><button className="icon-btn" onClick={close}><X/></button></div><div className="modal-body"><div className="form-grid"><Field label="Начало"><input type="date" value={start} onChange={e=>setStart(e.target.value)}/></Field><Field label="Окончание"><input type="date" value={end} onChange={e=>setEnd(e.target.value)}/></Field><Field label="Режим"><select value={type} onChange={e=>setType(e.target.value as GracePeriod['type'])}><option value="full">Полная отсрочка</option><option value="interestOnly">Только проценты</option><option value="reduced">Уменьшенный платёж</option><option value="custom">Индивидуальный</option></select></Field><label className="toggle-row"><div><b>Продлить срок</b><span>На период действия льготы</span></div><input type="checkbox" checked={extend} onChange={e=>setExtend(e.target.checked)}/></label></div></div><div className="modal-actions"><button className="ghost" onClick={close}>Отмена</button><button className="primary" onClick={save}>Добавить период</button></div></div></div>
-}
 
 export default App

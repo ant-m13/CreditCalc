@@ -1,0 +1,6 @@
+.term-control{display:grid;grid-template-columns:1fr 112px}.term-control input{border-radius:9px 0 0 9px!important}.term-control select{border-left:0!important;border-radius:0 9px 9px 0!important;background:#f2f7f5!important}.appearance-panel{grid-column:1/-1}.print-report{display:none}
+.event{grid-template-columns:53px 1fr auto}.event-actions{display:flex;align-items:center;gap:2px}
+.accent-picker{display:grid;grid-template-columns:42px 1fr auto;align-items:center;gap:8px}.accent-picker input[type=color]{width:42px;height:38px;padding:3px;border-radius:10px}.accent-picker span{font-size:10px;color:#5e726c;font-weight:800}.accent-picker .ghost{height:38px}
+.app-shell[data-theme="night"] .accent-picker span{color:#9aabc0}
+.app-shell .scenario.selected{border-color:var(--green);box-shadow:0 0 0 1px var(--green)}.app-shell .field input:focus,.app-shell .field select:focus{border-color:var(--green);box-shadow:0 0 0 3px color-mix(in srgb,var(--green) 12%,transparent)}.app-shell .toggle-row input,.app-shell input[type=checkbox]{accent-color:var(--green)}.app-shell .sidebar nav em,.app-shell .status-dot i,.app-shell .insight-icon{background:var(--green)}
+.rule-actions{display:flex;gap:9px;align-items:center;margin-top:14px}.rule-list{margin-top:16px}

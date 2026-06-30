@@ -1,0 +1,48 @@
+name: Release built site
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Enable pnpm
+        run: corepack enable
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run tests
+        run: pnpm test
+
+      - name: Build site
+        run: pnpm build
+        env:
+          VITE_BASE_PATH: ./
+
+      - name: Pack dist
+        run: |
+          cd dist
+          zip -r ../credit-calculator-dist.zip .
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: credit-calculator-dist.zip
+          generate_release_notes: true
+          fail_on_unmatched_files: true

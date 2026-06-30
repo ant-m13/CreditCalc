@@ -1,0 +1,12 @@
+/* Мобильный график платежей */
+.mobile-schedule-bar,.mobile-schedule-cards{display:none}
+@media(max-width:720px){
+  .mobile-schedule-bar{position:sticky;top:0;z-index:12;display:block;background:#f8fbfa;border:1px solid #d9e6e1;border-radius:14px;padding:12px;margin:0 0 14px;box-shadow:0 8px 22px #10231f12}
+  .mobile-schedule-bar span,.mobile-schedule-bar b{display:block}.mobile-schedule-bar span{font-size:9px;text-transform:uppercase;letter-spacing:.1em;color:#6d817b;font-weight:800}.mobile-schedule-bar b{font-size:18px;margin-top:4px;color:#0b755a}
+  .mobile-quick-actions{display:flex;flex-wrap:wrap;gap:7px;margin-top:10px}.mobile-quick-actions .compact{flex:1;min-width:120px}
+  .table-wrap:not(.force-mobile-table){display:none}
+  .mobile-schedule-cards{display:grid;gap:10px}
+  .schedule-card{border:1px solid #dfe8e5;background:white;border-radius:13px;padding:13px;scroll-margin-top:105px}.schedule-card.recalc-row{background:#f0faf6}.schedule-card>div:first-child{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:10px}.schedule-card>div:first-child span{font-size:10px;color:#7a8e88;font-weight:800}.schedule-card>div:first-child b{font-size:14px}
+  .schedule-card dl{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:0 0 10px}.schedule-card dl div{border:1px solid #edf2f0;border-radius:10px;padding:9px;background:#fbfdfc}.schedule-card dt{font-size:8px;text-transform:uppercase;letter-spacing:.08em;color:#7d908a}.schedule-card dd{margin:4px 0 0;font-size:12px;font-weight:800;color:#203630}
+  .mobile-audit{margin-top:10px}.mobile-audit .audit-card dl{grid-template-columns:1fr}.force-mobile-table{display:block!important}
+}
