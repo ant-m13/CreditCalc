@@ -1,0 +1,113 @@
+name: Auto release on version change
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - package.json
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: auto-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Read application version
+        id: version
+        shell: bash
+        run: |
+          VERSION="$(node -p "require('./package.json').version")"
+
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
+            echo "Некорректная версия в package.json: $VERSION"
+            exit 1
+          fi
+
+          TAG="v$VERSION"
+
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+          if git ls-remote --exit-code --tags origin \
+            "refs/tags/$TAG" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "Тег $TAG уже существует — выпуск пропущен."
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "Будет создан тег $TAG."
+          fi
+
+      - name: Verify changelog
+        if: steps.version.outputs.exists == 'false'
+        shell: bash
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          if ! grep -Eq "^##[[:space:]]+${VERSION}([[:space:]]|—|-|$)" CHANGELOG.md; then
+            echo "В CHANGELOG.md отсутствует раздел для версии $VERSION"
+            exit 1
+          fi
+
+      - name: Enable pnpm
+        if: steps.version.outputs.exists == 'false'
+        run: corepack enable
+
+      - name: Install dependencies
+        if: steps.version.outputs.exists == 'false'
+        run: pnpm install --frozen-lockfile
+
+      - name: Run tests
+        if: steps.version.outputs.exists == 'false'
+        run: pnpm test
+
+      - name: Build site
+        if: steps.version.outputs.exists == 'false'
+        run: pnpm build
+        env:
+          VITE_BASE_PATH: ./
+
+      - name: Pack dist
+        if: steps.version.outputs.exists == 'false'
+        run: |
+          cd dist
+          zip -r ../credit-calculator-dist.zip .
+
+      - name: Create and push Git tag
+        if: steps.version.outputs.exists == 'false'
+        shell: bash
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email \
+            "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git tag -a "$TAG" "$GITHUB_SHA" -m "Release $TAG"
+          git push origin "$TAG"
+
+      - name: Create GitHub Release
+        if: steps.version.outputs.exists == 'false'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          files: credit-calculator-dist.zip
+          generate_release_notes: true
+          fail_on_unmatched_files: true
