@@ -1,4 +1,4 @@
-name: Auto release on version change
+name: Auto tag on version change
 
 on:
   push:
@@ -16,7 +16,7 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  release:
+  tag:
     runs-on: ubuntu-latest
 
     steps:
@@ -84,12 +84,6 @@ jobs:
         env:
           VITE_BASE_PATH: ./
 
-      - name: Pack dist
-        if: steps.version.outputs.exists == 'false'
-        run: |
-          cd dist
-          zip -r ../credit-calculator-dist.zip .
-
       - name: Create and push Git tag
         if: steps.version.outputs.exists == 'false'
         shell: bash
@@ -102,12 +96,3 @@ jobs:
 
           git tag -a "$TAG" "$GITHUB_SHA" -m "Release $TAG"
           git push origin "$TAG"
-
-      - name: Create GitHub Release
-        if: steps.version.outputs.exists == 'false'
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ steps.version.outputs.tag }}
-          files: credit-calculator-dist.zip
-          generate_release_notes: true
-          fail_on_unmatched_files: true
