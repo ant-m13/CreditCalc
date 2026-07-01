@@ -1,7 +1,8 @@
 import Decimal from 'decimal.js'
 import { addDays, parseISO } from 'date-fns'
+import { accrueInterestRaw, periodsPerYear } from './accrual'
 import { calculateAnnuityPayment } from './calculateAnnuityPayment'
-import { calculateInterest, periodDays } from './calculateInterest'
+import { periodDays } from './calculateInterest'
 import { iso, nextPaymentDate } from './dates'
 import { activeGrace } from './gracePeriod'
 import { MAX_EARLY_REPAYMENTS, MAX_GRACE_PERIODS, MAX_SCHEDULE_ROWS } from './limits'
@@ -9,7 +10,6 @@ import { money, num } from './rounding'
 import type { EarlyRepayment, GracePeriod, LoanConfig, PaymentScheduleItem, RepaymentStrategy } from './types'
 import { validateScenario } from './validation'
 
-const periodsPerYear = (frequency: LoanConfig['frequency']) => frequency === 'biweekly' ? 26 : frequency === 'quarterly' ? 4 : 12
 const totalPeriods = (config: LoanConfig) => config.frequency === 'biweekly' ? Math.ceil(config.termMonths * 26 / 12) : config.frequency === 'quarterly' ? Math.ceil(config.termMonths / 3) : config.termMonths
 
 interface Options { earlyRepayments?: EarlyRepayment[]; gracePeriods?: GracePeriod[]; forcedStrategy?: RepaymentStrategy }
@@ -51,14 +51,14 @@ export function generateBaseSchedule(config: LoanConfig, options: Options = {}):
     interestAccrued: 0,
     interestPaid: 0,
     principalPaid: 0,
-    feePaid: 0,
+    feePaid: num(new Decimal(config.oneTimeFee), config.rounding),
     deferredInterestOpening: 0,
     deferredInterestClosing: 0,
-    cashFlowTotal: 0,
+    cashFlowTotal: num(new Decimal(config.oneTimeFee), config.rounding),
     closingBalance: num(balance, config.rounding),
     cumulativeInterest: 0,
     cumulativeSavings: 0,
-    fee: 0,
+    fee: num(new Decimal(config.oneTimeFee), config.rounding),
     comment: '',
     event: 'Выдача кредита'
   }]
@@ -68,8 +68,6 @@ export function generateBaseSchedule(config: LoanConfig, options: Options = {}):
     }
     schedule.push(row)
   }
-  const noAccrualGracePeriods = gracePeriods.filter(period => period.accrueInterest === false)
-
   const eventLabel = (strategy: RepaymentStrategy, fullyClosed: boolean) => strategy === 'reduceTerm'
     ? 'Пересчёт · сокращение срока'
     : strategy === 'reducePayment'
@@ -81,38 +79,8 @@ export function generateBaseSchedule(config: LoanConfig, options: Options = {}):
   const iterationLimit = Math.min(MAX_SCHEDULE_ROWS - 1, Math.max(maxPeriods + 240, 360))
   for (let regularIndex = 1; regularIndex <= iterationLimit && (balance.gt(0) || deferredInterest.gt(0)); regularIndex++) {
     const periodCalendarDays = Math.max(1, periodDays(previousPaymentDate, paymentDate, false))
-    const accrueRawSegment = (from: string, to: string, includeTo: boolean, currentBalance: Decimal) => {
-      if (to < from || currentBalance.lte(0)) return new Decimal(0)
-      if (config.interest.method === 'daily') {
-        return calculateInterest(currentBalance, config.annualRate, from, to, { ...config.interest, includePaymentDate: includeTo })
-      }
-      const segmentDays = periodDays(from, to, includeTo)
-      return currentBalance.mul(config.annualRate).div(100).div(periodsPerYear(config.frequency)).mul(segmentDays).div(periodCalendarDays)
-    }
-    const accrueRaw = (from: string, to: string, includeTo: boolean, currentBalance: Decimal) => {
-      const days = periodDays(from, to, includeTo)
-      if (days === 0 || noAccrualGracePeriods.length === 0) return accrueRawSegment(from, to, includeTo, currentBalance)
-      let result = new Decimal(0)
-      let segmentStart: string | null = null
-      let segmentEnd = from
-      const closeSegment = () => {
-        if (!segmentStart) return
-        result = result.add(accrueRawSegment(segmentStart, segmentEnd, true, currentBalance))
-        segmentStart = null
-      }
-      for (let day = 0; day < days; day += 1) {
-        const currentDate = iso(addDays(parseISO(from), day))
-        const shouldAccrue = !noAccrualGracePeriods.some(period => period.startDate <= currentDate && currentDate <= period.endDate)
-        if (shouldAccrue) {
-          if (!segmentStart) segmentStart = currentDate
-          segmentEnd = currentDate
-        } else {
-          closeSegment()
-        }
-      }
-      closeSegment()
-      return result
-    }
+    const accrueRaw = (from: string, to: string, includeTo: boolean, currentBalance: Decimal) =>
+      accrueInterestRaw(config, currentBalance, from, to, includeTo, periodCalendarDays, gracePeriods)
     const accrue = (from: string, to: string, includeTo: boolean, currentBalance: Decimal) => money(accrueRaw(from, to, includeTo, currentBalance), config.rounding)
     const audit = (from: string, to: string, includeTo: boolean, currentBalance: Decimal, order: string) => ({
       periodStart: from,
@@ -286,7 +254,7 @@ export function generateBaseSchedule(config: LoanConfig, options: Options = {}):
       event = event || 'Автозакрытие малого остатка'
     }
     cumulativeInterest = cumulativeInterest.add(chargedInterest)
-    const feePaid = earlyFees.add(config.monthlyFee).add(regularIndex === 1 ? config.oneTimeFee : 0)
+    const feePaid = earlyFees.add(config.monthlyFee)
     const principalPaid = principalPart.add(earlyPrincipal)
     const interestPaid = paidInterestRegular.add(earlyInterest)
     const cashFlowTotal = regularPayment.add(earlyTotal).add(feePaid)

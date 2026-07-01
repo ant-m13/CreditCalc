@@ -62,7 +62,7 @@ export function Settings({
       <div className="form-grid">
         <Field label="Единовременная"><NumberInput min="0" value={config.oneTimeFee} onCommit={oneTimeFee => update({ oneTimeFee })}/></Field>
         <Field label="Ежемесячная"><NumberInput min="0" value={config.monthlyFee} onCommit={monthlyFee => update({ monthlyFee })}/></Field>
-        <Field label="За досрочное погашение"><div className="with-suffix"><NumberInput min="0" value={config.earlyRepaymentFeePercent} onCommit={earlyRepaymentFeePercent => update({ earlyRepaymentFeePercent })}/><i>%</i></div></Field>
+        <Field label="За досрочное погашение"><div className="with-suffix"><NumberInput min="0" max="100" value={config.earlyRepaymentFeePercent} onCommit={earlyRepaymentFeePercent => update({ earlyRepaymentFeePercent: Math.min(100, Math.max(0, earlyRepaymentFeePercent)) })}/><i>%</i></div></Field>
       </div>
     </section>
 

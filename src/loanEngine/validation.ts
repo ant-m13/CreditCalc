@@ -14,6 +14,7 @@ export function validateLoan(config: LoanConfig) {
   if (!finite(config.paymentDay) || config.paymentDay < 1 || config.paymentDay > 31) errors.push('День платежа должен быть от 1 до 31')
   if (!finite(config.closeThreshold) || config.closeThreshold < 0) errors.push('Порог закрытия не может быть отрицательным')
   if (!finite(config.oneTimeFee) || !finite(config.monthlyFee) || !finite(config.earlyRepaymentFeePercent) || config.oneTimeFee < 0 || config.monthlyFee < 0 || config.earlyRepaymentFeePercent < 0) errors.push('Комиссии не могут быть отрицательными')
+  if (finite(config.earlyRepaymentFeePercent) && config.earlyRepaymentFeePercent > 100) errors.push('Комиссия за досрочное погашение должна быть от 0 до 100%')
   if (!isISODate(config.issueDate)) errors.push('Дата выдачи должна быть корректной календарной датой')
   if (!isISODate(config.firstPaymentDate)) errors.push('Дата первого платежа должна быть корректной календарной датой')
   if (isISODate(config.issueDate) && isISODate(config.firstPaymentDate) && config.firstPaymentDate <= config.issueDate) errors.push('Первый платёж должен быть после даты выдачи')

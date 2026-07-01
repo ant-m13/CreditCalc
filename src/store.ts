@@ -7,7 +7,7 @@ import type { LoanBackupData } from './importExport'
 import type { RepaymentRule } from './repaymentRules'
 import { createId } from './utils/createId'
 import { isISODate, isISOYearMonth } from './utils/dateValidation'
-import { MAX_TERM_MONTHS } from './loanEngine/limits'
+import { MAX_EARLY_REPAYMENTS, MAX_GRACE_PERIODS, MAX_TERM_MONTHS } from './loanEngine/limits'
 export { defaultConfig } from './loanDefaults'
 
 type ThemeName = 'emerald' | 'ocean' | 'violet' | 'graphite' | 'warm' | 'night'
@@ -131,7 +131,7 @@ const normalizeConfig = (config: Partial<LoanConfig> | undefined): LoanConfig =>
     closeThreshold: finiteNumber(source.closeThreshold, defaultConfig.closeThreshold, 0),
     oneTimeFee: finiteNumber(source.oneTimeFee, defaultConfig.oneTimeFee, 0),
     monthlyFee: finiteNumber(source.monthlyFee, defaultConfig.monthlyFee, 0),
-    earlyRepaymentFeePercent: finiteNumber(source.earlyRepaymentFeePercent, defaultConfig.earlyRepaymentFeePercent, 0),
+    earlyRepaymentFeePercent: finiteNumber(source.earlyRepaymentFeePercent, defaultConfig.earlyRepaymentFeePercent, 0, 100),
     interest: {
       ...defaultConfig.interest,
       ...interest,
@@ -145,11 +145,11 @@ const normalizeConfig = (config: Partial<LoanConfig> | undefined): LoanConfig =>
 
 const normalizeRepayments = (value: unknown, config: LoanConfig): EarlyRepayment[] => {
   if (!Array.isArray(value)) return []
-  return sortRepayments(value.flatMap((item): EarlyRepayment[] => {
+  return sortRepayments(value.slice(0, MAX_EARLY_REPAYMENTS).flatMap((item): EarlyRepayment[] => {
     if (!isObject(item) || typeof item.id !== 'string' || !isISODate(item.date)) return []
     const amount = finiteNumber(item.amount, 0, 0)
     if (amount <= 0) return []
-    const requestedAmountMode = oneOf(item.amountMode, ['extra', 'total'] as const, 'extra')
+    const requestedAmountMode = item.amountMode === undefined ? 'total' : oneOf(item.amountMode, ['extra', 'total'] as const, 'extra')
     const amountMode = requestedAmountMode === 'total' && isRegularPaymentDate(item.date, config) ? 'total' : 'extra'
     return [{
       id: item.id,
@@ -167,7 +167,7 @@ const normalizeRepayments = (value: unknown, config: LoanConfig): EarlyRepayment
 
 const normalizeRepaymentRules = (value: unknown): RepaymentRule[] => {
   if (!Array.isArray(value)) return []
-  return sortRules(value.flatMap((item): RepaymentRule[] => {
+  return sortRules(value.slice(0, MAX_EARLY_REPAYMENTS).flatMap((item): RepaymentRule[] => {
     if (!isObject(item) || typeof item.id !== 'string' || typeof item.name !== 'string' || !isISODate(item.startDate) || !isISODate(item.endDate) || item.endDate < item.startDate) return []
     const type = oneOf(item.type, repaymentRuleTypes, 'monthlyFixed')
     const amount = item.amount === undefined ? undefined : finiteNumber(item.amount, 0, 0)
@@ -193,7 +193,7 @@ const normalizeRepaymentRules = (value: unknown): RepaymentRule[] => {
 
 const normalizeGracePeriods = (value: unknown): GracePeriod[] => {
   if (!Array.isArray(value)) return []
-  return value.flatMap((item): GracePeriod[] => {
+  return value.slice(0, MAX_GRACE_PERIODS).flatMap((item): GracePeriod[] => {
     if (!isObject(item) || typeof item.id !== 'string' || !isISODate(item.startDate) || !isISODate(item.endDate) || item.endDate < item.startDate) return []
     const paymentAmount = item.paymentAmount === undefined ? undefined : finiteNumber(item.paymentAmount, 0, 0)
     return [{

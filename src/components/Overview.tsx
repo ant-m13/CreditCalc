@@ -1,34 +1,23 @@
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { differenceInCalendarMonths, format, parseISO } from 'date-fns'
 import { CalendarDays, Check, Clock3, Sparkles, Target, WalletCards } from 'lucide-react'
-import type { ComparisonResult, EarlyRepayment, LoanConfig, PaymentScheduleItem, ScenarioResult } from '../loanEngine'
-import { calculateInterest } from '../loanEngine'
+import type { ComparisonResult, EarlyRepayment, GracePeriod, LoanConfig, PaymentScheduleItem, ScenarioResult } from '../loanEngine'
+import { calculateDebtAtDate } from '../loanEngine'
 import { fmtMonths, fmtMonthsFull, money, plural, shortDate } from '../formatters'
 import { repaymentStrategyName } from '../labels'
 
 const todayISO = () => format(new Date(), 'yyyy-MM-dd')
 const rowCashFlow = (row: PaymentScheduleItem) => row.cashFlowTotal ?? row.payment + row.earlyPayment + row.fee
 
-const currentDebt = (schedule: PaymentScheduleItem[], config: LoanConfig, today = todayISO()) => {
-  if (!schedule.length || today < config.issueDate) return { date: today, principal: 0, interest: 0, total: 0, fromDate: config.issueDate }
-  const paidRows = schedule.filter(row => row.date <= today)
-  const lastRow = paidRows.at(-1) ?? schedule[0]
-  const principal = Math.max(0, lastRow.closingBalance)
-  const deferredInterest = Math.max(0, lastRow.deferredInterestClosing ?? 0)
-  const accruedInterest = principal > 0 && lastRow.date < today ? calculateInterest(principal, config.annualRate, lastRow.date, today, config.interest).toDecimalPlaces(2).toNumber() : 0
-  const interest = deferredInterest + accruedInterest
-  return { date: today, principal, interest, total: principal + interest, fromDate: lastRow.date }
-}
-
 function ProgressBar({ title, value }: { title: string; value: number }) {
   return <div className="progress-item"><div><span>{title}</span><b>{Math.round(value)}%</b></div><i><em style={{ width: `${Math.min(100, Math.max(0, value))}%` }}/></i></div>
 }
 
-export function Overview({ config, repayments, comparison, selected, chartData, onSelect, onOpen }: { config: LoanConfig; repayments: EarlyRepayment[]; comparison: ComparisonResult; selected: ScenarioResult; chartData: { date: string; base: number; balance: number | null }[]; onSelect: (id: string) => void; onOpen: () => void }) {
+export function Overview({ config, repayments, gracePeriods, comparison, selected, chartData, onSelect, onOpen }: { config: LoanConfig; repayments: EarlyRepayment[]; gracePeriods: GracePeriod[]; comparison: ComparisonResult; selected: ScenarioResult; chartData: { date: string; base: number; balance: number | null }[]; onSelect: (id: string) => void; onOpen: () => void }) {
   const base = comparison.scenarios[0]
-  const debt = currentDebt(selected.schedule, config)
   const earlyTotal = repayments.reduce((sum, item) => sum + item.amount, 0)
   const today = todayISO()
+  const debt = calculateDebtAtDate(config, selected.schedule, gracePeriods, today)
   const nextPayment = selected.schedule.find(row => row.date >= today && rowCashFlow(row) > 0)
   const nextPaymentFee = nextPayment ? nextPayment.feePaid ?? nextPayment.fee : 0
   const principalPaidPercent = Math.min(100, Math.max(0, (config.principal - debt.principal) / Math.max(1, config.principal) * 100))

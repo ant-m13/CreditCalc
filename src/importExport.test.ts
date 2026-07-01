@@ -45,6 +45,10 @@ describe('импорт резервной копии', () => {
     expect(() => parseLoanBackup(JSON.stringify({ config: { ...defaultConfig, termMonths: 1201 }, repayments: [], gracePeriods: [] }))).toThrow('недопустимые числа')
   })
 
+  it('отклоняет комиссию за досрочное погашение выше 100%', () => {
+    expect(() => parseLoanBackup(JSON.stringify({ config: { ...defaultConfig, earlyRepaymentFeePercent: 150 }, repayments: [], gracePeriods: [] }))).toThrow('недопустимые числа')
+  })
+
   it('отклоняет общую сумму строки банка с порядком earlyFirst', () => {
     expect(() => parseLoanBackup(JSON.stringify({ config: defaultConfig, repayments: [{ ...repayment, amountMode: 'total', sameDayOrder: 'earlyFirst' }], gracePeriods: [] }))).toThrow('общая сумма')
   })
@@ -52,5 +56,10 @@ describe('импорт резервной копии', () => {
   it('отклоняет общую сумму строки банка не в дату регулярного платежа', () => {
     const config = { ...defaultConfig, issueDate: '2026-01-01', firstPaymentDate: '2026-01-26', paymentDay: 26 }
     expect(() => parseLoanBackup(JSON.stringify({ config, repayments: [{ ...repayment, date: '2026-01-27', amountMode: 'total', sameDayOrder: 'regularFirst' }], gracePeriods: [] }))).toThrow('дату регулярного платежа')
+  })
+
+  it('отклоняет обратный льготный период', () => {
+    const grace = { id: 'g1', startDate: '2026-05-01', endDate: '2026-04-01', type: 'full', extendTerm: true, accrueInterest: true, capitalizeInterest: false }
+    expect(() => parseLoanBackup(JSON.stringify({ config: defaultConfig, repayments: [], gracePeriods: [grace] }))).toThrow('окончание раньше начала')
   })
 })

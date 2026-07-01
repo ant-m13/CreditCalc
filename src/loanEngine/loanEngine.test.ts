@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { calculateAnnuityPayment, calculateInterest, compareScenarios, generateBaseSchedule, nextPaymentDate, validateScenario } from '.'
+import { calculateAnnuityPayment, calculateDebtAtDate, calculateInterest, compareScenarios, generateBaseSchedule, nextPaymentDate, validateScenario } from '.'
 import type { EarlyRepayment, GracePeriod, LoanConfig } from './types'
 
 const config: LoanConfig = {
@@ -131,6 +131,22 @@ describe('loan engine', () => {
     expect(row.principalPaid).toBe(10000)
   })
 
+  it('считает текущий долг с учётом беспроцентной льготы', () => {
+    const grace:GracePeriod={id:'g-current',startDate:'2024-01-01',endDate:'2024-01-31',type:'full',extendTerm:true,accrueInterest:false,capitalizeInterest:false}
+    const s=generateBaseSchedule(config,{gracePeriods:[grace]})
+    const debt=calculateDebtAtDate(config,s,[grace],'2024-01-20')
+    expect(debt.principal).toBe(config.principal)
+    expect(debt.interest).toBe(0)
+    expect(debt.total).toBe(config.principal)
+  })
+
+  it('считает текущий долг периодическим методом пропорционально платёжному периоду', () => {
+    const periodic={...config,principal:1_000_000,annualRate:12,issueDate:'2024-01-01',firstPaymentDate:'2024-02-01',paymentDay:1,interest:{...config.interest,method:'annuity' as const,includePaymentDate:false}}
+    const s=generateBaseSchedule(periodic)
+    const debt=calculateDebtAtDate(periodic,s,[],'2024-01-16')
+    expect(debt.interest).toBeCloseTo(4838.71,2)
+  })
+
   it('учитывает момент остатка в день досрочного платежа', () => {
     const baseDaily={...config,interest:{...config.interest,method:'daily' as const,dayCountBasis:'actual365' as const,includePaymentDate:true}}
     const start=generateBaseSchedule({...baseDaily,interest:{...baseDaily.interest,balanceMoment:'startOfDay' as const}},{earlyRepayments:[early({date:'2024-03-01'})]})
@@ -148,6 +164,20 @@ describe('loan engine', () => {
     const result=compareScenarios({...config,principal:120000,annualRate:0,termMonths:12,oneTimeFee:1000},[])
     expect(result.scenarios[0].overpayment).toBe(1000)
     expect(result.scenarios[0].totalPaid).toBe(121000)
+  })
+
+  it('учитывает единовременную комиссию даже при закрытии до первого платежа', () => {
+    const result=compareScenarios({...config,principal:120000,annualRate:0,termMonths:12,oneTimeFee:1000},[early({date:'2024-01-15',amount:120000,strategy:'full'})])
+    const combined=result.scenarios.find(s=>s.id==='combined')!
+    expect(combined.totalPaid).toBe(121000)
+    expect(combined.overpayment).toBe(1000)
+    expect(combined.schedule[0].feePaid).toBe(1000)
+  })
+
+  it('показывает будущий платёж 0 после полного досрочного закрытия', () => {
+    const result=compareScenarios(config,[early({date:'2024-03-15',amount:4_000_000,strategy:'full'})])
+    const combined=result.scenarios.find(s=>s.id==='combined')!
+    expect(combined.monthlyPayment).toBe(0)
   })
 
   it('каждая строка бухгалтерски сходится по денежному потоку', () => {
@@ -331,6 +361,8 @@ describe('edge cases', () => {
   it('отрицательная ставка — ошибка валидации', () => expect(() => generateBaseSchedule({ ...config, annualRate: -5 })).toThrow('Ставка'))
 
   it('слишком длинный срок — ошибка валидации', () => expect(() => generateBaseSchedule({ ...config, termMonths: 1201 })).toThrow('1200'))
+
+  it('комиссия за досрочное погашение выше 100% — ошибка валидации', () => expect(() => generateBaseSchedule({ ...config, earlyRepaymentFeePercent: 150 })).toThrow('0 до 100'))
 
   it('валидатор отклоняет пустые даты досрочных платежей и льготных периодов', () => {
     const errors = validateScenario(config, [early({ date: '' })], [{ id:'bad', startDate:'', endDate:'2024-03-01', type:'full', extendTerm:false, accrueInterest:true, capitalizeInterest:false }])
