@@ -43,7 +43,7 @@ export function EarlyModal({ close, save, initial, defaultDate }: EarlyModalProp
     <div className="modal">
       <div className="modal-head">
         <div><span className="eyebrow">{initial ? 'Редактирование события' : 'Новое событие'}</span><h2>Досрочный платёж</h2></div>
-        <button className="icon-btn" onClick={close}><X/></button>
+        <button className="icon-btn" aria-label="Закрыть окно досрочного платежа" onClick={close}><X/></button>
       </div>
       <div className="modal-body">
         <div className="form-grid">

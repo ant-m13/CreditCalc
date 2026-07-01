@@ -1,4 +1,7 @@
 /* Улучшенная компоновка настроек и быстрый ночной режим */
+.icon-btn:disabled{opacity:.35;cursor:not-allowed}
+.danger-action{background:#bd6758}
+.danger-action:hover{background:#a95548}
 .settings-layout{grid-template-columns:1fr 1fr;grid-template-areas:"loan loan" "interest fees" "appearance appearance";align-items:start}
 .loan-settings-panel{grid-area:loan;grid-row:auto}
 .interest-settings-panel{grid-area:interest}

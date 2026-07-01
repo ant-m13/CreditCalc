@@ -54,6 +54,7 @@ interface LoanState extends LoanData {
   switchLoan: (id: string) => void
   createLoan: (name?: string) => void
   renameLoan: (id: string, name: string) => void
+  removeLoan: (id: string) => void
   addLoanFromData: (data: LoanImportData) => void
   replaceData: (data: LoanImportData) => void
 }
@@ -182,6 +183,13 @@ export const useLoanStore = create<LoanState>()(persist((set) => ({
     return { loans: [...s.loans, loan], activeLoanId: loan.id, ...publicData(loan) }
   }),
   renameLoan: (id, name) => set(s => ({ loans: s.loans.map(loan => loan.id === id ? { ...loan, name: name.trim() || loan.name } : loan) })),
+  removeLoan: (id) => set(s => {
+    if (s.loans.length <= 1) return {}
+    const loans = s.loans.filter(loan => loan.id !== id)
+    const activeLoanId = s.activeLoanId === id ? loans[0].id : s.activeLoanId
+    const active = loans.find(loan => loan.id === activeLoanId) ?? loans[0]
+    return { loans, activeLoanId, ...publicData(active) }
+  }),
   addLoanFromData: (data) => set(s => {
     const loan = loanFromData(data, data.name ?? 'Кредит из ссылки')
     return { loans: [...s.loans, loan], activeLoanId: loan.id, ...publicData(loan) }

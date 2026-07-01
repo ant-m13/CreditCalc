@@ -32,7 +32,7 @@ export function GraceModal({ close, add }: GraceModalProps) {
     <div className="modal">
       <div className="modal-head">
         <div><span className="eyebrow">Условия договора</span><h2>Льготный период</h2></div>
-        <button className="icon-btn" onClick={close}><X/></button>
+        <button className="icon-btn" aria-label="Закрыть окно льготного периода" onClick={close}><X/></button>
       </div>
       <div className="modal-body">
         <div className="form-grid">
