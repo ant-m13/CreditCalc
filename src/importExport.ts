@@ -1,6 +1,7 @@
 import type { EarlyRepayment, GracePeriod, LoanConfig } from './loanEngine'
 import { defaultConfig } from './loanDefaults'
 import type { RepaymentRule } from './repaymentRules'
+import { format, isValid, parseISO } from 'date-fns'
 
 export interface LoanBackupData {
   name?: string
@@ -19,10 +20,15 @@ export interface LoanBackupData {
 }
 
 const isObject = (value: unknown): value is Record<string, unknown> => Boolean(value) && typeof value === 'object' && !Array.isArray(value)
-const isDate = (value: unknown): value is string => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(Date.parse(`${value}T00:00:00`))
+const isDate = (value: unknown): value is string => {
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false
+  const parsed = parseISO(value)
+  return isValid(parsed) && format(parsed, 'yyyy-MM-dd') === value
+}
 const oneOf = <T extends string>(value: unknown, values: readonly T[]): value is T => typeof value === 'string' && values.includes(value as T)
 const finite = (value: unknown, minimum = 0) => typeof value === 'number' && Number.isFinite(value) && value >= minimum
 const hexColor = (value: unknown): value is string => typeof value === 'string' && /^#[0-9a-fA-F]{6}$/.test(value)
+const currencies = ['RUB', 'USD', 'EUR', 'CNY'] as const
 
 export function parseLoanBackup(text: string): LoanBackupData {
   let raw: unknown
@@ -36,10 +42,11 @@ export function parseLoanBackupObject(raw: unknown): LoanBackupData {
   const source = raw.config
   const interest = isObject(source.interest) ? source.interest : {}
   const config = { ...defaultConfig, ...source, interest: { ...defaultConfig.interest, ...interest } } as LoanConfig
-  if (!finite(config.principal) || !finite(config.annualRate) || !finite(config.termMonths, 1) || !finite(config.paymentDay, 1) || config.paymentDay > 31) throw new Error('Параметры кредита содержат недопустимые числа')
+  if (!finite(config.principal) || !finite(config.annualRate) || !finite(config.termMonths, 1) || !finite(config.paymentDay, 1) || config.paymentDay > 31 || !finite(config.closeThreshold) || !finite(config.oneTimeFee) || !finite(config.monthlyFee) || !finite(config.earlyRepaymentFeePercent)) throw new Error('Параметры кредита содержат недопустимые числа')
   if (!isDate(config.issueDate) || !isDate(config.firstPaymentDate)) throw new Error('Проверьте даты выдачи и первого платежа')
-  if (!oneOf(config.paymentType, ['annuity', 'differentiated']) || !oneOf(config.frequency, ['monthly', 'biweekly', 'quarterly']) || !oneOf(config.rounding, ['kopecks', 'rubles', 'bank'])) throw new Error('Файл содержит неизвестный тип расчёта')
-  if (!oneOf(config.interest.method, ['annuity', 'daily']) || !oneOf(config.interest.dayCountBasis, ['365', '366', '360', 'actual365', 'actualActual']) || !oneOf(config.interest.balanceMoment, ['startOfDay', 'endOfDay'])) throw new Error('Файл содержит неизвестное правило начисления процентов')
+  if (!oneOf(config.currency, currencies)) throw new Error('Файл содержит неподдерживаемую валюту')
+  if (typeof config.firstPaymentInterestOnly !== 'boolean' || !oneOf(config.paymentType, ['annuity', 'differentiated']) || !oneOf(config.frequency, ['monthly', 'biweekly', 'quarterly']) || !oneOf(config.rounding, ['kopecks', 'rubles', 'bank'])) throw new Error('Файл содержит неизвестный тип расчёта')
+  if (typeof config.interest.includePaymentDate !== 'boolean' || !oneOf(config.interest.method, ['annuity', 'daily']) || !oneOf(config.interest.dayCountBasis, ['365', '366', '360', 'actual365', 'actualActual']) || !oneOf(config.interest.balanceMoment, ['startOfDay', 'endOfDay'])) throw new Error('Файл содержит неизвестное правило начисления процентов')
 
   const repaymentsRaw = raw.repayments ?? []
   if (!Array.isArray(repaymentsRaw)) throw new Error('Список досрочных платежей повреждён')

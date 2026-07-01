@@ -32,7 +32,8 @@ export function generateBaseSchedule(config: LoanConfig, options: Options = {}):
   const configuredPeriods = totalPeriods(config)
   const maxPeriods = configuredPeriods + gracePeriods.filter(g => g.extendTerm).reduce((sum, g) => sum + Math.max(1, Math.ceil((+parseISO(g.endDate) - +parseISO(g.startDate)) / 2629800000)), 0)
   let balance = money(config.principal, config.rounding)
-  let payment = config.paymentType === 'annuity' ? calculateAnnuityPayment(balance, config.annualRate, configuredPeriods, periodsPerYear(config.frequency), config.rounding) : money(new Decimal(balance).div(configuredPeriods), config.rounding)
+  let principalPerPeriod = money(new Decimal(balance).div(Math.max(1, configuredPeriods)), config.rounding)
+  let payment = config.paymentType === 'annuity' ? calculateAnnuityPayment(balance, config.annualRate, configuredPeriods, periodsPerYear(config.frequency), config.rounding) : principalPerPeriod
   let paymentDate = config.firstPaymentDate
   let previousPaymentDate = config.issueDate
   let accrualStart = config.issueDate
@@ -65,7 +66,7 @@ export function generateBaseSchedule(config: LoanConfig, options: Options = {}):
         ? (fullyClosed ? 'Полное досрочное погашение' : 'Полное погашение · недостаточно средств')
         : 'Комбинированный пересчёт'
 
-  for (let regularIndex = 1; regularIndex <= Math.max(maxPeriods + 240, 360) && balance.gt(0); regularIndex++) {
+  for (let regularIndex = 1; regularIndex <= Math.max(maxPeriods + 240, 360) && (balance.gt(0) || deferredInterest.gt(0)); regularIndex++) {
     const periodCalendarDays = Math.max(1, periodDays(previousPaymentDate, paymentDate, false))
     const accrueRaw = (from: string, to: string, includeTo: boolean, currentBalance: Decimal) => {
       if (to < from || currentBalance.lte(0)) return new Decimal(0)
@@ -98,8 +99,10 @@ export function generateBaseSchedule(config: LoanConfig, options: Options = {}):
       const paidPrincipal = Decimal.min(balance, available)
       balance = Decimal.max(0, balance.minus(paidPrincipal))
       const fullyClosed = balance.isZero() && interestLeft.lte(0)
-      if (strategy === 'reducePayment' && balance.gt(0)) {
+      if (strategy === 'reducePayment' && balance.gt(0) && config.paymentType === 'annuity') {
         payment = calculateAnnuityPayment(balance, config.annualRate, Math.max(1, remainingPeriods), periodsPerYear(config.frequency), config.rounding)
+      } else if (strategy === 'reducePayment' && balance.gt(0)) {
+        principalPerPeriod = money(balance.div(Math.max(1, remainingPeriods)), config.rounding)
       }
       return { paidInterest, paidPrincipal, interestLeft, fee, event: eventLabel(strategy, fullyClosed), comment: early.comment ?? '' }
     }
@@ -145,7 +148,7 @@ export function generateBaseSchedule(config: LoanConfig, options: Options = {}):
       accrualStart = includeEventDay ? iso(addDays(parseISO(eventDate), 1)) : eventDate
     }
 
-    if (balance.lte(0)) break
+    if (balance.lte(0) && deferredInterest.lte(0)) break
 
     const opening = balance
     const rowStart = accrualStart
@@ -191,11 +194,14 @@ export function generateBaseSchedule(config: LoanConfig, options: Options = {}):
       if (grace?.type === 'interestOnly' || (regularIndex === 1 && config.firstPaymentInterestOnly !== false)) {
         targetPayment = interestDue
         event = event || (regularIndex === 1 && config.firstPaymentInterestOnly !== false ? 'Первый платёж · только проценты' : 'Льготный период · только проценты')
+      } else if (balance.lte(0) && interestDue.gt(0)) {
+        targetPayment = interestDue
+        event = event || 'Погашение отложенных процентов'
       } else if (grace?.type === 'reduced' || grace?.type === 'custom') {
         targetPayment = money(grace.paymentAmount ?? payment.div(2), config.rounding)
         event = event || 'Льготный период · особый платёж'
       } else if (config.paymentType === 'differentiated') {
-        targetPayment = money(interestDue.add(new Decimal(config.principal).div(configuredPeriods)), config.rounding)
+        targetPayment = money(interestDue.add(principalPerPeriod), config.rounding)
       }
       const paidInterest = Decimal.min(interestDue, targetPayment)
       const availableForPrincipal = Decimal.max(0, targetPayment.minus(paidInterest))

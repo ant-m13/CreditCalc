@@ -34,4 +34,14 @@ describe('правила досрочных платежей', () => {
     expect(items).toHaveLength(1)
     expect(items[0].amount).toBeGreaterThan(0)
   })
+
+  it('не сдвигает день правила после короткого месяца', () => {
+    const items = expandRepaymentRules(defaultConfig, [rule({ startDate: '2026-01-31', endDate: '2026-04-30' })])
+    expect(items.map(item => item.date)).toEqual(['2026-01-31', '2026-02-28', '2026-03-31', '2026-04-30'])
+  })
+
+  it('округляет сумму правила согласно настройке кредита', () => {
+    const items = expandRepaymentRules({ ...defaultConfig, rounding: 'rubles' }, [rule({ amount: 10000.49, startDate: '2026-01-26', endDate: '2026-01-26' })])
+    expect(items[0].amount).toBe(10000)
+  })
 })

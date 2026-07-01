@@ -32,4 +32,12 @@ describe('импорт резервной копии', () => {
     expect(() => parseLoanBackup('{broken')).toThrow('корректным JSON')
     expect(() => parseLoanBackup(JSON.stringify({ repayments: [] }))).toThrow('параметры кредита')
   })
+
+  it('отклоняет неподдерживаемую валюту', () => {
+    expect(() => parseLoanBackup(JSON.stringify({ config: { ...defaultConfig, currency: 'NOT-A-CURRENCY' }, repayments: [], gracePeriods: [] }))).toThrow('валюту')
+  })
+
+  it('отклоняет невозможные календарные даты', () => {
+    expect(() => parseLoanBackup(JSON.stringify({ config: { ...defaultConfig, issueDate: '2024-02-31' }, repayments: [], gracePeriods: [] }))).toThrow('даты')
+  })
 })

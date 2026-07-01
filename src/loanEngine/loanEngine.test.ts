@@ -29,6 +29,18 @@ describe('loan engine', () => {
   it('учитывает льготный период', () => { const grace:GracePeriod={id:'g',startDate:'2024-03-01',endDate:'2024-04-30',type:'interestOnly',extendTerm:true,accrueInterest:true,capitalizeInterest:false}; const s=generateBaseSchedule(config,{gracePeriods:[grace]}); const row=s.find(x=>x.date==='2024-03-15')!; expect(row.principal).toBe(0); expect(row.event).toContain('проценты') })
   it('работает с нулевой ставкой', () => { const s=generateBaseSchedule({...config,annualRate:0}); const first=s.find(x=>x.date==='2024-02-15')!; expect(first.interest).toBe(0); expect(first.payment).toBe(25000) })
   it('выполняет полное досрочное погашение', () => { const s=generateBaseSchedule(config,{earlyRepayments:[early({date:'2024-03-15',amount:4_000_000,strategy:'full'})]}); expect(s.length).toBe(3); expect(s.at(-1)?.closingBalance).toBe(0) })
+  it('не закрывает кредит, если основной долг погашен, но остались отложенные проценты', () => {
+    const c = { ...config, principal: 1_000_000, termMonths: 12, firstPaymentDate: '2024-02-01', paymentDay: 1 }
+    const s = generateBaseSchedule(c, {
+      earlyRepayments: [early({ date: '2024-01-15', amount: 1_000_000, strategy: 'full', interestFirst: false, sameDayOrder: 'regularFirst' })]
+    })
+    const earlyRow = s.find(row => row.date === '2024-01-15')!
+    const interestRow = s.find(row => row.event === 'Погашение отложенных процентов')!
+    expect(earlyRow.closingBalance).toBe(0)
+    expect(interestRow.payment).toBeGreaterThan(0)
+    expect(s.at(-1)?.closingBalance).toBe(0)
+    expect(s.at(-1)?.payment).toBeGreaterThan(0)
+  })
   it('автоматически закрывает остаток меньше порога', () => { const c={...config,principal:1000,termMonths:3,closeThreshold:500}; const s=generateBaseSchedule(c); expect(s.at(-1)?.closingBalance).toBe(0) })
   it('считает actual/actual в високосном году', () => { const i=calculateInterest(1_000_000,10,'2024-02-01','2024-03-01',config.interest); expect(i.toNumber()).toBeCloseTo(7923.5,0) })
   it('корректирует 31 число для короткого месяца', () => { expect(nextPaymentDate('2024-01-31',{...config,paymentDay:31})).toBe('2024-02-29') })
@@ -183,7 +195,7 @@ describe('performance', () => {
     const duration = performance.now() - start;
 
     expect(duration).toBeLessThan(800);
-    expect(result.length).toBeLessThanOrEqual(360);
+    expect(result.length).toBeLessThanOrEqual(363);
     expect(result.length).toBeGreaterThan(0);
     expect(result.at(-1)?.closingBalance).toBeCloseTo(0, 2);
   });
@@ -218,6 +230,17 @@ describe('differentiated payments', () => {
     const diffInterest = diff.reduce((sum, r) => sum + r.interest, 0);
     expect(diffInterest).toBeLessThan(annuityInterest);
   });
+
+  it('уменьшает основной платёж после досрочного погашения со стратегией reducePayment', () => {
+    const diffConfig = { ...config, paymentType: 'differentiated' as const, principal: 1_200_000, termMonths: 12, annualRate: 12 }
+    const s = generateBaseSchedule(diffConfig, {
+      earlyRepayments: [early({ date: '2024-03-15', amount: 300_000, strategy: 'reducePayment' })]
+    })
+    const before = s.find(row => row.date === '2024-02-15')!
+    const after = s.find(row => row.date === '2024-04-15')!
+    expect(after.principal).toBeLessThan(before.principal)
+    expect(s.length).toBeGreaterThan(10)
+  })
 })
 
 describe('day count bases', () => {

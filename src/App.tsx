@@ -53,13 +53,23 @@ function App() {
   const calculationRepayments = useDeferredValue(store.repayments)
   const calculationRepaymentRules = useDeferredValue(store.repaymentRules)
   const calculationGracePeriods = useDeferredValue(store.gracePeriods)
-  const generatedRepayments = useMemo(() => expandRepaymentRules(calculationConfig, calculationRepaymentRules), [calculationConfig, calculationRepaymentRules])
+  const validationErrors = useMemo(() => validateScenario(calculationConfig, calculationRepayments, calculationGracePeriods), [calculationConfig, calculationRepayments, calculationGracePeriods])
+  const generatedResult = useMemo(() => {
+    if (validationErrors.length > 0) return { items: [] as EarlyRepayment[], error: null as string | null }
+    try {
+      return { items: expandRepaymentRules(calculationConfig, calculationRepaymentRules), error: null as string | null }
+    } catch (error) {
+      return { items: [] as EarlyRepayment[], error: error instanceof Error ? error.message : 'Не удалось создать операции по правилам досрочных платежей' }
+    }
+  }, [calculationConfig, calculationRepaymentRules, validationErrors])
+  const generatedRepayments = generatedResult.items
   const allRepayments = useMemo(() => [...calculationRepayments, ...generatedRepayments].sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id)), [calculationRepayments, generatedRepayments])
-  const comparison = useMemo(() => compareScenarios(calculationConfig, allRepayments, calculationGracePeriods), [calculationConfig, allRepayments, calculationGracePeriods])
-  const selected = comparison.scenarios.find(s => s.id === store.selectedScenario) ?? comparison.scenarios[1]
-  const base = comparison.scenarios[0]
-  const errors = validateScenario(store.config, allRepayments, store.gracePeriods)
+  const errors = useMemo(() => generatedResult.error ? [...validationErrors, generatedResult.error] : validationErrors, [validationErrors, generatedResult.error])
+  const comparison = useMemo(() => errors.length === 0 ? compareScenarios(calculationConfig, allRepayments, calculationGracePeriods) : null, [calculationConfig, allRepayments, calculationGracePeriods, errors])
+  const selected = comparison?.scenarios.find(s => s.id === store.selectedScenario) ?? comparison?.scenarios[1] ?? null
+  const base = comparison?.scenarios[0] ?? null
   const overviewChartData = useMemo(() => {
+    if (!base || !selected) return []
     const baseStep = Math.max(1, Math.floor(base.schedule.length / 48))
     const dates = new Set(base.schedule.filter((_, i) => i % baseStep === 0).map(row => row.date))
     if (base.schedule.at(-1)) dates.add(base.schedule.at(-1)!.date)
@@ -211,16 +221,18 @@ function App() {
       <header><button className="icon-btn menu-btn" aria-label="Открыть меню" onClick={() => setMobileNav(true)}><Menu/></button><div className="header-title"><p>Финансовый план · v{APP_VERSION}</p><h1>{section === 'overview' ? 'Ваш кредит' : nav.find(x => x[0] === section)?.[2]}</h1></div><LoanSwitcher loans={store.loans} activeLoanId={store.activeLoanId} switchLoan={store.switchLoan} createLoan={store.createLoan} renameLoan={store.renameLoan} removeLoan={store.removeLoan}/><button className="icon-btn theme-toggle" onClick={toggleNightTheme} title={store.theme === 'night' ? 'Вернуть светлую тему' : 'Включить ночной режим'} aria-label={store.theme === 'night' ? 'Вернуть светлую тему' : 'Включить ночной режим'}>{store.theme === 'night' ? <Sun/> : <Moon/>}</button><FontControls fontSize={store.appFontSize} setFontSize={store.setAppFontSize}/><div className="header-actions"><span className="status-dot"><i/> Данные сохранены</span><button className="ghost print-action" onClick={() => window.print()}><Printer size={16}/> Печать</button><button className="primary add-payment-action" onClick={() => openEarly()}><Plus size={17}/> Досрочный платёж</button></div></header>
       <div className="content">
         {errors.length > 0 && <div className="alert">{errors.join(' · ')}</div>}
-        {section === 'overview' && <Overview config={store.config} repayments={allRepayments} comparison={comparison} selected={selected} chartData={overviewChartData} onSelect={store.selectScenario} onOpen={() => openEarly()}/>}
+        {section === 'overview' && comparison && selected && <Overview config={store.config} repayments={allRepayments} comparison={comparison} selected={selected} chartData={overviewChartData} onSelect={store.selectScenario} onOpen={() => openEarly()}/>}
+        {section === 'overview' && (!comparison || !selected) && <section className="panel list-panel"><div className="panel-head"><div><h3>Расчёт временно остановлен</h3><p>Исправьте параметры кредита или правила досрочных платежей, чтобы построить график.</p></div></div></section>}
         {section === 'settings' && <Settings config={store.config} update={store.updateConfig} updateInterest={store.updateInterest} termUnit={store.termUnit} setTermUnit={store.setTermUnit} displayDecimals={store.displayDecimals} setDisplayDecimals={store.setDisplayDecimals} appFontSize={store.appFontSize} setAppFontSize={store.setAppFontSize} theme={store.theme} setTheme={store.setTheme} customAccentColor={store.customAccentColor} useCustomAccentColor={store.useCustomAccentColor} setCustomAccentColor={store.setCustomAccentColor} setUseCustomAccentColor={store.setUseCustomAccentColor} resetCustomAccentColor={store.resetCustomAccentColor}/>}
         {section === 'early' && <EarlyList items={store.repayments} rules={store.repaymentRules} generated={generatedRepayments} remove={store.removeRepayment} edit={openEarly} open={() => openEarly()} addRule={store.addRepaymentRule} updateRule={store.updateRepaymentRule} removeRule={store.removeRepaymentRule} defaultStart={store.config.firstPaymentDate}/>}
         {section === 'grace' && <GraceList items={store.gracePeriods} remove={store.removeGrace} open={() => setShowGrace(true)}/>} 
-        {section === 'schedule' && <Schedule schedule={selected.schedule} baseSchedule={base.schedule} repayments={allRepayments} rows={rows} setRows={setRows} more={() => setRows(r => r + 24)}/>}
+        {section === 'schedule' && selected && base && <Schedule schedule={selected.schedule} baseSchedule={base.schedule} repayments={allRepayments} rows={rows} setRows={setRows} more={() => setRows(r => r + 24)}/>}
+        {section === 'schedule' && (!selected || !base) && <section className="panel list-panel"><div className="panel-head"><div><h3>График недоступен</h3><p>Сначала исправьте ошибки в параметрах расчёта.</p></div></div></section>}
         {section === 'export' && <ExportPanel loans={store.loans} exportLoanId={exportLoanId} setExportLoanId={setExportLoanId} download={download} createFromJson={(data, fileName) => createLoanFromData(data, `файла «${fileName}»`)} replaceFromJson={(data, fileName) => replaceActiveWithData(data, `файла «${fileName}»`)} copyShareLink={copyShareLink} status={importStatus}/>}
         {section === 'changes' && <Changelog/>}
       </div>
     </main>
-    <PrintReport config={store.config} repayments={allRepayments} comparison={comparison} selected={selected}/>
+    {comparison && selected && <PrintReport config={store.config} repayments={allRepayments} comparison={comparison} selected={selected}/>}
     {showOnboarding && <OnboardingModal close={finishOnboarding} showExample={() => { finishOnboarding(); setSection('overview') }} startSettings={() => { finishOnboarding(); setSection('settings') }}/>}
     {showWhatsNew && <WhatsNewModal close={closeWhatsNew} openChanges={() => { closeWhatsNew(); setSection('changes') }}/>}
     {sharedCalculation && <SharedCalculationModal data={sharedCalculation} createNew={createLoanFromSharedCalculation} replaceCurrent={replaceActiveWithSharedCalculation} decline={declineSharedCalculation}/>}
