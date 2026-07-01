@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Тег релиза, например v1.5.1'
+        description: 'Тег релиза, например v1.5.2'
         required: true
         type: string
 

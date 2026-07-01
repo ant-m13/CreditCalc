@@ -18,6 +18,7 @@ import { buildShareUrl, createLoanSnapshot, decodeSharedCalculation, readSharedC
 import { expandRepaymentRules } from './repaymentRules'
 import { APP_VERSION } from './version'
 import { graceTypeName } from './labels'
+import { isISODate } from './utils/dateValidation'
 
 const Overview = lazy(() => import('./components/Overview').then(module => ({ default: module.Overview })))
 const Settings = lazy(() => import('./components/Settings').then(module => ({ default: module.Settings })))
@@ -64,8 +65,17 @@ function App() {
   }, [calculationConfig, calculationRepaymentRules, validationErrors])
   const generatedRepayments = generatedResult.items
   const allRepayments = useMemo(() => [...calculationRepayments, ...generatedRepayments].sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id)), [calculationRepayments, generatedRepayments])
-  const errors = useMemo(() => generatedResult.error ? [...validationErrors, generatedResult.error] : validationErrors, [validationErrors, generatedResult.error])
-  const comparison = useMemo(() => errors.length === 0 ? compareScenarios(calculationConfig, allRepayments, calculationGracePeriods) : null, [calculationConfig, allRepayments, calculationGracePeriods, errors])
+  const preliminaryErrors = useMemo(() => generatedResult.error ? [...validationErrors, generatedResult.error] : validationErrors, [validationErrors, generatedResult.error])
+  const comparisonResult = useMemo(() => {
+    if (preliminaryErrors.length > 0) return { comparison: null, error: null as string | null }
+    try {
+      return { comparison: compareScenarios(calculationConfig, allRepayments, calculationGracePeriods), error: null }
+    } catch (error) {
+      return { comparison: null, error: error instanceof Error ? error.message : 'Не удалось построить график платежей' }
+    }
+  }, [calculationConfig, allRepayments, calculationGracePeriods, preliminaryErrors])
+  const errors = useMemo(() => comparisonResult.error ? [...preliminaryErrors, comparisonResult.error] : preliminaryErrors, [preliminaryErrors, comparisonResult.error])
+  const comparison = comparisonResult.comparison
   const selected = comparison?.scenarios.find(s => s.id === store.selectedScenario) ?? comparison?.scenarios[1] ?? null
   const base = comparison?.scenarios[0] ?? null
   const overviewChartData = useMemo(() => {
@@ -88,11 +98,16 @@ function App() {
 
   const download = (kind: 'csv' | 'json' | 'xls', loanId = exportLoanId) => {
     const loan = store.loans.find(item => item.id === loanId) ?? store.loans.find(item => item.id === store.activeLoanId) ?? store.loans[0]
-    const calculation = buildLoanCalculation(loan)
-    const schedule = calculation.selected.schedule
     let body = '', type = '', ext = kind
     if (kind === 'json') { body = JSON.stringify({ ...createLoanSnapshot(loanToBackupData(loan)), exportedAt: new Date().toISOString() }, null, 2); type = 'application/json' }
     else {
+      let schedule: PaymentScheduleItem[]
+      try {
+        schedule = buildLoanCalculation(loan).selected.schedule
+      } catch (error) {
+        setImportStatus({ kind: 'error', text: error instanceof Error ? error.message : 'Не удалось построить график для экспорта' })
+        return
+      }
       const showFees = schedule.some(r => Math.abs(r.feePaid ?? r.fee) > 0.004)
       const head = showFees ? ['№ п/п','Дата','По кредиту','По процентам','Комиссия','Итого','Остаток задолженности'] : ['№ п/п','Дата','По кредиту','По процентам','Итого','Остаток задолженности']
       const table = [head, ...schedule.map(r => showFees ? [r.number,r.date,r.principalPaid ?? r.principal,r.interestPaid ?? r.interest,r.feePaid ?? r.fee,r.cashFlowTotal ?? r.payment + r.earlyPayment + r.fee,r.closingBalance] : [r.number,r.date,r.principalPaid ?? r.principal,r.interestPaid ?? r.interest,r.cashFlowTotal ?? r.payment + r.earlyPayment + r.fee,r.closingBalance])]
@@ -210,6 +225,7 @@ function App() {
   const openEarly = (repayment: EarlyRepayment | null = null) => { setEditingEarly(repayment); setShowEarly(true) }
   const closeEarly = () => { setShowEarly(false); setEditingEarly(null) }
   const toggleNightTheme = () => store.setTheme(store.theme === 'night' ? lastLightTheme : 'night')
+  const defaultEarlyDate = useMemo(() => isISODate(store.config.firstPaymentDate) ? format(addMonths(parseISO(store.config.firstPaymentDate), 1), 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd'), [store.config.firstPaymentDate])
 
   const accentStyle = store.useCustomAccentColor ? ({ '--green': store.customAccentColor } as CSSProperties) : undefined
 
@@ -240,7 +256,7 @@ function App() {
     {showOnboarding && <OnboardingModal close={finishOnboarding} showExample={() => { finishOnboarding(); setSection('overview') }} startSettings={() => { finishOnboarding(); setSection('settings') }}/>}
     {showWhatsNew && <WhatsNewModal close={closeWhatsNew} openChanges={() => { closeWhatsNew(); setSection('changes') }}/>}
     {sharedCalculation && <SharedCalculationModal data={sharedCalculation} createNew={createLoanFromSharedCalculation} replaceCurrent={replaceActiveWithSharedCalculation} decline={declineSharedCalculation}/>}
-    {showEarly && <EarlyModal close={closeEarly} save={editingEarly ? store.updateRepayment : store.addRepayment} initial={editingEarly} defaultDate={format(addMonths(parseISO(store.config.firstPaymentDate), 1), 'yyyy-MM-dd')}/>}
+    {showEarly && <EarlyModal close={closeEarly} save={editingEarly ? store.updateRepayment : store.addRepayment} initial={editingEarly} defaultDate={defaultEarlyDate}/>}
     {showGrace && <GraceModal close={() => setShowGrace(false)} add={store.addGrace}/>} 
   </div>
 }

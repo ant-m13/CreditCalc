@@ -5,6 +5,8 @@ import { defaultConfig } from './loanDefaults'
 import type { LoanBackupData } from './importExport'
 import type { RepaymentRule } from './repaymentRules'
 import { createId } from './utils/createId'
+import { isISODate } from './utils/dateValidation'
+import { MAX_TERM_MONTHS } from './loanEngine/limits'
 export { defaultConfig } from './loanDefaults'
 
 type ThemeName = 'emerald' | 'ocean' | 'violet' | 'graphite' | 'warm' | 'night'
@@ -69,8 +71,17 @@ const sortRules = (rules: RepaymentRule[]) =>
 
 const defaultAccentColor = '#0b9873'
 const themeNames: readonly ThemeName[] = ['emerald', 'ocean', 'violet', 'graphite', 'warm', 'night']
+const currencies = ['RUB', 'USD', 'EUR', 'CNY'] as const
+const paymentTypes = ['annuity', 'differentiated'] as const
+const frequencies = ['monthly', 'biweekly', 'quarterly'] as const
+const roundingModes = ['kopecks', 'rubles', 'bank'] as const
+const interestMethods = ['annuity', 'daily'] as const
+const dayCountBases = ['365', '366', '360', 'actual365', 'actualActual'] as const
+const balanceMoments = ['startOfDay', 'endOfDay'] as const
 const normalizeTheme = (value: unknown): ThemeName => typeof value === 'string' && themeNames.includes(value as ThemeName) ? value as ThemeName : 'emerald'
 const normalizeAccentColor = (value: unknown): string => typeof value === 'string' && /^#[0-9a-fA-F]{6}$/.test(value) ? value : defaultAccentColor
+const oneOf = <T extends string>(value: unknown, values: readonly T[], fallback: T): T => typeof value === 'string' && values.includes(value as T) ? value as T : fallback
+const finiteNumber = (value: unknown, fallback: number, min = 0, max = Number.POSITIVE_INFINITY) => typeof value === 'number' && Number.isFinite(value) ? Math.min(max, Math.max(min, value)) : fallback
 
 const defaultLoanData = (withSeedRepayment = true): LoanData => ({
   config: defaultConfig,
@@ -87,8 +98,42 @@ const defaultLoanData = (withSeedRepayment = true): LoanData => ({
   useCustomAccentColor: false
 })
 
+const normalizeConfig = (config: Partial<LoanConfig> | undefined): LoanConfig => {
+  const source = config ?? {}
+  const interest = (source.interest ?? {}) as Partial<LoanConfig['interest']>
+  const issueDate = isISODate(source.issueDate) ? source.issueDate : defaultConfig.issueDate
+  const firstPaymentDate = isISODate(source.firstPaymentDate) && source.firstPaymentDate > issueDate ? source.firstPaymentDate : defaultConfig.firstPaymentDate
+  return {
+    ...defaultConfig,
+    ...source,
+    principal: finiteNumber(source.principal, defaultConfig.principal, 1),
+    annualRate: finiteNumber(source.annualRate, defaultConfig.annualRate, 0, 100),
+    issueDate,
+    firstPaymentDate,
+    firstPaymentInterestOnly: typeof source.firstPaymentInterestOnly === 'boolean' ? source.firstPaymentInterestOnly : true,
+    termMonths: Math.round(finiteNumber(source.termMonths, defaultConfig.termMonths, 1, MAX_TERM_MONTHS)),
+    paymentDay: Math.round(finiteNumber(source.paymentDay, defaultConfig.paymentDay, 1, 31)),
+    paymentType: oneOf(source.paymentType, paymentTypes, defaultConfig.paymentType),
+    frequency: oneOf(source.frequency, frequencies, defaultConfig.frequency),
+    currency: oneOf(source.currency, currencies, defaultConfig.currency as typeof currencies[number]),
+    rounding: oneOf(source.rounding, roundingModes, defaultConfig.rounding),
+    closeThreshold: finiteNumber(source.closeThreshold, defaultConfig.closeThreshold, 0),
+    oneTimeFee: finiteNumber(source.oneTimeFee, defaultConfig.oneTimeFee, 0),
+    monthlyFee: finiteNumber(source.monthlyFee, defaultConfig.monthlyFee, 0),
+    earlyRepaymentFeePercent: finiteNumber(source.earlyRepaymentFeePercent, defaultConfig.earlyRepaymentFeePercent, 0),
+    interest: {
+      ...defaultConfig.interest,
+      ...interest,
+      method: oneOf(interest.method, interestMethods, defaultConfig.interest.method),
+      dayCountBasis: oneOf(interest.dayCountBasis, dayCountBases, defaultConfig.interest.dayCountBasis),
+      includePaymentDate: typeof interest.includePaymentDate === 'boolean' ? interest.includePaymentDate : defaultConfig.interest.includePaymentDate,
+      balanceMoment: oneOf(interest.balanceMoment, balanceMoments, defaultConfig.interest.balanceMoment)
+    }
+  }
+}
+
 const normalizeLoanData = (data: Partial<LoanImportData | LoanData>): LoanData => ({
-  config: { ...defaultConfig, ...data.config, interest: { ...defaultConfig.interest, ...data.config?.interest }, firstPaymentInterestOnly: data.config?.firstPaymentInterestOnly ?? true },
+  config: normalizeConfig(data.config),
   repayments: sortRepayments(data.repayments ?? []),
   repaymentRules: sortRules(data.repaymentRules ?? []),
   gracePeriods: data.gracePeriods ?? [],

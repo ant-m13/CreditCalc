@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { X } from 'lucide-react'
 import type { GracePeriod } from '../loanEngine'
 import { createId } from '../utils/createId'
+import { isISODate } from '../utils/dateValidation'
 import { Field } from './ui'
 
 interface GraceModalProps {
@@ -14,8 +15,11 @@ export function GraceModal({ close, add }: GraceModalProps) {
   const [end, setEnd] = useState('2027-05-31')
   const [type, setType] = useState<GracePeriod['type']>('interestOnly')
   const [extend, setExtend] = useState(true)
+  const [error, setError] = useState('')
 
   const save = () => {
+    if (!isISODate(start) || !isISODate(end)) { setError('Укажите корректные даты льготного периода'); return }
+    if (end < start) { setError('Дата окончания не может быть раньше даты начала'); return }
     add({
       id: createId('grace'),
       startDate: start,
@@ -41,6 +45,7 @@ export function GraceModal({ close, add }: GraceModalProps) {
           <Field label="Режим"><select value={type} onChange={event => setType(event.target.value as GracePeriod['type'])}><option value="full">Полная отсрочка</option><option value="interestOnly">Только проценты</option><option value="reduced">Уменьшенный платёж</option><option value="custom">Индивидуальный</option></select></Field>
           <label className="toggle-row"><div><b>Продлить срок</b><span>На период действия льготы</span></div><input type="checkbox" checked={extend} onChange={event => setExtend(event.target.checked)}/></label>
         </div>
+        {error && <div className="alert modal-alert">{error}</div>}
       </div>
       <div className="modal-actions"><button className="ghost" onClick={close}>Отмена</button><button className="primary" onClick={save}>Добавить период</button></div>
     </div>

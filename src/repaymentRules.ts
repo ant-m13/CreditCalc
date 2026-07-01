@@ -1,6 +1,8 @@
 import { addMonths, addYears, format, parseISO } from 'date-fns'
 import { generateBaseSchedule, type EarlyRepayment, type LoanConfig } from './loanEngine'
+import { MAX_GENERATED_REPAYMENTS } from './loanEngine/limits'
 import { num } from './loanEngine/rounding'
+import { isISODate, isISOYearMonth } from './utils/dateValidation'
 
 export type RepaymentRuleType = 'monthlyFixed' | 'annualBonus' | 'paymentPercent'
 
@@ -34,6 +36,8 @@ export function expandRepaymentRules(config: LoanConfig, rules: RepaymentRule[])
   const regularPayment = firstRegularPayment(config)
   const result: EarlyRepayment[] = []
   for (const rule of rules) {
+    if (!isISODate(rule.startDate) || !isISODate(rule.endDate)) throw new Error(`Правило «${rule.name}» содержит некорректные даты`)
+    if (!rule.skipMonths.every(isISOYearMonth)) throw new Error(`Правило «${rule.name}» содержит некорректный месяц пропуска`)
     const amount = ruleAmount(rule, regularPayment, config)
     if (amount <= 0 || rule.startDate > rule.endDate) continue
     const startDate = parseISO(rule.startDate)
@@ -54,6 +58,7 @@ export function expandRepaymentRules(config: LoanConfig, rules: RepaymentRule[])
           interestFirst: rule.interestFirst,
           comment: rule.comment || rule.name
         })
+        if (result.length > MAX_GENERATED_REPAYMENTS) throw new Error(`Правила создают слишком много досрочных операций. Максимум: ${MAX_GENERATED_REPAYMENTS}`)
       }
       guard += 1
       cursor = rule.type === 'annualBonus' ? addYears(startDate, guard) : addMonths(startDate, guard)

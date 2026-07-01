@@ -40,4 +40,12 @@ describe('импорт резервной копии', () => {
   it('отклоняет невозможные календарные даты', () => {
     expect(() => parseLoanBackup(JSON.stringify({ config: { ...defaultConfig, issueDate: '2024-02-31' }, repayments: [], gracePeriods: [] }))).toThrow('даты')
   })
+
+  it('отклоняет слишком длинный срок', () => {
+    expect(() => parseLoanBackup(JSON.stringify({ config: { ...defaultConfig, termMonths: 1201 }, repayments: [], gracePeriods: [] }))).toThrow('недопустимые числа')
+  })
+
+  it('отклоняет общую сумму строки банка с порядком earlyFirst', () => {
+    expect(() => parseLoanBackup(JSON.stringify({ config: defaultConfig, repayments: [{ ...repayment, amountMode: 'total', sameDayOrder: 'earlyFirst' }], gracePeriods: [] }))).toThrow('общая сумма')
+  })
 })

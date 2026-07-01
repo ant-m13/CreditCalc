@@ -1,0 +1,5 @@
+export const MAX_TERM_MONTHS = 1200
+export const MAX_EARLY_REPAYMENTS = 5000
+export const MAX_GENERATED_REPAYMENTS = 5000
+export const MAX_GRACE_PERIODS = 100
+export const MAX_SCHEDULE_ROWS = 10000

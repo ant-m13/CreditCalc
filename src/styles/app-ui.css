@@ -12,5 +12,6 @@
 .whats-new-list{margin:0;padding-left:19px;color:#536960;font-size:12px;line-height:1.65}
 .onboarding-steps{display:grid;gap:10px}.onboarding-steps div{display:grid;grid-template-columns:34px 1fr;gap:10px;align-items:center;border:1px solid #dfe8e5;background:white;border-radius:12px;padding:11px}.onboarding-steps b{width:30px;height:30px;border-radius:9px;background:#e5f6ef;color:#087458;display:grid;place-items:center}.onboarding-steps span{font-size:12px;color:#425750;line-height:1.45}.saved-period-note{margin-top:12px;background:#fff8e8;border:1px solid #f0d9a8;color:#6d4710;border-radius:10px;padding:10px 12px;font-size:10px;display:flex;gap:8px;align-items:center}.saved-period-note svg{width:15px;flex:0 0 auto}
 .compact-export-grid button{grid-template-rows:1fr!important}.compact-export-grid button b{align-self:center!important}.compact-export-grid button small{display:none}
+.error-boundary{min-height:100vh;display:grid;place-items:center;background:#edf4f1;padding:24px}.error-boundary .panel{max-width:560px;width:100%}
 @media(max-width:1100px){.loan-switcher{order:3}.font-controls{order:4}}
 @media(max-width:720px){.loan-switcher{width:100%;order:3}.loan-switcher label{min-width:0;flex:1}.changelog-entry{grid-template-columns:1fr}}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { calculateAnnuityPayment, calculateInterest, compareScenarios, generateBaseSchedule, nextPaymentDate } from '.'
+import { calculateAnnuityPayment, calculateInterest, compareScenarios, generateBaseSchedule, nextPaymentDate, validateScenario } from '.'
 import type { EarlyRepayment, GracePeriod, LoanConfig } from './types'
 
 const config: LoanConfig = {
@@ -111,6 +111,15 @@ describe('loan engine', () => {
     const earlyFirst=generateBaseSchedule(config,{earlyRepayments:[early({date:'2024-08-15',strategy:'reducePayment',sameDayOrder:'earlyFirst'})]})
     const regularFirst=generateBaseSchedule(config,{earlyRepayments:[early({date:'2024-08-15',strategy:'reducePayment',sameDayOrder:'regularFirst'})]})
     expect(earlyFirst.find(x=>x.date==='2024-08-15')!.payment).toBeLessThan(regularFirst.find(x=>x.date==='2024-08-15')!.payment)
+  })
+
+  it('не даёт earlyFirst погасить проценты, отменённые беспроцентной льготой', () => {
+    const grace:GracePeriod={id:'g-free',startDate:'2024-08-01',endDate:'2024-08-31',type:'full',extendTerm:true,accrueInterest:false,capitalizeInterest:false}
+    const s=generateBaseSchedule(config,{gracePeriods:[grace],earlyRepayments:[early({date:'2024-08-15',amount:10000,sameDayOrder:'earlyFirst',interestFirst:true})]})
+    const row=s.find(x=>x.date==='2024-08-15')!
+    expect(row.interestAccrued).toBe(0)
+    expect(row.interestPaid).toBe(0)
+    expect(row.principalPaid).toBe(10000)
   })
 
   it('учитывает момент остатка в день досрочного платежа', () => {
@@ -294,35 +303,25 @@ describe('early repayment amount modes', () => {
 })
 
 describe('edge cases', () => {
-  it('сумма кредита = 0 — возвращает график только с выдачей и нулевым остатком', () => {
-    const s = generateBaseSchedule({ ...config, principal: 0 });
-    expect(s.length).toBe(1);
-    expect(s[0].closingBalance).toBe(0);
-    expect(s[0].payment).toBe(0);
-  });
+  it('сумма кредита = 0 — ошибка валидации', () => expect(() => generateBaseSchedule({ ...config, principal: 0 })).toThrow('Сумма кредита'))
 
-  it('срок = 0 — генерирует график без платежей, остаток не меняется', () => {
-    const s = generateBaseSchedule({ ...config, termMonths: 0 });
-    expect(s.length).toBeGreaterThan(0);
-    const totalPayment = s.reduce((sum, r) => sum + r.payment, 0);
-    expect(totalPayment).toBe(0);
-    expect(s.at(-1)?.closingBalance).toBe(config.principal);
-  });
+  it('срок = 0 — ошибка валидации', () => expect(() => generateBaseSchedule({ ...config, termMonths: 0 })).toThrow('Срок'))
 
-  it('дата выдачи позже даты первого платежа', () => {
-    const s = generateBaseSchedule({
-      ...config,
-      issueDate: '2024-02-01',
-      firstPaymentDate: '2024-01-15',
-    });
-    expect(s[1]?.interest).toBe(0);
-  });
+  it('дата выдачи позже даты первого платежа — ошибка валидации', () => expect(() => generateBaseSchedule({ ...config, issueDate: '2024-02-01', firstPaymentDate: '2024-01-15' })).toThrow('Первый платёж'))
 
-  it('отрицательная ставка — проценты отрицательные, график закрывается', () => {
-    const s = generateBaseSchedule({ ...config, annualRate: -5 });
-    expect(s.some(r => r.interest < 0)).toBe(true);
-    expect(s.at(-1)?.closingBalance).toBeCloseTo(0, 2);
-  });
+  it('пустая дата первого платежа — ошибка валидации', () => expect(() => generateBaseSchedule({ ...config, firstPaymentDate: '' })).toThrow('Дата первого платежа'))
+
+  it('невозможная календарная дата — ошибка валидации', () => expect(() => generateBaseSchedule({ ...config, issueDate: '2024-02-31' })).toThrow('Дата выдачи'))
+
+  it('отрицательная ставка — ошибка валидации', () => expect(() => generateBaseSchedule({ ...config, annualRate: -5 })).toThrow('Ставка'))
+
+  it('слишком длинный срок — ошибка валидации', () => expect(() => generateBaseSchedule({ ...config, termMonths: 1201 })).toThrow('1200'))
+
+  it('валидатор отклоняет пустые даты досрочных платежей и льготных периодов', () => {
+    const errors = validateScenario(config, [early({ date: '' })], [{ id:'bad', startDate:'', endDate:'2024-03-01', type:'full', extendTerm:false, accrueInterest:true, capitalizeInterest:false }])
+    expect(errors.some(error => error.includes('Досрочный платёж'))).toBe(true)
+    expect(errors.some(error => error.includes('Льготный период'))).toBe(true)
+  })
 
   it('очень большая сумма (10 млрд) — нет переполнения', () => {
     const s = generateBaseSchedule({ ...config, principal: 10_000_000_000, termMonths: 120 });

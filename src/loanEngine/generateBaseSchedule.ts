@@ -1,22 +1,16 @@
 import Decimal from 'decimal.js'
-import { addDays, addMonths, format, getDaysInMonth, parseISO } from 'date-fns'
+import { addDays, parseISO } from 'date-fns'
 import { calculateAnnuityPayment } from './calculateAnnuityPayment'
 import { calculateInterest, periodDays } from './calculateInterest'
+import { iso, nextPaymentDate } from './dates'
 import { activeGrace } from './gracePeriod'
+import { MAX_EARLY_REPAYMENTS, MAX_GRACE_PERIODS, MAX_SCHEDULE_ROWS } from './limits'
 import { money, num } from './rounding'
 import type { EarlyRepayment, GracePeriod, LoanConfig, PaymentScheduleItem, RepaymentStrategy } from './types'
+import { validateScenario } from './validation'
 
-const iso = (d: Date) => format(d, 'yyyy-MM-dd')
 const periodsPerYear = (frequency: LoanConfig['frequency']) => frequency === 'biweekly' ? 26 : frequency === 'quarterly' ? 4 : 12
 const totalPeriods = (config: LoanConfig) => config.frequency === 'biweekly' ? Math.ceil(config.termMonths * 26 / 12) : config.frequency === 'quarterly' ? Math.ceil(config.termMonths / 3) : config.termMonths
-
-export function nextPaymentDate(date: string, config: LoanConfig) {
-  const parsed = parseISO(date)
-  if (config.frequency === 'biweekly') return iso(addDays(parsed, 14))
-  const offset = config.frequency === 'quarterly' ? 3 : 1
-  const target = addMonths(parsed, offset)
-  return iso(new Date(target.getFullYear(), target.getMonth(), Math.min(config.paymentDay, getDaysInMonth(target))))
-}
 
 interface Options { earlyRepayments?: EarlyRepayment[]; gracePeriods?: GracePeriod[]; forcedStrategy?: RepaymentStrategy }
 
@@ -29,6 +23,10 @@ interface Options { earlyRepayments?: EarlyRepayment[]; gracePeriods?: GracePeri
 export function generateBaseSchedule(config: LoanConfig, options: Options = {}): PaymentScheduleItem[] {
   const repayments = [...(options.earlyRepayments ?? [])].sort((a, b) => a.date.localeCompare(b.date))
   const gracePeriods = options.gracePeriods ?? []
+  if (repayments.length > MAX_EARLY_REPAYMENTS) throw new Error(`Слишком много досрочных платежей. Максимум: ${MAX_EARLY_REPAYMENTS}`)
+  if (gracePeriods.length > MAX_GRACE_PERIODS) throw new Error(`Слишком много льготных периодов. Максимум: ${MAX_GRACE_PERIODS}`)
+  const validationErrors = validateScenario(config, repayments, gracePeriods)
+  if (validationErrors.length > 0) throw new Error(validationErrors.join(' · '))
   const configuredPeriods = totalPeriods(config)
   const maxPeriods = configuredPeriods + gracePeriods.filter(g => g.extendTerm).reduce((sum, g) => sum + Math.max(1, Math.ceil((+parseISO(g.endDate) - +parseISO(g.startDate)) / 2629800000)), 0)
   let balance = money(config.principal, config.rounding)
@@ -73,7 +71,8 @@ export function generateBaseSchedule(config: LoanConfig, options: Options = {}):
         ? (fullyClosed ? 'Полное досрочное погашение' : 'Полное погашение · недостаточно средств')
         : 'Комбинированный пересчёт'
 
-  for (let regularIndex = 1; regularIndex <= Math.max(maxPeriods + 240, 360) && (balance.gt(0) || deferredInterest.gt(0)); regularIndex++) {
+  const iterationLimit = Math.min(MAX_SCHEDULE_ROWS - 1, Math.max(maxPeriods + 240, 360))
+  for (let regularIndex = 1; regularIndex <= iterationLimit && (balance.gt(0) || deferredInterest.gt(0)); regularIndex++) {
     const periodCalendarDays = Math.max(1, periodDays(previousPaymentDate, paymentDate, false))
     const accrueRaw = (from: string, to: string, includeTo: boolean, currentBalance: Decimal) => {
       if (to < from || currentBalance.lte(0)) return new Decimal(0)
@@ -185,6 +184,13 @@ export function generateBaseSchedule(config: LoanConfig, options: Options = {}):
     while (repaymentIndex < repayments.length && repayments[repaymentIndex].date === paymentDate) sameDay.push(repayments[repaymentIndex++])
     const earlyFirst = sameDay.filter(r => r.sameDayOrder === 'earlyFirst')
     const regularFirst = sameDay.filter(r => r.sameDayOrder === 'regularFirst')
+    let currentInterestCancelled = false
+
+    if (grace && !grace.accrueInterest) {
+      interestDue = Decimal.max(0, interestDue.minus(chargedInterest))
+      chargedInterest = new Decimal(0)
+      currentInterestCancelled = true
+    }
 
     for (const early of earlyFirst) {
       const applied = applyEarly(early, interestDue, maxPeriods - regularIndex + 1)
@@ -198,7 +204,7 @@ export function generateBaseSchedule(config: LoanConfig, options: Options = {}):
     }
 
     if (grace?.type === 'full') {
-      if (!grace.accrueInterest) {
+      if (!grace.accrueInterest && !currentInterestCancelled) {
         interestDue = Decimal.max(0, interestDue.minus(chargedInterest))
         chargedInterest = new Decimal(0)
       }
@@ -276,6 +282,9 @@ export function generateBaseSchedule(config: LoanConfig, options: Options = {}):
     })
     previousPaymentDate = paymentDate
     paymentDate = nextPaymentDate(paymentDate, config)
+  }
+  if (balance.gt(0) || deferredInterest.gt(0)) {
+    throw new Error(`График не закрывает кредит в допустимое количество строк (${MAX_SCHEDULE_ROWS})`)
   }
   return schedule
 }

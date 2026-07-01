@@ -3,6 +3,7 @@ import { Sparkles, X } from 'lucide-react'
 import type { EarlyRepayment } from '../loanEngine'
 import { currencySymbol } from '../formatters'
 import { createId } from '../utils/createId'
+import { isISODate } from '../utils/dateValidation'
 import { Field } from './ui'
 
 interface EarlyModalProps {
@@ -21,10 +22,12 @@ export function EarlyModal({ close, save, initial, defaultDate }: EarlyModalProp
   const [amountMode, setAmountMode] = useState<NonNullable<EarlyRepayment['amountMode']>>(initial?.amountMode ?? 'extra')
   const [sameDayOrder, setSameDayOrder] = useState<EarlyRepayment['sameDayOrder']>(initial?.sameDayOrder ?? 'regularFirst')
   const [interestFirst, setInterestFirst] = useState(initial?.interestFirst ?? true)
+  const [error, setError] = useState('')
 
   const submit = () => {
     const parsed = Number(amount)
-    if (!Number.isFinite(parsed) || parsed <= 0) return
+    if (!isISODate(date)) { setError('Укажите корректную дату досрочного платежа'); return }
+    if (!Number.isFinite(parsed) || parsed <= 0) { setError('Сумма должна быть больше нуля'); return }
     save({
       id: initial?.id ?? createId('early'),
       date,
@@ -56,6 +59,7 @@ export function EarlyModal({ close, save, initial, defaultDate }: EarlyModalProp
           <label className="toggle-row"><div><b>Сначала погасить проценты</b><span>Остаток направить в основной долг</span></div><input type="checkbox" checked={interestFirst} onChange={event => setInterestFirst(event.target.checked)}/></label>
         </div>
         <Field label="Комментарий"><input value={comment} onChange={event => setComment(event.target.value)} placeholder="Например, премия за год"/></Field>
+        {error && <div className="alert modal-alert">{error}</div>}
         <div className="modal-tip"><Sparkles/> Для банковского примера 26.01.2026 укажите досрочную часть 8 704,99 ₽. Итог строки станет 44 184,80 ₽.</div>
       </div>
       <div className="modal-actions"><button className="ghost" onClick={close}>Отмена</button><button className="primary" onClick={submit}>{initial ? 'Сохранить изменения' : 'Добавить и пересчитать'}</button></div>
