@@ -2,7 +2,7 @@ import { lazy, Suspense, useDeferredValue, useEffect, useMemo, useState, type CS
 import { addMonths, format, parseISO } from 'date-fns'
 import { ru } from 'date-fns/locale'
 import { ArrowDownToLine, CalendarDays, CircleHelp, History, Landmark, Menu, Moon, Plus, Printer, ReceiptText, Settings2, ShieldCheck, Sun, Trash2, TrendingDown, X } from 'lucide-react'
-import { compareScenarios, validateScenario, type EarlyRepayment, type GracePeriod, type PaymentScheduleItem } from './loanEngine'
+import { compareScenarios, isRegularPaymentDate, validateScenario, type EarlyRepayment, type GracePeriod, type PaymentScheduleItem } from './loanEngine'
 import type { LoanBackupData } from './importExport'
 import { loanToBackupData, useLoanStore, type LoanProfile } from './store'
 import { FontControls } from './components/FontControls'
@@ -256,7 +256,7 @@ function App() {
     {showOnboarding && <OnboardingModal close={finishOnboarding} showExample={() => { finishOnboarding(); setSection('overview') }} startSettings={() => { finishOnboarding(); setSection('settings') }}/>}
     {showWhatsNew && <WhatsNewModal close={closeWhatsNew} openChanges={() => { closeWhatsNew(); setSection('changes') }}/>}
     {sharedCalculation && <SharedCalculationModal data={sharedCalculation} createNew={createLoanFromSharedCalculation} replaceCurrent={replaceActiveWithSharedCalculation} decline={declineSharedCalculation}/>}
-    {showEarly && <EarlyModal close={closeEarly} save={editingEarly ? store.updateRepayment : store.addRepayment} initial={editingEarly} defaultDate={defaultEarlyDate}/>}
+    {showEarly && <EarlyModal close={closeEarly} save={editingEarly ? store.updateRepayment : store.addRepayment} initial={editingEarly} defaultDate={defaultEarlyDate} isRegularPaymentDate={(date) => isRegularPaymentDate(date, store.config)}/>}
     {showGrace && <GraceModal close={() => setShowGrace(false)} add={store.addGrace}/>} 
   </div>
 }

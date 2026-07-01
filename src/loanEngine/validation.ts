@@ -1,5 +1,6 @@
 import type { EarlyRepayment, GracePeriod, LoanConfig } from './types'
 import { MAX_EARLY_REPAYMENTS, MAX_GRACE_PERIODS, MAX_TERM_MONTHS } from './limits'
+import { isRegularPaymentDate } from './dates'
 import { isISODate } from '../utils/dateValidation'
 
 const finite = (value: unknown) => typeof value === 'number' && Number.isFinite(value)
@@ -28,6 +29,7 @@ export function validateScenario(config: LoanConfig, repayments: EarlyRepayment[
     if (!isISODate(repayment.date)) errors.push(`Досрочный платёж №${index + 1}: дата должна быть корректной`)
     else if (isISODate(config.issueDate) && repayment.date < config.issueDate) errors.push(`Досрочный платёж №${index + 1}: дата раньше выдачи кредита`)
     if (repayment.amountMode === 'total' && repayment.sameDayOrder === 'earlyFirst') errors.push(`Досрочный платёж №${index + 1}: общая сумма из графика банка может применяться только после регулярного платежа`)
+    if (repayment.amountMode === 'total' && isISODate(repayment.date) && !isRegularPaymentDate(repayment.date, config)) errors.push(`Досрочный платёж №${index + 1}: общую сумму строки банка можно указать только в дату регулярного платежа`)
   })
   const sortedGrace = [...gracePeriods].sort((a, b) => a.startDate.localeCompare(b.startDate))
   sortedGrace.forEach((period, index) => {

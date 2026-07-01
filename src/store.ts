@@ -1,11 +1,12 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import type { EarlyRepayment, GracePeriod, LoanConfig } from './loanEngine'
+import { addMonths, format, parseISO } from 'date-fns'
+import { isRegularPaymentDate, type EarlyRepayment, type GracePeriod, type LoanConfig } from './loanEngine'
 import { defaultConfig } from './loanDefaults'
 import type { LoanBackupData } from './importExport'
 import type { RepaymentRule } from './repaymentRules'
 import { createId } from './utils/createId'
-import { isISODate } from './utils/dateValidation'
+import { isISODate, isISOYearMonth } from './utils/dateValidation'
 import { MAX_TERM_MONTHS } from './loanEngine/limits'
 export { defaultConfig } from './loanDefaults'
 
@@ -78,10 +79,20 @@ const roundingModes = ['kopecks', 'rubles', 'bank'] as const
 const interestMethods = ['annuity', 'daily'] as const
 const dayCountBases = ['365', '366', '360', 'actual365', 'actualActual'] as const
 const balanceMoments = ['startOfDay', 'endOfDay'] as const
+const repaymentStrategies = ['reduceTerm', 'reducePayment', 'full', 'custom'] as const
+const repaymentSources = ['own', 'subsidy', 'insurance', 'other'] as const
+const sameDayOrders = ['regularFirst', 'earlyFirst'] as const
+const repaymentRuleTypes = ['monthlyFixed', 'annualBonus', 'paymentPercent'] as const
+const graceTypes = ['full', 'interestOnly', 'reduced', 'custom'] as const
+const scenarioIds = ['base', 'reduceTerm', 'reducePayment', 'combined'] as const
+const termUnits = ['months', 'years'] as const
+const fontSizes = ['normal', 'large', 'xlarge'] as const
 const normalizeTheme = (value: unknown): ThemeName => typeof value === 'string' && themeNames.includes(value as ThemeName) ? value as ThemeName : 'emerald'
 const normalizeAccentColor = (value: unknown): string => typeof value === 'string' && /^#[0-9a-fA-F]{6}$/.test(value) ? value : defaultAccentColor
 const oneOf = <T extends string>(value: unknown, values: readonly T[], fallback: T): T => typeof value === 'string' && values.includes(value as T) ? value as T : fallback
 const finiteNumber = (value: unknown, fallback: number, min = 0, max = Number.POSITIVE_INFINITY) => typeof value === 'number' && Number.isFinite(value) ? Math.min(max, Math.max(min, value)) : fallback
+const isObject = (value: unknown): value is Record<string, unknown> => Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+const nextMonthDate = (date: string) => format(addMonths(parseISO(date), 1), 'yyyy-MM-dd')
 
 const defaultLoanData = (withSeedRepayment = true): LoanData => ({
   config: defaultConfig,
@@ -102,7 +113,7 @@ const normalizeConfig = (config: Partial<LoanConfig> | undefined): LoanConfig =>
   const source = config ?? {}
   const interest = (source.interest ?? {}) as Partial<LoanConfig['interest']>
   const issueDate = isISODate(source.issueDate) ? source.issueDate : defaultConfig.issueDate
-  const firstPaymentDate = isISODate(source.firstPaymentDate) && source.firstPaymentDate > issueDate ? source.firstPaymentDate : defaultConfig.firstPaymentDate
+  const firstPaymentDate = isISODate(source.firstPaymentDate) && source.firstPaymentDate > issueDate ? source.firstPaymentDate : defaultConfig.firstPaymentDate > issueDate ? defaultConfig.firstPaymentDate : nextMonthDate(issueDate)
   return {
     ...defaultConfig,
     ...source,
@@ -132,20 +143,89 @@ const normalizeConfig = (config: Partial<LoanConfig> | undefined): LoanConfig =>
   }
 }
 
-const normalizeLoanData = (data: Partial<LoanImportData | LoanData>): LoanData => ({
-  config: normalizeConfig(data.config),
-  repayments: sortRepayments(data.repayments ?? []),
-  repaymentRules: sortRules(data.repaymentRules ?? []),
-  gracePeriods: data.gracePeriods ?? [],
-  selectedScenario: data.selectedScenario ?? 'reduceTerm',
-  termUnit: data.termUnit ?? 'months',
-  displayDecimals: data.displayDecimals ?? 2,
-  appFontSize: data.appFontSize ?? 'normal',
-  scheduleFontSize: data.scheduleFontSize ?? 'large',
-  theme: normalizeTheme(data.theme),
-  customAccentColor: normalizeAccentColor(data.customAccentColor),
-  useCustomAccentColor: typeof data.useCustomAccentColor === 'boolean' ? data.useCustomAccentColor : false
-})
+const normalizeRepayments = (value: unknown, config: LoanConfig): EarlyRepayment[] => {
+  if (!Array.isArray(value)) return []
+  return sortRepayments(value.flatMap((item): EarlyRepayment[] => {
+    if (!isObject(item) || typeof item.id !== 'string' || !isISODate(item.date)) return []
+    const amount = finiteNumber(item.amount, 0, 0)
+    if (amount <= 0) return []
+    const requestedAmountMode = oneOf(item.amountMode, ['extra', 'total'] as const, 'extra')
+    const amountMode = requestedAmountMode === 'total' && isRegularPaymentDate(item.date, config) ? 'total' : 'extra'
+    return [{
+      id: item.id,
+      date: item.date,
+      amount,
+      amountMode,
+      strategy: oneOf(item.strategy, repaymentStrategies, 'reduceTerm'),
+      source: oneOf(item.source, repaymentSources, 'own'),
+      sameDayOrder: amountMode === 'total' ? 'regularFirst' : oneOf(item.sameDayOrder, sameDayOrders, 'regularFirst'),
+      interestFirst: typeof item.interestFirst === 'boolean' ? item.interestFirst : true,
+      ...(typeof item.comment === 'string' ? { comment: item.comment } : {})
+    }]
+  }))
+}
+
+const normalizeRepaymentRules = (value: unknown): RepaymentRule[] => {
+  if (!Array.isArray(value)) return []
+  return sortRules(value.flatMap((item): RepaymentRule[] => {
+    if (!isObject(item) || typeof item.id !== 'string' || typeof item.name !== 'string' || !isISODate(item.startDate) || !isISODate(item.endDate) || item.endDate < item.startDate) return []
+    const type = oneOf(item.type, repaymentRuleTypes, 'monthlyFixed')
+    const amount = item.amount === undefined ? undefined : finiteNumber(item.amount, 0, 0)
+    const percent = item.percent === undefined ? undefined : finiteNumber(item.percent, 0, 0)
+    if (type === 'paymentPercent' ? !percent : !amount) return []
+    return [{
+      id: item.id,
+      name: item.name.trim() || 'Регулярный платёж',
+      type,
+      startDate: item.startDate,
+      endDate: item.endDate,
+      amount: type === 'paymentPercent' ? undefined : amount,
+      percent: type === 'paymentPercent' ? percent : undefined,
+      strategy: oneOf(item.strategy, repaymentStrategies, 'reduceTerm'),
+      source: oneOf(item.source, repaymentSources, 'own'),
+      sameDayOrder: oneOf(item.sameDayOrder, sameDayOrders, 'regularFirst'),
+      interestFirst: typeof item.interestFirst === 'boolean' ? item.interestFirst : true,
+      skipMonths: Array.isArray(item.skipMonths) ? item.skipMonths.filter(isISOYearMonth) : [],
+      ...(typeof item.comment === 'string' ? { comment: item.comment } : {})
+    }]
+  }))
+}
+
+const normalizeGracePeriods = (value: unknown): GracePeriod[] => {
+  if (!Array.isArray(value)) return []
+  return value.flatMap((item): GracePeriod[] => {
+    if (!isObject(item) || typeof item.id !== 'string' || !isISODate(item.startDate) || !isISODate(item.endDate) || item.endDate < item.startDate) return []
+    const paymentAmount = item.paymentAmount === undefined ? undefined : finiteNumber(item.paymentAmount, 0, 0)
+    return [{
+      id: item.id,
+      startDate: item.startDate,
+      endDate: item.endDate,
+      type: oneOf(item.type, graceTypes, 'interestOnly'),
+      ...(paymentAmount !== undefined ? { paymentAmount } : {}),
+      extendTerm: typeof item.extendTerm === 'boolean' ? item.extendTerm : true,
+      accrueInterest: typeof item.accrueInterest === 'boolean' ? item.accrueInterest : true,
+      capitalizeInterest: typeof item.capitalizeInterest === 'boolean' ? item.capitalizeInterest : false
+    }]
+  }).sort((a, b) => a.startDate.localeCompare(b.startDate) || a.id.localeCompare(b.id))
+}
+
+const normalizeLoanData = (data: Partial<LoanImportData | LoanData>): LoanData => {
+  const config = normalizeConfig(data.config)
+  return {
+    config,
+    repayments: normalizeRepayments(data.repayments, config),
+    repaymentRules: normalizeRepaymentRules(data.repaymentRules),
+    gracePeriods: normalizeGracePeriods(data.gracePeriods),
+    selectedScenario: oneOf(data.selectedScenario, scenarioIds, 'reduceTerm'),
+    termUnit: oneOf(data.termUnit, termUnits, 'months'),
+    displayDecimals: data.displayDecimals === 0 ? 0 : 2,
+    appFontSize: oneOf(data.appFontSize, fontSizes, 'normal'),
+    scheduleFontSize: oneOf(data.scheduleFontSize, fontSizes, 'large'),
+    theme: normalizeTheme(data.theme),
+    customAccentColor: normalizeAccentColor(data.customAccentColor),
+    useCustomAccentColor: typeof data.useCustomAccentColor === 'boolean' ? data.useCustomAccentColor : false
+  }
+}
 
 const loanFromData = (data: Partial<LoanImportData | LoanData>, name = 'Мой кредит', id = createId('loan')): LoanProfile => ({
   id,
@@ -199,6 +279,17 @@ const switchToLoan = (state: LoanState, id: string): Partial<LoanState> => {
 
 const initialLoan = loanFromData(defaultLoanData(), 'Мой кредит', 'loan-default')
 
+export const normalizePersistedState = (persisted: unknown): Partial<LoanState> => {
+  const state = (isObject(persisted) ? persisted : {}) as Partial<LoanState>
+  const hasLoans = Array.isArray(state.loans) && state.loans.length > 0
+  const loans = hasLoans
+    ? state.loans!.map((loan, index) => loanFromData(loan, loan.name || `Кредит ${index + 1}`, loan.id || createId('loan')))
+    : [loanFromData(state, 'Мой кредит', 'loan-default')]
+  const activeLoanId = state.activeLoanId && loans.some(loan => loan.id === state.activeLoanId) ? state.activeLoanId : loans[0].id
+  const active = loans.find(loan => loan.id === activeLoanId) ?? loans[0]
+  return { loans, activeLoanId, ...publicData(active) }
+}
+
 export const useLoanStore = create<LoanState>()(persist((set) => ({
   ...publicData(initialLoan),
   loans: [initialLoan],
@@ -246,15 +337,7 @@ export const useLoanStore = create<LoanState>()(persist((set) => ({
   })
 }), {
   name: 'ipoteka-calculator-v1',
-  version: 5,
-  migrate: (persisted) => {
-    const state = persisted as Partial<LoanState>
-    const hasLoans = Array.isArray(state.loans) && state.loans.length > 0
-    const loans = hasLoans
-      ? state.loans!.map((loan, index) => loanFromData(loan, loan.name || `Кредит ${index + 1}`, loan.id || createId('loan')))
-      : [loanFromData(state, 'Мой кредит', 'loan-default')]
-    const activeLoanId = state.activeLoanId && loans.some(loan => loan.id === state.activeLoanId) ? state.activeLoanId : loans[0].id
-    const active = loans.find(loan => loan.id === activeLoanId) ?? loans[0]
-    return { ...state, loans, activeLoanId, ...publicData(active) }
-  }
+  version: 6,
+  migrate: normalizePersistedState,
+  merge: (persisted, current) => ({ ...current, ...normalizePersistedState(persisted) })
 }))

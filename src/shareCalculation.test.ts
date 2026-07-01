@@ -26,7 +26,7 @@ const config: LoanConfig = {
 }
 
 const repayments: EarlyRepayment[] = [
-  { id: 'r1', date: '2025-11-28', amount: 35480, amountMode: 'total', strategy: 'reduceTerm', source: 'own', sameDayOrder: 'regularFirst', interestFirst: true, comment: 'Первый платёж 🏠 & #%+"' },
+  { id: 'r1', date: '2025-11-28', amount: 35480, amountMode: 'extra', strategy: 'reduceTerm', source: 'own', sameDayOrder: 'regularFirst', interestFirst: true, comment: 'Первый платёж 🏠 & #%+"' },
   { id: 'r2', date: '2026-01-26', amount: 8704.99, amountMode: 'extra', strategy: 'reducePayment', source: 'subsidy', sameDayOrder: 'earlyFirst', interestFirst: false, comment: 'Маткапитал' },
   { id: 'r3', date: '2026-03-27', amount: 12342.6, amountMode: 'extra', strategy: 'full', source: 'insurance', sameDayOrder: 'regularFirst', interestFirst: true, comment: 'Страховка' }
 ]

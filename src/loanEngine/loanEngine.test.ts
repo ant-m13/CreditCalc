@@ -101,7 +101,7 @@ describe('loan engine', () => {
 
   it('не принимает первый платёж только по процентам за обычный ежемесячный платёж', () => {
     const bank:LoanConfig={...config,principal:5917734,annualRate:6,issueDate:'2025-11-26',firstPaymentDate:'2025-12-26',firstPaymentInterestOnly:true,termMonths:360,paymentDay:26,interest:{...config.interest,method:'daily',dayCountBasis:'actualActual'}}
-    const bankEarly:EarlyRepayment[]=[early({id:'b1',date:'2025-11-28',amount:35480,amountMode:'total'}),early({id:'b2',date:'2026-01-26',amount:8704.99})]
+    const bankEarly:EarlyRepayment[]=[early({id:'b1',date:'2025-11-28',amount:35480,amountMode:'extra'}),early({id:'b2',date:'2026-01-26',amount:8704.99})]
     const result=compareScenarios(bank,bankEarly).scenarios.find(s=>s.id==='reduceTerm')!
     expect(result.schedule.find(row=>row.date==='2025-12-26')?.payment).toBe(27083.44)
     expect(result.monthlyPayment).toBe(35479.81)
@@ -114,9 +114,18 @@ describe('loan engine', () => {
   })
 
   it('не даёт earlyFirst погасить проценты, отменённые беспроцентной льготой', () => {
-    const grace:GracePeriod={id:'g-free',startDate:'2024-08-01',endDate:'2024-08-31',type:'full',extendTerm:true,accrueInterest:false,capitalizeInterest:false}
+    const grace:GracePeriod={id:'g-free',startDate:'2024-01-01',endDate:'2024-08-31',type:'full',extendTerm:true,accrueInterest:false,capitalizeInterest:false}
     const s=generateBaseSchedule(config,{gracePeriods:[grace],earlyRepayments:[early({date:'2024-08-15',amount:10000,sameDayOrder:'earlyFirst',interestFirst:true})]})
     const row=s.find(x=>x.date==='2024-08-15')!
+    expect(row.interestAccrued).toBe(0)
+    expect(row.interestPaid).toBe(0)
+    expect(row.principalPaid).toBe(10000)
+  })
+
+  it('не начисляет проценты по беспроцентной льготе для досрочного платежа между регулярными датами', () => {
+    const grace:GracePeriod={id:'g-free-between',startDate:'2024-01-01',endDate:'2024-08-31',type:'full',extendTerm:true,accrueInterest:false,capitalizeInterest:false}
+    const s=generateBaseSchedule(config,{gracePeriods:[grace],earlyRepayments:[early({date:'2024-08-10',amount:10000,sameDayOrder:'regularFirst',interestFirst:true})]})
+    const row=s.find(x=>x.date==='2024-08-10')!
     expect(row.interestAccrued).toBe(0)
     expect(row.interestPaid).toBe(0)
     expect(row.principalPaid).toBe(10000)
@@ -300,6 +309,12 @@ describe('early repayment amount modes', () => {
     const earlyPart = row?.earlyPayment || 0;
     expect(earlyPart + regularPayment).toBeCloseTo(200_000, 2);
   });
+
+  it('amountMode: "total" доступен только в дату регулярного платежа', () => {
+    expect(() => generateBaseSchedule(config, {
+      earlyRepayments: [early({ date: '2024-08-16', amountMode: 'total', amount: 200_000 })],
+    })).toThrow('дату регулярного платежа')
+  })
 })
 
 describe('edge cases', () => {

@@ -8,9 +8,10 @@ import { APP_VERSION } from '../version'
 export function PrintReport({ config, repayments, comparison, selected }: { config: LoanConfig; repayments: EarlyRepayment[]; comparison: ComparisonResult; selected: ScenarioResult }) {
   const generated = format(new Date(), 'dd.MM.yyyy HH:mm')
   const showFees = selected.schedule.some(row => Math.abs(row.feePaid ?? row.fee) > 0.004)
+  const paymentLabel = config.frequency === 'biweekly' ? 'Платёж раз в 2 недели' : config.frequency === 'quarterly' ? 'Квартальный платёж' : 'Ежемесячный платёж'
   return <article className="print-report">
     <div className="print-title"><div><span>Кредитный калькулятор</span><h1>Расчёт кредита</h1><p>Сформировано {generated} · сценарий «{selected.name}» · версия {APP_VERSION}</p></div><Landmark/></div>
-    <section className="print-summary"><div><span>Сумма кредита</span><b>{money(config.principal)}</b></div><div><span>Ежемесячный платёж</span><b>{money(selected.monthlyPayment)}</b></div><div><span>Дата закрытия</span><b>{shortDate(selected.closingDate)}</b></div><div><span>Переплата</span><b>{money(selected.overpayment)}</b></div></section>
+    <section className="print-summary"><div><span>Сумма кредита</span><b>{money(config.principal)}</b></div><div><span>{paymentLabel}</span><b>{money(selected.monthlyPayment)}</b></div><div><span>Дата закрытия</span><b>{shortDate(selected.closingDate)}</b></div><div><span>Переплата</span><b>{money(selected.overpayment)}</b></div></section>
     <h2>Параметры кредита</h2>
     <dl className="print-params"><div><dt>Ставка</dt><dd>{config.annualRate}% годовых</dd></div><div><dt>Срок</dt><dd>{fmtMonths(config.termMonths)} ({config.termMonths} мес.)</dd></div><div><dt>Дата выдачи</dt><dd>{shortDate(config.issueDate)}</dd></div><div><dt>Первый платёж</dt><dd>{shortDate(config.firstPaymentDate)}</dd></div><div><dt>Тип платежа</dt><dd>{config.paymentType === 'annuity' ? 'Аннуитетный' : 'Дифференцированный'}</dd></div><div><dt>Начисление</dt><dd>{config.interest.method === 'daily' ? 'По фактическим дням' : 'По периодам'}, {dayCountBasisLabel(config.interest.dayCountBasis)}</dd></div></dl>
     <h2>Сравнение сценариев</h2>

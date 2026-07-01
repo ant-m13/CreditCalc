@@ -62,6 +62,13 @@ export function generateBaseSchedule(config: LoanConfig, options: Options = {}):
     comment: '',
     event: 'Выдача кредита'
   }]
+  const pushScheduleRow = (row: PaymentScheduleItem) => {
+    if (schedule.length >= MAX_SCHEDULE_ROWS) {
+      throw new Error(`График не закрывает кредит в допустимое количество строк (${MAX_SCHEDULE_ROWS})`)
+    }
+    schedule.push(row)
+  }
+  const noAccrualGracePeriods = gracePeriods.filter(period => period.accrueInterest === false)
 
   const eventLabel = (strategy: RepaymentStrategy, fullyClosed: boolean) => strategy === 'reduceTerm'
     ? 'Пересчёт · сокращение срока'
@@ -74,13 +81,37 @@ export function generateBaseSchedule(config: LoanConfig, options: Options = {}):
   const iterationLimit = Math.min(MAX_SCHEDULE_ROWS - 1, Math.max(maxPeriods + 240, 360))
   for (let regularIndex = 1; regularIndex <= iterationLimit && (balance.gt(0) || deferredInterest.gt(0)); regularIndex++) {
     const periodCalendarDays = Math.max(1, periodDays(previousPaymentDate, paymentDate, false))
-    const accrueRaw = (from: string, to: string, includeTo: boolean, currentBalance: Decimal) => {
+    const accrueRawSegment = (from: string, to: string, includeTo: boolean, currentBalance: Decimal) => {
       if (to < from || currentBalance.lte(0)) return new Decimal(0)
       if (config.interest.method === 'daily') {
         return calculateInterest(currentBalance, config.annualRate, from, to, { ...config.interest, includePaymentDate: includeTo })
       }
       const segmentDays = periodDays(from, to, includeTo)
       return currentBalance.mul(config.annualRate).div(100).div(periodsPerYear(config.frequency)).mul(segmentDays).div(periodCalendarDays)
+    }
+    const accrueRaw = (from: string, to: string, includeTo: boolean, currentBalance: Decimal) => {
+      const days = periodDays(from, to, includeTo)
+      if (days === 0 || noAccrualGracePeriods.length === 0) return accrueRawSegment(from, to, includeTo, currentBalance)
+      let result = new Decimal(0)
+      let segmentStart: string | null = null
+      let segmentEnd = from
+      const closeSegment = () => {
+        if (!segmentStart) return
+        result = result.add(accrueRawSegment(segmentStart, segmentEnd, true, currentBalance))
+        segmentStart = null
+      }
+      for (let day = 0; day < days; day += 1) {
+        const currentDate = iso(addDays(parseISO(from), day))
+        const shouldAccrue = !noAccrualGracePeriods.some(period => period.startDate <= currentDate && currentDate <= period.endDate)
+        if (shouldAccrue) {
+          if (!segmentStart) segmentStart = currentDate
+          segmentEnd = currentDate
+        } else {
+          closeSegment()
+        }
+      }
+      closeSegment()
+      return result
     }
     const accrue = (from: string, to: string, includeTo: boolean, currentBalance: Decimal) => money(accrueRaw(from, to, includeTo, currentBalance), config.rounding)
     const audit = (from: string, to: string, includeTo: boolean, currentBalance: Decimal, order: string) => ({
@@ -147,7 +178,7 @@ export function generateBaseSchedule(config: LoanConfig, options: Options = {}):
       if (interestDue.gt(0)) deferredInterest = deferredInterest.add(interestDue)
       cumulativeInterest = cumulativeInterest.add(chargedInterest)
       const cashFlowTotal = earlyTotal.add(fees)
-      schedule.push({
+      pushScheduleRow({
         number: ++rowNumber, date: eventDate, days: periodDays(accrualStart, eventDate, includeEventDay),
         openingBalance: num(opening, config.rounding), payment: 0, interest: num(chargedInterest, config.rounding), principal: num(earlyPrincipal, config.rounding),
         earlyPayment: num(earlyTotal, config.rounding), closingBalance: num(balance, config.rounding),
@@ -184,13 +215,6 @@ export function generateBaseSchedule(config: LoanConfig, options: Options = {}):
     while (repaymentIndex < repayments.length && repayments[repaymentIndex].date === paymentDate) sameDay.push(repayments[repaymentIndex++])
     const earlyFirst = sameDay.filter(r => r.sameDayOrder === 'earlyFirst')
     const regularFirst = sameDay.filter(r => r.sameDayOrder === 'regularFirst')
-    let currentInterestCancelled = false
-
-    if (grace && !grace.accrueInterest) {
-      interestDue = Decimal.max(0, interestDue.minus(chargedInterest))
-      chargedInterest = new Decimal(0)
-      currentInterestCancelled = true
-    }
 
     for (const early of earlyFirst) {
       const applied = applyEarly(early, interestDue, maxPeriods - regularIndex + 1)
@@ -204,10 +228,6 @@ export function generateBaseSchedule(config: LoanConfig, options: Options = {}):
     }
 
     if (grace?.type === 'full') {
-      if (!grace.accrueInterest && !currentInterestCancelled) {
-        interestDue = Decimal.max(0, interestDue.minus(chargedInterest))
-        chargedInterest = new Decimal(0)
-      }
       if (grace.capitalizeInterest) balance = balance.add(interestDue)
       else deferredInterest = deferredInterest.add(interestDue)
       interestDue = new Decimal(0)
@@ -270,7 +290,7 @@ export function generateBaseSchedule(config: LoanConfig, options: Options = {}):
     const principalPaid = principalPart.add(earlyPrincipal)
     const interestPaid = paidInterestRegular.add(earlyInterest)
     const cashFlowTotal = regularPayment.add(earlyTotal).add(feePaid)
-    schedule.push({
+    pushScheduleRow({
       number: ++rowNumber, date: paymentDate, days, openingBalance: num(opening, config.rounding), payment: num(regularPayment, config.rounding),
       interest: num(chargedInterest, config.rounding), principal: num(principalPart.add(earlyPrincipal), config.rounding), earlyPayment: num(earlyTotal, config.rounding),
       closingBalance: num(balance, config.rounding), cumulativeInterest: num(cumulativeInterest, config.rounding), cumulativeSavings: 0,

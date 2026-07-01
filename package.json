@@ -1,7 +1,7 @@
 {
   "name": "credit-calculator",
   "private": true,
-  "version": "1.5.2",
+  "version": "1.5.3",
   "description": "Кредитный калькулятор с досрочными погашениями, банковским графиком платежей и локальным хранением данных.",
   "type": "module",
   "packageManager": "pnpm@11.7.0",

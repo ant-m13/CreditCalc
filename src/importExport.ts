@@ -1,4 +1,5 @@
 import type { EarlyRepayment, GracePeriod, LoanConfig } from './loanEngine'
+import { isRegularPaymentDate } from './loanEngine'
 import { defaultConfig } from './loanDefaults'
 import type { RepaymentRule } from './repaymentRules'
 import { MAX_EARLY_REPAYMENTS, MAX_GRACE_PERIODS, MAX_TERM_MONTHS } from './loanEngine/limits'
@@ -52,6 +53,7 @@ export function parseLoanBackupObject(raw: unknown): LoanBackupData {
     if (!isObject(item) || typeof item.id !== 'string' || !isISODate(item.date) || !finite(item.amount) || !oneOf(item.strategy, ['reduceTerm', 'reducePayment', 'full', 'custom']) || !oneOf(item.source, ['own', 'subsidy', 'insurance', 'other']) || !oneOf(item.sameDayOrder, ['regularFirst', 'earlyFirst']) || typeof item.interestFirst !== 'boolean') throw new Error(`Ошибка в досрочном платеже №${index + 1}`)
     if (item.amountMode !== undefined && !oneOf(item.amountMode, ['extra', 'total'])) throw new Error(`Ошибка в досрочном платеже №${index + 1}`)
     if (item.amountMode === 'total' && item.sameDayOrder === 'earlyFirst') throw new Error(`Ошибка в досрочном платеже №${index + 1}: общая сумма из графика банка применяется после регулярного платежа`)
+    if (item.amountMode === 'total' && !isRegularPaymentDate(item.date, config)) throw new Error(`Ошибка в досрочном платеже №${index + 1}: общую сумму строки банка можно указать только в дату регулярного платежа`)
     return item as unknown as EarlyRepayment
   })
 

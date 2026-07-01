@@ -48,4 +48,9 @@ describe('импорт резервной копии', () => {
   it('отклоняет общую сумму строки банка с порядком earlyFirst', () => {
     expect(() => parseLoanBackup(JSON.stringify({ config: defaultConfig, repayments: [{ ...repayment, amountMode: 'total', sameDayOrder: 'earlyFirst' }], gracePeriods: [] }))).toThrow('общая сумма')
   })
+
+  it('отклоняет общую сумму строки банка не в дату регулярного платежа', () => {
+    const config = { ...defaultConfig, issueDate: '2026-01-01', firstPaymentDate: '2026-01-26', paymentDay: 26 }
+    expect(() => parseLoanBackup(JSON.stringify({ config, repayments: [{ ...repayment, date: '2026-01-27', amountMode: 'total', sameDayOrder: 'regularFirst' }], gracePeriods: [] }))).toThrow('дату регулярного платежа')
+  })
 })

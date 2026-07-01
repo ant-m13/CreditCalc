@@ -56,7 +56,6 @@ jobs:
           fi
 
       - name: Verify changelog
-        if: steps.version.outputs.exists == 'false'
         shell: bash
         env:
           VERSION: ${{ steps.version.outputs.version }}
@@ -66,20 +65,23 @@ jobs:
             exit 1
           fi
 
+      - name: Checkout existing tag for repair runs
+        if: steps.version.outputs.exists == 'true'
+        shell: bash
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+        run: git checkout "$TAG"
+
       - name: Enable pnpm
-        if: steps.version.outputs.exists == 'false'
         run: corepack enable
 
       - name: Install dependencies
-        if: steps.version.outputs.exists == 'false'
         run: pnpm install --frozen-lockfile
 
       - name: Run tests
-        if: steps.version.outputs.exists == 'false'
         run: pnpm test
 
       - name: Build site
-        if: steps.version.outputs.exists == 'false'
         run: pnpm build
         env:
           VITE_BASE_PATH: ./
@@ -96,3 +98,17 @@ jobs:
 
           git tag -a "$TAG" "$GITHUB_SHA" -m "Release $TAG"
           git push origin "$TAG"
+
+      - name: Pack dist
+        run: |
+          cd dist
+          zip -r ../credit-calculator-dist.zip .
+
+      - name: Create or update GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          files: credit-calculator-dist.zip
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          overwrite_files: true
