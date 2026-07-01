@@ -93,7 +93,7 @@ function App() {
     let body = '', type = '', ext = kind
     if (kind === 'json') { body = JSON.stringify({ ...createLoanSnapshot(loanToBackupData(loan)), exportedAt: new Date().toISOString() }, null, 2); type = 'application/json' }
     else {
-      const table = [['№ п/п','Дата','По кредиту','По процентам','Итого','Остаток задолженности'], ...schedule.map(r => [r.number,r.date,r.principal,r.interest,r.payment + r.earlyPayment,r.closingBalance])]
+      const table = [['№ п/п','Дата','По кредиту','По процентам','Комиссия','Итого','Остаток задолженности'], ...schedule.map(r => [r.number,r.date,r.principalPaid ?? r.principal,r.interestPaid ?? r.interest,r.feePaid ?? r.fee,r.cashFlowTotal ?? r.payment + r.earlyPayment + r.fee,r.closingBalance])]
       body = kind === 'csv' ? '\ufeff' + table.map(r => r.join(';')).join('\n') : `<table>${table.map(r => `<tr>${r.map(c => `<td>${c}</td>`).join('')}</tr>`).join('')}</table>`
       type = kind === 'csv' ? 'text/csv;charset=utf-8' : 'application/vnd.ms-excel'; ext = kind
     }

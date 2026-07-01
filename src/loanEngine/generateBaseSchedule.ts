@@ -50,6 +50,13 @@ export function generateBaseSchedule(config: LoanConfig, options: Options = {}):
     interest: 0,
     principal: 0,
     earlyPayment: 0,
+    interestAccrued: 0,
+    interestPaid: 0,
+    principalPaid: 0,
+    feePaid: 0,
+    deferredInterestOpening: 0,
+    deferredInterestClosing: 0,
+    cashFlowTotal: 0,
     closingBalance: num(balance, config.rounding),
     cumulativeInterest: 0,
     cumulativeSavings: 0,
@@ -118,10 +125,12 @@ export function generateBaseSchedule(config: LoanConfig, options: Options = {}):
       const opening = balance
       const includeEventDay = config.interest.includePaymentDate && config.interest.balanceMoment === 'startOfDay'
       const chargedInterest = accrue(accrualStart, eventDate, includeEventDay, balance)
+      const deferredOpening = deferredInterest
       let interestDue = deferredInterest.add(chargedInterest)
       deferredInterest = new Decimal(0)
       let earlyTotal = new Decimal(0)
       let earlyPrincipal = new Decimal(0)
+      let earlyInterest = new Decimal(0)
       let fees = new Decimal(0)
       let event = ''
       const comments: string[] = []
@@ -131,16 +140,20 @@ export function generateBaseSchedule(config: LoanConfig, options: Options = {}):
         interestDue = applied.interestLeft
         earlyTotal = earlyTotal.add(applied.paidInterest).add(applied.paidPrincipal)
         earlyPrincipal = earlyPrincipal.add(applied.paidPrincipal)
+        earlyInterest = earlyInterest.add(applied.paidInterest)
         fees = fees.add(applied.fee)
         event = applied.event
         if (applied.comment) comments.push(applied.comment)
       }
       if (interestDue.gt(0)) deferredInterest = deferredInterest.add(interestDue)
       cumulativeInterest = cumulativeInterest.add(chargedInterest)
+      const cashFlowTotal = earlyTotal.add(fees)
       schedule.push({
         number: ++rowNumber, date: eventDate, days: periodDays(accrualStart, eventDate, includeEventDay),
         openingBalance: num(opening, config.rounding), payment: 0, interest: num(chargedInterest, config.rounding), principal: num(earlyPrincipal, config.rounding),
         earlyPayment: num(earlyTotal, config.rounding), closingBalance: num(balance, config.rounding),
+        interestAccrued: num(chargedInterest, config.rounding), interestPaid: num(earlyInterest, config.rounding), principalPaid: num(earlyPrincipal, config.rounding),
+        feePaid: num(fees, config.rounding), deferredInterestOpening: num(deferredOpening, config.rounding), deferredInterestClosing: num(deferredInterest, config.rounding), cashFlowTotal: num(cashFlowTotal, config.rounding),
         cumulativeInterest: num(cumulativeInterest, config.rounding), cumulativeSavings: 0, fee: num(fees, config.rounding),
         comment: comments.join('; '), event,
         audit: audit(accrualStart, eventDate, includeEventDay, opening, 'Досрочное погашение между регулярными платежами')
@@ -156,12 +169,15 @@ export function generateBaseSchedule(config: LoanConfig, options: Options = {}):
     const grace = activeGrace(paymentDate, gracePeriods)
     const includeFinalDay = config.interest.includePaymentDate && config.interest.balanceMoment === 'startOfDay'
     let chargedInterest = accrue(rowStart, paymentDate, includeFinalDay, balance)
+    const deferredOpening = deferredInterest
     let interestDue = deferredInterest.add(chargedInterest)
     deferredInterest = new Decimal(0)
     let principalPart = new Decimal(0)
+    let paidInterestRegular = new Decimal(0)
     let regularPayment = new Decimal(0)
     let earlyTotal = new Decimal(0)
     let earlyPrincipal = new Decimal(0)
+    let earlyInterest = new Decimal(0)
     let earlyFees = new Decimal(0)
     let event = ''
     const comments: string[] = []
@@ -175,6 +191,7 @@ export function generateBaseSchedule(config: LoanConfig, options: Options = {}):
       interestDue = applied.interestLeft
       earlyTotal = earlyTotal.add(applied.paidInterest).add(applied.paidPrincipal)
       earlyPrincipal = earlyPrincipal.add(applied.paidPrincipal)
+      earlyInterest = earlyInterest.add(applied.paidInterest)
       earlyFees = earlyFees.add(applied.fee)
       event = applied.event
       if (applied.comment) comments.push(applied.comment)
@@ -208,6 +225,7 @@ export function generateBaseSchedule(config: LoanConfig, options: Options = {}):
       principalPart = Decimal.min(balance, availableForPrincipal)
       balance = Decimal.max(0, balance.minus(principalPart))
       interestDue = interestDue.minus(paidInterest)
+      paidInterestRegular = paidInterest
       regularPayment = money(paidInterest.add(principalPart), config.rounding)
     }
 
@@ -219,6 +237,7 @@ export function generateBaseSchedule(config: LoanConfig, options: Options = {}):
       interestDue = applied.interestLeft
       earlyTotal = earlyTotal.add(applied.paidInterest).add(applied.paidPrincipal)
       earlyPrincipal = earlyPrincipal.add(applied.paidPrincipal)
+      earlyInterest = earlyInterest.add(applied.paidInterest)
       earlyFees = earlyFees.add(applied.fee)
       event = applied.event
       if (applied.comment) comments.push(applied.comment)
@@ -241,11 +260,17 @@ export function generateBaseSchedule(config: LoanConfig, options: Options = {}):
       event = event || 'Автозакрытие малого остатка'
     }
     cumulativeInterest = cumulativeInterest.add(chargedInterest)
+    const feePaid = earlyFees.add(config.monthlyFee).add(regularIndex === 1 ? config.oneTimeFee : 0)
+    const principalPaid = principalPart.add(earlyPrincipal)
+    const interestPaid = paidInterestRegular.add(earlyInterest)
+    const cashFlowTotal = regularPayment.add(earlyTotal).add(feePaid)
     schedule.push({
       number: ++rowNumber, date: paymentDate, days, openingBalance: num(opening, config.rounding), payment: num(regularPayment, config.rounding),
       interest: num(chargedInterest, config.rounding), principal: num(principalPart.add(earlyPrincipal), config.rounding), earlyPayment: num(earlyTotal, config.rounding),
       closingBalance: num(balance, config.rounding), cumulativeInterest: num(cumulativeInterest, config.rounding), cumulativeSavings: 0,
-      fee: num(earlyFees.add(config.monthlyFee).add(regularIndex === 1 ? config.oneTimeFee : 0), config.rounding),
+      interestAccrued: num(chargedInterest, config.rounding), interestPaid: num(interestPaid, config.rounding), principalPaid: num(principalPaid, config.rounding),
+      feePaid: num(feePaid, config.rounding), deferredInterestOpening: num(deferredOpening, config.rounding), deferredInterestClosing: num(deferredInterest, config.rounding), cashFlowTotal: num(cashFlowTotal, config.rounding),
+      fee: num(feePaid, config.rounding),
       comment: comments.join('; '), event,
       audit: audit(rowStart, paymentDate, includeFinalDay, opening, sameDay.length ? `${earlyFirst.length ? 'сначала досрочные платежи; ' : ''}регулярный платёж; ${regularFirst.length ? 'затем досрочные платежи' : 'досрочных платежей в дату платежа нет'}` : 'Регулярный платёж')
     })

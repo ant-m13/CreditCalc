@@ -5,7 +5,7 @@ import type { ComparisonResult, EarlyRepayment, GracePeriod, LoanConfig, Repayme
 function toResult(id: string, name: string, strategy: ScenarioResult['strategy'], schedule: ReturnType<typeof generateBaseSchedule>, config: LoanConfig, base?: ScenarioResult): ScenarioResult {
   const last = schedule.at(-1)
   const totalInterest = schedule.reduce((s, x) => s + x.interest, 0)
-  const totalPaid = schedule.reduce((s, x) => s + x.payment + x.earlyPayment + x.fee, 0)
+  const totalPaid = schedule.reduce((s, x) => s + (x.cashFlowTotal ?? x.payment + x.earlyPayment + x.fee), 0)
   const closingDate = last?.date ?? config.issueDate
   let recalculationIndex = -1
   schedule.forEach((row, index) => { if (row.event.includes('уменьшение платежа')) recalculationIndex = index })

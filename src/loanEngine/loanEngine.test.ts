@@ -132,6 +132,16 @@ describe('loan engine', () => {
     expect(result.scenarios[0].totalPaid).toBe(121000)
   })
 
+  it('каждая строка бухгалтерски сходится по денежному потоку', () => {
+    const s = generateBaseSchedule({ ...config, oneTimeFee: 1000, monthlyFee: 50, earlyRepaymentFeePercent: 1 }, { earlyRepayments: [early()] })
+    s.forEach(row => {
+      expect(row.cashFlowTotal).toBeCloseTo(row.principalPaid + row.interestPaid + row.feePaid, 2)
+      expect(row.interestAccrued).toBe(row.interest)
+      expect(row.principalPaid).toBe(row.principal)
+      expect(row.feePaid).toBe(row.fee)
+    })
+  })
+
   it('показывает новый платёж и накопленную экономию', () => {
     const result=compareScenarios(config,[early({strategy:'reducePayment'})])
     const reduced=result.scenarios.find(s=>s.id==='reducePayment')!

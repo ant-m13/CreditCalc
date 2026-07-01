@@ -63,6 +63,13 @@ export interface PaymentScheduleItem {
   interest: number
   principal: number
   earlyPayment: number
+  interestAccrued: number
+  interestPaid: number
+  principalPaid: number
+  feePaid: number
+  deferredInterestOpening: number
+  deferredInterestClosing: number
+  cashFlowTotal: number
   closingBalance: number
   cumulativeInterest: number
   cumulativeSavings: number

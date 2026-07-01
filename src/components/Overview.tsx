@@ -13,7 +13,9 @@ const currentDebt = (schedule: PaymentScheduleItem[], config: LoanConfig, today 
   const paidRows = schedule.filter(row => row.date <= today)
   const lastRow = paidRows.at(-1) ?? schedule[0]
   const principal = Math.max(0, lastRow.closingBalance)
-  const interest = principal > 0 && lastRow.date < today ? calculateInterest(principal, config.annualRate, lastRow.date, today, config.interest).toDecimalPlaces(2).toNumber() : 0
+  const deferredInterest = Math.max(0, lastRow.deferredInterestClosing ?? 0)
+  const accruedInterest = principal > 0 && lastRow.date < today ? calculateInterest(principal, config.annualRate, lastRow.date, today, config.interest).toDecimalPlaces(2).toNumber() : 0
+  const interest = deferredInterest + accruedInterest
   return { date: today, principal, interest, total: principal + interest, fromDate: lastRow.date }
 }
 
@@ -37,7 +39,7 @@ export function Overview({ config, repayments, comparison, selected, chartData, 
     { title: 'Половина кредита погашена', done: debt.principal <= config.principal * .5 },
     { title: 'Последний миллион', done: debt.principal <= 1_000_000 },
     { title: 'Последний год', done: remainingMonths <= 12 },
-    { title: 'Полное закрытие', done: debt.principal <= 0 }
+    { title: 'Полное закрытие', done: debt.total <= 0 }
   ]
   return <>
     <section className="hero-card"><div><span className="eyebrow">Сумма кредита</span><strong>{money(base.schedule[0]?.openingBalance ?? 0)}</strong><div className="hero-meta"><span><WalletCards/>Платёж <b>{money(selected.monthlyPayment)}</b></span><span><CalendarDays/>Закрытие <b>{shortDate(selected.closingDate)}</b></span><span><Clock3/>Срок сценария <b>{fmtMonths(selected.termMonths)}</b></span></div></div><div className="hero-ring"><svg viewBox="0 0 42 42"><circle cx="21" cy="21" r="16"/><circle className="progress" cx="21" cy="21" r="16" strokeDasharray={`${Math.max(2, Math.round(selected.monthsSaved / Math.max(1, base.termMonths) * 100))} 100`}/></svg><div><b>−{selected.monthsSaved}</b><span>{fmtMonthsFull(selected.monthsSaved)}</span></div></div></section>
