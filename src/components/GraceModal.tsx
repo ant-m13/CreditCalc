@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { X } from 'lucide-react'
 import type { GracePeriod } from '../loanEngine'
+import { createId } from '../utils/createId'
 import { Field } from './ui'
 
 interface GraceModalProps {
@@ -16,7 +17,7 @@ export function GraceModal({ close, add }: GraceModalProps) {
 
   const save = () => {
     add({
-      id: crypto.randomUUID(),
+      id: createId('grace'),
       startDate: start,
       endDate: end,
       type,

@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Sparkles, X } from 'lucide-react'
 import type { EarlyRepayment } from '../loanEngine'
 import { currencySymbol } from '../formatters'
+import { createId } from '../utils/createId'
 import { Field } from './ui'
 
 interface EarlyModalProps {
@@ -25,7 +26,7 @@ export function EarlyModal({ close, save, initial, defaultDate }: EarlyModalProp
     const parsed = Number(amount)
     if (!Number.isFinite(parsed) || parsed <= 0) return
     save({
-      id: initial?.id ?? crypto.randomUUID(),
+      id: initial?.id ?? createId('early'),
       date,
       amount: parsed,
       amountMode,

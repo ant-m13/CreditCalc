@@ -1,11 +1,14 @@
-// @ts-nocheck
 import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
-import { readFileSync } from 'node:fs'
+import packageJson from './package.json'
+
+interface PackageMetadata {
+  version?: string
+}
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, '.', '')
-  const pkg = JSON.parse(readFileSync('package.json', 'utf-8')) as { version?: string }
+  const pkg = packageJson as PackageMetadata
 
   return {
     base: env.VITE_BASE_PATH || '/',

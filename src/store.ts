@@ -4,6 +4,7 @@ import type { EarlyRepayment, GracePeriod, LoanConfig } from './loanEngine'
 import { defaultConfig } from './loanDefaults'
 import type { LoanBackupData } from './importExport'
 import type { RepaymentRule } from './repaymentRules'
+import { createId } from './utils/createId'
 export { defaultConfig } from './loanDefaults'
 
 type ThemeName = 'emerald' | 'ocean' | 'violet' | 'graphite' | 'warm' | 'night'
@@ -65,7 +66,6 @@ const sortRepayments = (repayments: EarlyRepayment[]) =>
 const sortRules = (rules: RepaymentRule[]) =>
   [...rules].sort((a, b) => a.startDate.localeCompare(b.startDate) || a.id.localeCompare(b.id))
 
-const createId = (): string => globalThis.crypto?.randomUUID?.() ?? `loan-${Date.now()}-${Math.random().toString(16).slice(2)}`
 const defaultAccentColor = '#0b9873'
 const themeNames: readonly ThemeName[] = ['emerald', 'ocean', 'violet', 'graphite', 'warm', 'night']
 const normalizeTheme = (value: unknown): ThemeName => typeof value === 'string' && themeNames.includes(value as ThemeName) ? value as ThemeName : 'emerald'
@@ -101,7 +101,7 @@ const normalizeLoanData = (data: Partial<LoanImportData | LoanData>): LoanData =
   useCustomAccentColor: typeof data.useCustomAccentColor === 'boolean' ? data.useCustomAccentColor : false
 })
 
-const loanFromData = (data: Partial<LoanImportData | LoanData>, name = 'Мой кредит', id = createId()): LoanProfile => ({
+const loanFromData = (data: Partial<LoanImportData | LoanData>, name = 'Мой кредит', id = createId('loan')): LoanProfile => ({
   id,
   name: name.trim() || 'Мой кредит',
   ...normalizeLoanData(data)
@@ -198,7 +198,7 @@ export const useLoanStore = create<LoanState>()(persist((set) => ({
     const state = persisted as Partial<LoanState>
     const hasLoans = Array.isArray(state.loans) && state.loans.length > 0
     const loans = hasLoans
-      ? state.loans!.map((loan, index) => loanFromData(loan, loan.name || `Кредит ${index + 1}`, loan.id || createId()))
+      ? state.loans!.map((loan, index) => loanFromData(loan, loan.name || `Кредит ${index + 1}`, loan.id || createId('loan')))
       : [loanFromData(state, 'Мой кредит', 'loan-default')]
     const activeLoanId = state.activeLoanId && loans.some(loan => loan.id === state.activeLoanId) ? state.activeLoanId : loans[0].id
     const active = loans.find(loan => loan.id === activeLoanId) ?? loans[0]

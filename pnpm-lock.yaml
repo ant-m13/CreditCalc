@@ -9,44 +9,44 @@ importers:
   .:
     dependencies:
       '@vitejs/plugin-react':
-        specifier: latest
+        specifier: 6.0.2
         version: 6.0.2(vite@8.0.16)
       date-fns:
-        specifier: latest
+        specifier: 4.4.0
         version: 4.4.0
       decimal.js:
-        specifier: latest
+        specifier: 10.6.0
         version: 10.6.0
       lucide-react:
-        specifier: latest
+        specifier: 1.21.0
         version: 1.21.0(react@19.2.7)
       react:
-        specifier: latest
+        specifier: 19.2.7
         version: 19.2.7
       react-dom:
-        specifier: latest
+        specifier: 19.2.7
         version: 19.2.7(react@19.2.7)
       recharts:
-        specifier: latest
+        specifier: 3.8.1
         version: 3.8.1(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react-is@19.2.7)(react@19.2.7)(redux@5.0.1)
       vite:
-        specifier: latest
+        specifier: 8.0.16
         version: 8.0.16
       zustand:
-        specifier: latest
+        specifier: 5.0.14
         version: 5.0.14(@types/react@19.2.17)(immer@11.1.8)(react@19.2.7)(use-sync-external-store@1.6.0(react@19.2.7))
     devDependencies:
       '@types/react':
-        specifier: latest
+        specifier: 19.2.17
         version: 19.2.17
       '@types/react-dom':
-        specifier: latest
+        specifier: 19.2.3
         version: 19.2.3(@types/react@19.2.17)
       typescript:
-        specifier: latest
+        specifier: 6.0.3
         version: 6.0.3
       vitest:
-        specifier: latest
+        specifier: 4.1.9
         version: 4.1.9(vite@8.0.16)
 
 packages:

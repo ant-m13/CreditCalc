@@ -12,20 +12,20 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@vitejs/plugin-react": "latest",
-    "date-fns": "latest",
-    "decimal.js": "latest",
-    "lucide-react": "latest",
-    "react": "latest",
-    "react-dom": "latest",
-    "recharts": "latest",
-    "vite": "latest",
-    "zustand": "latest"
+    "@vitejs/plugin-react": "6.0.2",
+    "date-fns": "4.4.0",
+    "decimal.js": "10.6.0",
+    "lucide-react": "1.21.0",
+    "react": "19.2.7",
+    "react-dom": "19.2.7",
+    "recharts": "3.8.1",
+    "vite": "8.0.16",
+    "zustand": "5.0.14"
   },
   "devDependencies": {
-    "@types/react": "latest",
-    "@types/react-dom": "latest",
-    "typescript": "latest",
-    "vitest": "latest"
+    "@types/react": "19.2.17",
+    "@types/react-dom": "19.2.3",
+    "typescript": "6.0.3",
+    "vitest": "4.1.9"
   }
 }
