@@ -7,6 +7,7 @@ import { APP_VERSION } from '../version'
 
 export function PrintReport({ config, repayments, comparison, selected }: { config: LoanConfig; repayments: EarlyRepayment[]; comparison: ComparisonResult; selected: ScenarioResult }) {
   const generated = format(new Date(), 'dd.MM.yyyy HH:mm')
+  const showFees = selected.schedule.some(row => Math.abs(row.feePaid ?? row.fee) > 0.004)
   return <article className="print-report">
     <div className="print-title"><div><span>Кредитный калькулятор</span><h1>Расчёт кредита</h1><p>Сформировано {generated} · сценарий «{selected.name}» · версия {APP_VERSION}</p></div><Landmark/></div>
     <section className="print-summary"><div><span>Сумма кредита</span><b>{money(config.principal)}</b></div><div><span>Ежемесячный платёж</span><b>{money(selected.monthlyPayment)}</b></div><div><span>Дата закрытия</span><b>{shortDate(selected.closingDate)}</b></div><div><span>Переплата</span><b>{money(selected.overpayment)}</b></div></section>
@@ -17,7 +18,7 @@ export function PrintReport({ config, repayments, comparison, selected }: { conf
     <h2>Досрочные платежи</h2>
     {repayments.length ? <table><thead><tr><th>Дата</th><th>Сумма</th><th>Стратегия</th><th>Комментарий</th></tr></thead><tbody>{repayments.map(r => <tr key={r.id}><td>{shortDate(r.date)}</td><td>{money(r.amount)}</td><td>{scenarioName(r.strategy)}</td><td>{r.comment || '—'}</td></tr>)}</tbody></table> : <p className="print-muted">Досрочные платежи не добавлены.</p>}
     <h2 className="page-break">График платежей — {selected.name}</h2>
-    <table className="print-schedule"><thead><tr><th rowSpan={2}>№ п/п</th><th rowSpan={2}>Дата</th><th colSpan={4}>Сумма платежа</th><th rowSpan={2}>Остаток задолженности</th></tr><tr><th>По кредиту</th><th>По процентам</th><th>Комиссия</th><th>Итого</th></tr></thead><tbody>{selected.schedule.map((r: PaymentScheduleItem) => <tr key={`${r.number}-${r.date}`} className={r.event ? 'print-event' : ''}><td>{r.number}</td><td>{shortDate(r.date)}</td><td>{money(r.principalPaid ?? r.principal)}</td><td>{money(r.interestPaid ?? r.interest)}</td><td>{money(r.feePaid ?? r.fee)}</td><td>{money(r.cashFlowTotal ?? r.payment + r.earlyPayment + r.fee)}</td><td>{money(r.closingBalance)}</td></tr>)}</tbody></table>
+    <table className="print-schedule"><thead><tr><th rowSpan={2}>№ п/п</th><th rowSpan={2}>Дата</th><th colSpan={showFees ? 4 : 3}>Сумма платежа</th><th rowSpan={2}>Остаток задолженности</th></tr><tr><th>По кредиту</th><th>По процентам</th>{showFees && <th>Комиссия</th>}<th>Итого</th></tr></thead><tbody>{selected.schedule.map((r: PaymentScheduleItem) => <tr key={`${r.number}-${r.date}`} className={r.event ? 'print-event' : ''}><td>{r.number}</td><td>{shortDate(r.date)}</td><td>{money(r.principalPaid ?? r.principal)}</td><td>{money(r.interestPaid ?? r.interest)}</td>{showFees && <td>{money(r.feePaid ?? r.fee)}</td>}<td>{money(r.cashFlowTotal ?? r.payment + r.earlyPayment + r.fee)}</td><td>{money(r.closingBalance)}</td></tr>)}</tbody></table>
     <footer>Расчёт носит информационный характер. Фактический график определяется условиями кредитного договора и правилами банка.</footer>
   </article>
 }
