@@ -1,13 +1,23 @@
 {
   "name": "credit-calculator",
   "private": true,
-  "version": "1.5.7",
+  "version": "1.5.8",
   "description": "Кредитный калькулятор с досрочными погашениями, банковским графиком платежей и локальным хранением данных.",
+  "license": "MIT",
+  "homepage": "https://ant-m13.github.io/CreditCalc/",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ant-m13/CreditCalc.git"
+  },
+  "bugs": {
+    "url": "https://github.com/ant-m13/CreditCalc/issues"
+  },
   "type": "module",
   "packageManager": "pnpm@11.7.0",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "lint": "eslint .",
     "typecheck": "tsc -b",
     "test": "vitest run",
     "test:watch": "vitest"
@@ -22,10 +32,18 @@
     "zustand": "5.0.14"
   },
   "devDependencies": {
-    "@vitejs/plugin-react": "6.0.2",
+    "@eslint/js": "10.0.1",
+    "@testing-library/react": "16.3.2",
+    "@testing-library/user-event": "14.6.1",
     "@types/react": "19.2.17",
     "@types/react-dom": "19.2.3",
+    "@vitejs/plugin-react": "6.0.2",
+    "eslint": "10.6.0",
+    "eslint-plugin-react-hooks": "7.1.1",
+    "globals": "17.7.0",
+    "jsdom": "29.1.1",
     "typescript": "6.0.3",
+    "typescript-eslint": "8.62.1",
     "vite": "8.0.16",
     "vitest": "4.1.9"
   }

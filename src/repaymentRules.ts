@@ -14,6 +14,7 @@ export interface RepaymentRule {
   endDate: string
   amount?: number
   percent?: number
+  enabled?: boolean
   strategy: EarlyRepayment['strategy']
   source: EarlyRepayment['source']
   sameDayOrder: EarlyRepayment['sameDayOrder']
@@ -38,6 +39,7 @@ export function expandRepaymentRules(config: LoanConfig, rules: RepaymentRule[])
   for (const rule of rules) {
     if (!isISODate(rule.startDate) || !isISODate(rule.endDate)) throw new Error(`Правило «${rule.name}» содержит некорректные даты`)
     if (!rule.skipMonths.every(isISOYearMonth)) throw new Error(`Правило «${rule.name}» содержит некорректный месяц пропуска`)
+    if (rule.enabled === false) continue
     const amount = ruleAmount(rule, regularPayment, config)
     if (amount <= 0 || rule.startDate > rule.endDate) continue
     const startDate = parseISO(rule.startDate)

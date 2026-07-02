@@ -26,9 +26,9 @@ const config: LoanConfig = {
 }
 
 const repayments: EarlyRepayment[] = [
-  { id: 'r1', date: '2025-11-28', amount: 35480, amountMode: 'extra', strategy: 'reduceTerm', source: 'own', sameDayOrder: 'regularFirst', interestFirst: true, comment: 'Первый платёж 🏠 & #%+"' },
-  { id: 'r2', date: '2026-01-26', amount: 8704.99, amountMode: 'extra', strategy: 'reducePayment', source: 'subsidy', sameDayOrder: 'earlyFirst', interestFirst: false, comment: 'Маткапитал' },
-  { id: 'r3', date: '2026-03-27', amount: 12342.6, amountMode: 'extra', strategy: 'full', source: 'insurance', sameDayOrder: 'regularFirst', interestFirst: true, comment: 'Страховка' }
+  { id: 'r1', date: '2025-11-28', amount: 35480, enabled: true, amountMode: 'extra', strategy: 'reduceTerm', source: 'own', sameDayOrder: 'regularFirst', interestFirst: true, comment: 'Первый платёж 🏠 & #%+"' },
+  { id: 'r2', date: '2026-01-26', amount: 8704.99, enabled: true, amountMode: 'extra', strategy: 'reducePayment', source: 'subsidy', sameDayOrder: 'earlyFirst', interestFirst: false, comment: 'Маткапитал' },
+  { id: 'r3', date: '2026-03-27', amount: 12342.6, enabled: true, amountMode: 'extra', strategy: 'full', source: 'insurance', sameDayOrder: 'regularFirst', interestFirst: true, comment: 'Страховка' }
 ]
 
 const gracePeriods: GracePeriod[] = [
@@ -39,9 +39,9 @@ const gracePeriods: GracePeriod[] = [
 ]
 
 const repaymentRules: RepaymentRule[] = [
-  { id: 'rule-1', name: '20 000 каждый месяц', type: 'monthlyFixed', startDate: '2026-02-26', endDate: '2027-02-26', amount: 20000, strategy: 'reduceTerm', source: 'own', sameDayOrder: 'regularFirst', interestFirst: true, skipMonths: ['2026-08'], comment: 'Автоплатёж' },
-  { id: 'rule-2', name: 'Премия', type: 'annualBonus', startDate: '2026-12-15', endDate: '2028-12-15', amount: 150000, strategy: 'reduceTerm', source: 'own', sameDayOrder: 'earlyFirst', interestFirst: true, skipMonths: [] },
-  { id: 'rule-3', name: '10% от платежа', type: 'paymentPercent', startDate: '2026-02-26', endDate: '2026-12-26', percent: 10, strategy: 'reducePayment', source: 'other', sameDayOrder: 'regularFirst', interestFirst: true, skipMonths: [] }
+  { id: 'rule-1', name: '20 000 каждый месяц', type: 'monthlyFixed', startDate: '2026-02-26', endDate: '2027-02-26', amount: 20000, enabled: true, strategy: 'reduceTerm', source: 'own', sameDayOrder: 'regularFirst', interestFirst: true, skipMonths: ['2026-08'], comment: 'Автоплатёж' },
+  { id: 'rule-2', name: 'Премия', type: 'annualBonus', startDate: '2026-12-15', endDate: '2028-12-15', amount: 150000, enabled: true, strategy: 'reduceTerm', source: 'own', sameDayOrder: 'earlyFirst', interestFirst: true, skipMonths: [] },
+  { id: 'rule-3', name: '10% от платежа', type: 'paymentPercent', startDate: '2026-02-26', endDate: '2026-12-26', percent: 10, enabled: true, strategy: 'reducePayment', source: 'other', sameDayOrder: 'regularFirst', interestFirst: true, skipMonths: [] }
 ]
 
 const snapshot = () => createLoanSnapshot({
@@ -153,5 +153,11 @@ describe('ссылка на расчёт', () => {
     const decoded = parseLoanSnapshot({ version: 1, config, repayments: [], gracePeriods: [], selectedScenario: 'reduceTerm', settings: { termUnit: 'months', displayDecimals: 2, theme: 'emerald' } })
     expect(decoded.appFontSize).toBe('normal')
     expect(decoded.scheduleFontSize).toBe('large')
+  })
+
+  it('поддерживает старый payload ссылки без внутреннего поля version', () => {
+    const decoded = parseLoanSnapshot({ config, repayments: [], gracePeriods: [], selectedScenario: 'reduceTerm', settings: { termUnit: 'months', displayDecimals: 2, theme: 'emerald' } })
+    expect(decoded.config.principal).toBe(config.principal)
+    expect(decoded.selectedScenario).toBe('reduceTerm')
   })
 })

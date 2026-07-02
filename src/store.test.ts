@@ -151,6 +151,17 @@ describe('миграция локального хранилища', () => {
     expect(new Set(normalized.loans.map((loan: any) => loan.id)).size).toBe(2)
     expect(new Set(normalized.loans[0].repayments.map((item: any) => item.id)).size).toBe(2)
   })
+
+  it('сохраняет явно отключенные досрочные платежи и правила при миграции', () => {
+    const normalized = normalizePersistedState({
+      repayments: [{ id: 'off-once', date: defaultConfig.firstPaymentDate, amount: 1000, enabled: false, amountMode: 'extra', ...repaymentBase }],
+      repaymentRules: [{ ...rule(1), amount: 1000, enabled: false }]
+    }) as any
+    expect(normalized.repayments).toHaveLength(1)
+    expect(normalized.repayments[0]).toMatchObject({ id: 'off-once', amount: 1000, enabled: false })
+    expect(normalized.repaymentRules).toHaveLength(1)
+    expect(normalized.repaymentRules[0]).toMatchObject({ amount: 1000, enabled: false })
+  })
 })
 
 describe('лимиты store до мутации', () => {

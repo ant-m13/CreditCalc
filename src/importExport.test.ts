@@ -23,10 +23,39 @@ describe('импорт резервной копии', () => {
     expect(result.repaymentRules).toEqual([])
   })
 
+  it('подставляет значения по умолчанию для полей, отсутствующих в старом JSON', () => {
+    const legacyConfig = {
+      principal: defaultConfig.principal,
+      annualRate: defaultConfig.annualRate,
+      issueDate: defaultConfig.issueDate,
+      firstPaymentDate: defaultConfig.firstPaymentDate,
+      termMonths: defaultConfig.termMonths,
+      paymentDay: defaultConfig.paymentDay,
+      currency: defaultConfig.currency,
+      closeThreshold: defaultConfig.closeThreshold,
+      oneTimeFee: defaultConfig.oneTimeFee,
+      monthlyFee: defaultConfig.monthlyFee,
+      earlyRepaymentFeePercent: defaultConfig.earlyRepaymentFeePercent
+    }
+    const result = parseLoanBackup(JSON.stringify({ config: legacyConfig, repayments: [], scenario: { id: 'reduceTerm', schedule: [] } }))
+    expect(result.config.paymentType).toBe(defaultConfig.paymentType)
+    expect(result.config.frequency).toBe(defaultConfig.frequency)
+    expect(result.config.rounding).toBe(defaultConfig.rounding)
+    expect(result.config.interest).toEqual(defaultConfig.interest)
+  })
+
   it('восстанавливает правила досрочных платежей', () => {
     const rule = { id: 'rule-1', name: 'Ежемесячно', type: 'monthlyFixed', startDate: '2026-02-26', endDate: '2026-12-26', amount: 20000, strategy: 'reduceTerm', source: 'own', sameDayOrder: 'regularFirst', interestFirst: true, skipMonths: ['2026-05'] }
     const result = parseLoanBackup(JSON.stringify({ config: defaultConfig, repayments: [], repaymentRules: [rule], gracePeriods: [], selectedScenario: 'combined' }))
     expect(result.repaymentRules[0]).toMatchObject(rule)
+  })
+
+  it('восстанавливает временно отключенные досрочные платежи и правила', () => {
+    const disabledRepayment = { ...repayment, enabled: false, amountMode: 'total', sameDayOrder: 'earlyFirst' }
+    const disabledRule = { id: 'rule-off', name: 'Пауза', type: 'monthlyFixed', startDate: '2026-02-26', endDate: '2026-12-26', amount: 20000, enabled: false, strategy: 'reduceTerm', source: 'own', sameDayOrder: 'regularFirst', interestFirst: true, skipMonths: [] }
+    const result = parseLoanBackup(JSON.stringify({ config: defaultConfig, repayments: [disabledRepayment], repaymentRules: [disabledRule], gracePeriods: [], selectedScenario: 'combined' }))
+    expect(result.repayments[0]).toMatchObject({ amount: 8704.99, enabled: false })
+    expect(result.repaymentRules[0]).toMatchObject({ amount: 20000, enabled: false })
   })
 
   it('отклоняет импорт с количеством правил сверх лимита', () => {

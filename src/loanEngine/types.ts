@@ -60,6 +60,7 @@ export interface EarlyRepayment {
   id: string
   date: string
   amount: number
+  enabled?: boolean
   amountMode?: 'extra' | 'total'
   strategy: RepaymentStrategy
   source: EarlySource
