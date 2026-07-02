@@ -27,6 +27,29 @@ describe('loan engine', () => {
   })
   it('поддерживает несколько досрочных платежей', () => { const s=generateBaseSchedule(config,{earlyRepayments:[early(),early({id:'e2',date:'2025-02-15',amount:200000})]}); expect(s.reduce((a,x)=>a+x.earlyPayment,0)).toBe(500000) })
   it('учитывает льготный период', () => { const grace:GracePeriod={id:'g',startDate:'2024-03-01',endDate:'2024-04-30',type:'interestOnly',extendTerm:true,accrueInterest:true,capitalizeInterest:false}; const s=generateBaseSchedule(config,{gracePeriods:[grace]}); const row=s.find(x=>x.date==='2024-03-15')!; expect(row.principal).toBe(0); expect(row.event).toContain('проценты') })
+  it('не продлевает договорную дату закрытия при льготе без продления', () => {
+    const short = { ...config, principal: 120_000, annualRate: 0, termMonths: 12, issueDate: '2024-01-01', firstPaymentDate: '2024-02-01', paymentDay: 1 }
+    const base = generateBaseSchedule(short)
+    const grace: GracePeriod = { id: 'g-no-extend', startDate: '2024-03-01', endDate: '2024-05-31', type: 'full', extendTerm: false, accrueInterest: false, capitalizeInterest: false }
+    const s = generateBaseSchedule(short, { gracePeriods: [grace] })
+    expect(s.at(-1)?.date).toBe(base.at(-1)?.date)
+    expect(s.at(-1)?.eventTypes).toContain('finalBalloon')
+    expect(s.at(-1)?.payment).toBeGreaterThan(base.at(-1)!.payment)
+  })
+  it('продлевает льготу в платёжных периодах для двухнедельного графика', () => {
+    const biweekly = { ...config, principal: 260_000, annualRate: 0, termMonths: 12, frequency: 'biweekly' as const, issueDate: '2024-01-01', firstPaymentDate: '2024-01-15', paymentDay: 15 }
+    const grace: GracePeriod = { id: 'g-biweekly', startDate: '2024-04-01', endDate: '2024-06-30', type: 'full', extendTerm: true, accrueInterest: false, capitalizeInterest: false }
+    const base = generateBaseSchedule(biweekly)
+    const s = generateBaseSchedule(biweekly, { gracePeriods: [grace] })
+    expect(s.length - base.length).toBe(6)
+  })
+  it('продлевает льготу в платёжных периодах для квартального графика', () => {
+    const quarterly = { ...config, principal: 120_000, annualRate: 0, termMonths: 12, frequency: 'quarterly' as const, issueDate: '2024-01-01', firstPaymentDate: '2024-01-15', paymentDay: 15 }
+    const grace: GracePeriod = { id: 'g-quarterly', startDate: '2024-04-01', endDate: '2024-06-30', type: 'full', extendTerm: true, accrueInterest: false, capitalizeInterest: false }
+    const base = generateBaseSchedule(quarterly)
+    const s = generateBaseSchedule(quarterly, { gracePeriods: [grace] })
+    expect(s.length - base.length).toBe(1)
+  })
   it('работает с нулевой ставкой', () => { const s=generateBaseSchedule({...config,annualRate:0}); const first=s.find(x=>x.date==='2024-02-15')!; expect(first.interest).toBe(0); expect(first.payment).toBe(25000) })
   it('выполняет полное досрочное погашение', () => { const s=generateBaseSchedule(config,{earlyRepayments:[early({date:'2024-03-15',amount:4_000_000,strategy:'full'})]}); expect(s.length).toBe(3); expect(s.at(-1)?.closingBalance).toBe(0) })
   it('не закрывает кредит, если основной долг погашен, но остались отложенные проценты', () => {
@@ -107,6 +130,20 @@ describe('loan engine', () => {
     expect(result.monthlyPayment).toBe(35479.81)
   })
 
+  it('сверяет первый аннуитетный платёж с выпиской банка', () => {
+    const bank:LoanConfig={...config,principal:2375000,annualRate:8.1,issueDate:'2020-11-21',firstPaymentDate:'2020-12-21',firstPaymentInterestOnly:false,termMonths:240,paymentDay:21,interest:{...config.interest,method:'daily',dayCountBasis:'actualActual'}}
+    const first=generateBaseSchedule(bank).find(row=>row.date==='2020-12-21')!
+    expect(first.payment).toBe(20013.52)
+    expect(first.interest).toBe(15768.44)
+    expect(first.principal).toBe(4245.08)
+    expect(first.closingBalance).toBe(2370754.92)
+    expect(first.eventTypes).not.toContain('firstInterestOnly')
+    const interestOnlyFirst=generateBaseSchedule({...bank,firstPaymentInterestOnly:true}).find(row=>row.date==='2020-12-21')!
+    expect(interestOnlyFirst.payment).toBe(15768.44)
+    expect(interestOnlyFirst.principal).toBe(0)
+    expect(interestOnlyFirst.eventTypes).toContain('firstInterestOnly')
+  })
+
   it('учитывает порядок операций в дату регулярного платежа', () => {
     const earlyFirst=generateBaseSchedule(config,{earlyRepayments:[early({date:'2024-08-15',strategy:'reducePayment',sameDayOrder:'earlyFirst'})]})
     const regularFirst=generateBaseSchedule(config,{earlyRepayments:[early({date:'2024-08-15',strategy:'reducePayment',sameDayOrder:'regularFirst'})]})
@@ -164,6 +201,24 @@ describe('loan engine', () => {
     expect(start.reduce((s,x)=>s+x.interest,0)).toBeGreaterThan(end.reduce((s,x)=>s+x.interest,0))
   })
 
+  it('раскрывает начисление на конец дня отдельным сегментом audit', () => {
+    const daily={...config,interest:{...config.interest,method:'daily' as const,dayCountBasis:'actual365' as const,includePaymentDate:true,balanceMoment:'endOfDay' as const}}
+    const row=generateBaseSchedule(daily).find(item=>item.payment>0)!
+    const rawTotal=row.audit!.interestSegments.reduce((sum, segment)=>sum+segment.rawInterest,0)
+    expect(row.audit!.interestSegments.some(segment=>segment.reason==='Начисление на конец дня')).toBe(true)
+    expect(row.audit!.days).toBe(row.audit!.interestSegments.reduce((sum, segment)=>sum+segment.days,0))
+    expect(row.interest).toBeCloseTo(Math.round(rawTotal*100)/100,2)
+  })
+
+  it('показывает беспроцентные льготные дни отдельным нулевым сегментом audit', () => {
+    const daily={...config,interest:{...config.interest,method:'daily' as const,dayCountBasis:'actual365' as const}}
+    const grace:GracePeriod={id:'g-audit-free',startDate:'2024-01-10',endDate:'2024-01-20',type:'full',extendTerm:true,accrueInterest:false,capitalizeInterest:false}
+    const row=generateBaseSchedule(daily,{gracePeriods:[grace]}).find(item=>item.date==='2024-02-15')!
+    const freeSegment=row.audit!.interestSegments.find(segment=>segment.reason==='Беспроцентная льгота')!
+    expect(freeSegment.rawInterest).toBe(0)
+    expect(freeSegment.days).toBe(11)
+  })
+
   it('делит Actual/Actual по календарным годам', () => {
     const interest=calculateInterest(1_000_000,10,'2023-12-15','2024-01-15',{...config.interest,dayCountBasis:'actualActual',includePaymentDate:false})
     const expected=1_000_000*.10*(17/365+14/366)
@@ -187,6 +242,31 @@ describe('loan engine', () => {
   it('показывает будущий платёж 0 после полного досрочного закрытия', () => {
     const result=compareScenarios(config,[early({date:'2024-03-15',amount:4_000_000,strategy:'full'})])
     const combined=result.scenarios.find(s=>s.id==='combined')!
+    expect(combined.monthlyPayment).toBe(0)
+  })
+
+  it('сохраняет пересчёт платежа, если в ту же дату есть другая стратегия', () => {
+    const result=compareScenarios(config,[
+      early({id:'same-payment',strategy:'reducePayment'}),
+      early({id:'same-term',amount:50_000,strategy:'reduceTerm'})
+    ])
+    const combined=result.scenarios.find(s=>s.id==='combined')!
+    const rowIndex=combined.schedule.findIndex(row=>row.date==='2024-08-15')
+    const row=combined.schedule[rowIndex]
+    const nextRegular=combined.schedule.slice(rowIndex+1).find(item=>item.isRegularPayment)!
+    expect(row.eventTypes).toEqual(expect.arrayContaining(['earlyReducePayment','earlyReduceTerm']))
+    expect(combined.monthlyPayment).toBe(nextRegular.payment)
+    expect(combined.monthlyPayment).toBeLessThan(result.scenarios[0].monthlyPayment)
+  })
+
+  it('определяет полное досрочное закрытие структурным флагом, даже если в дату есть вторая операция', () => {
+    const result=compareScenarios(config,[
+      early({id:'full-close',date:'2024-03-15',amount:4_000_000,strategy:'full'}),
+      early({id:'after-full',date:'2024-03-15',amount:1000,strategy:'reduceTerm'})
+    ])
+    const combined=result.scenarios.find(s=>s.id==='combined')!
+    expect(combined.schedule.at(-1)?.eventTypes).toEqual(expect.arrayContaining(['earlyFull','earlyReduceTerm']))
+    expect(combined.schedule.at(-1)?.fullyClosedByEarlyRepayment).toBe(true)
     expect(combined.monthlyPayment).toBe(0)
   })
 

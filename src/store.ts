@@ -7,7 +7,7 @@ import type { LoanBackupData } from './importExport'
 import type { RepaymentRule } from './repaymentRules'
 import { createId } from './utils/createId'
 import { isISODate, isISOYearMonth } from './utils/dateValidation'
-import { MAX_EARLY_REPAYMENTS, MAX_GRACE_PERIODS, MAX_TERM_MONTHS } from './loanEngine/limits'
+import { MAX_EARLY_REPAYMENTS, MAX_GRACE_PERIODS, MAX_REPAYMENT_RULES, MAX_TERM_MONTHS } from './loanEngine/limits'
 export { defaultConfig } from './loanDefaults'
 
 type ThemeName = 'emerald' | 'ocean' | 'violet' | 'graphite' | 'warm' | 'night'
@@ -88,7 +88,7 @@ const graceTypes = ['full', 'interestOnly', 'reduced', 'custom'] as const
 const scenarioIds = ['base', 'reduceTerm', 'reducePayment', 'combined'] as const
 const termUnits = ['months', 'years'] as const
 const fontSizes = ['normal', 'large', 'xlarge'] as const
-const MAX_LOANS = 100
+export const MAX_LOANS = 100
 const normalizeTheme = (value: unknown): ThemeName => typeof value === 'string' && themeNames.includes(value as ThemeName) ? value as ThemeName : 'emerald'
 const normalizeAccentColor = (value: unknown): string => typeof value === 'string' && /^#[0-9a-fA-F]{6}$/.test(value) ? value : defaultAccentColor
 const oneOf = <T extends string>(value: unknown, values: readonly T[], fallback: T): T => typeof value === 'string' && values.includes(value as T) ? value as T : fallback
@@ -182,7 +182,7 @@ const normalizeRepayments = (value: unknown, config: LoanConfig): EarlyRepayment
 
 const normalizeRepaymentRules = (value: unknown): RepaymentRule[] => {
   if (!Array.isArray(value)) return []
-  return withUniqueIds(sortRules(value.slice(0, MAX_EARLY_REPAYMENTS).flatMap((item): RepaymentRule[] => {
+  return withUniqueIds(sortRules(value.slice(0, MAX_REPAYMENT_RULES).flatMap((item): RepaymentRule[] => {
     if (!isObject(item) || typeof item.id !== 'string' || typeof item.name !== 'string' || !isISODate(item.startDate) || !isISODate(item.endDate) || item.endDate < item.startDate) return []
     const type = oneOf(item.type, repaymentRuleTypes, 'monthlyFixed')
     const amount = item.amount === undefined ? undefined : finiteNumber(item.amount, 0, 0)
@@ -263,6 +263,16 @@ const publicData = (state: LoanData): LoanData => ({
   useCustomAccentColor: state.useCustomAccentColor
 })
 
+const countArray = (value: unknown) => Array.isArray(value) ? value.length : 0
+const assertCanAddLoan = (count: number) => {
+  if (count >= MAX_LOANS) throw new Error(`Можно сохранить не более ${MAX_LOANS} кредитов`)
+}
+const assertImportWithinLimits = (data: Partial<LoanImportData | LoanData>) => {
+  if (countArray(data.repayments) > MAX_EARLY_REPAYMENTS) throw new Error(`Слишком много досрочных платежей. Максимум: ${MAX_EARLY_REPAYMENTS}`)
+  if (countArray(data.repaymentRules) > MAX_REPAYMENT_RULES) throw new Error(`Слишком много правил досрочных платежей. Максимум: ${MAX_REPAYMENT_RULES}`)
+  if (countArray(data.gracePeriods) > MAX_GRACE_PERIODS) throw new Error(`Слишком много льготных периодов. Максимум: ${MAX_GRACE_PERIODS}`)
+}
+
 export const loanToBackupData = (loan: LoanProfile): LoanBackupData => ({
   name: loan.name,
   config: loan.config,
@@ -322,13 +332,22 @@ export const useLoanStore = create<LoanState>()(persist((set) => ({
   activeLoanId: initialLoan.id,
   updateConfig: (patch) => set(s => syncActive(s, { config: { ...s.config, ...patch } })),
   updateInterest: (patch) => set(s => syncActive(s, { config: { ...s.config, interest: { ...s.config.interest, ...patch } } })),
-  addRepayment: (repayment) => set(s => syncActive(s, { repayments: sortRepayments([...s.repayments, repayment]) })),
+  addRepayment: (repayment) => set(s => {
+    if (s.repayments.length >= MAX_EARLY_REPAYMENTS) throw new Error(`Можно добавить не более ${MAX_EARLY_REPAYMENTS} разовых платежей`)
+    return syncActive(s, { repayments: sortRepayments([...s.repayments, repayment]) })
+  }),
   updateRepayment: (repayment) => set(s => syncActive(s, { repayments: sortRepayments(s.repayments.map(item => item.id === repayment.id ? repayment : item)) })),
   removeRepayment: (id) => set(s => syncActive(s, { repayments: s.repayments.filter(r => r.id !== id) })),
-  addRepaymentRule: (rule) => set(s => syncActive(s, { repaymentRules: sortRules([...s.repaymentRules, rule]) })),
+  addRepaymentRule: (rule) => set(s => {
+    if (s.repaymentRules.length >= MAX_REPAYMENT_RULES) throw new Error(`Можно добавить не более ${MAX_REPAYMENT_RULES} правил досрочных платежей`)
+    return syncActive(s, { repaymentRules: sortRules([...s.repaymentRules, rule]) })
+  }),
   updateRepaymentRule: (rule) => set(s => syncActive(s, { repaymentRules: sortRules(s.repaymentRules.map(item => item.id === rule.id ? rule : item)) })),
   removeRepaymentRule: (id) => set(s => syncActive(s, { repaymentRules: s.repaymentRules.filter(rule => rule.id !== id) })),
-  addGrace: (grace) => set(s => syncActive(s, { gracePeriods: [...s.gracePeriods, grace] })),
+  addGrace: (grace) => set(s => {
+    if (s.gracePeriods.length >= MAX_GRACE_PERIODS) throw new Error(`Можно добавить не более ${MAX_GRACE_PERIODS} льготных периодов`)
+    return syncActive(s, { gracePeriods: [...s.gracePeriods, grace] })
+  }),
   removeGrace: (id) => set(s => syncActive(s, { gracePeriods: s.gracePeriods.filter(g => g.id !== id) })),
   selectScenario: (selectedScenario) => set(s => syncActive(s, { selectedScenario })),
   setTermUnit: (termUnit) => set(s => syncActive(s, { termUnit })),
@@ -341,6 +360,7 @@ export const useLoanStore = create<LoanState>()(persist((set) => ({
   resetCustomAccentColor: () => set(s => syncActive(s, { customAccentColor: defaultAccentColor, useCustomAccentColor: false })),
   switchLoan: (id) => set(s => switchToLoan(s, id)),
   createLoan: (name = 'Новый кредит') => set(s => {
+    assertCanAddLoan(s.loans.length)
     const loan = loanFromData(defaultLoanData(false), name)
     return { loans: [...s.loans, loan], activeLoanId: loan.id, ...publicData(loan) }
   }),
@@ -357,10 +377,13 @@ export const useLoanStore = create<LoanState>()(persist((set) => ({
     return { ...data, loans: s.loans.map(loan => loan.id === s.activeLoanId ? { ...loan, name: 'Пример кредита', ...data } : loan) }
   }),
   addLoanFromData: (data) => set(s => {
+    assertCanAddLoan(s.loans.length)
+    assertImportWithinLimits(data)
     const loan = loanFromData(data, data.name ?? 'Кредит из ссылки')
     return { loans: [...s.loans, loan], activeLoanId: loan.id, ...publicData(loan) }
   }),
   replaceData: (data) => set(s => {
+    assertImportWithinLimits(data)
     const normalized = normalizeLoanData(data)
     const name = data.name?.trim()
     return { ...normalized, loans: s.loans.map(loan => loan.id === s.activeLoanId ? { ...loan, ...(name ? { name } : {}), ...normalized } : loan) }

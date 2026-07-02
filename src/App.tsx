@@ -187,29 +187,43 @@ function App() {
   }
 
   const createLoanFromData = (data: LoanBackupData, source = 'данных') => {
-    store.addLoanFromData(data)
-    setRows(18)
-    setImportStatus({ kind: 'success', text: `Создан новый кредит из ${source}` })
+    try {
+      store.addLoanFromData(data)
+      setRows(18)
+      setImportStatus({ kind: 'success', text: `Создан новый кредит из ${source}` })
+      return true
+    } catch (error) {
+      setImportStatus({ kind: 'error', text: error instanceof Error ? error.message : 'Не удалось создать кредит' })
+      return false
+    }
   }
 
   const replaceActiveWithData = (data: LoanBackupData, source = 'данных') => {
-    store.replaceData(data)
-    setRows(18)
-    setImportStatus({ kind: 'success', text: `Текущий кредит заменён данными из ${source}` })
+    try {
+      store.replaceData(data)
+      setRows(18)
+      setImportStatus({ kind: 'success', text: `Текущий кредит заменён данными из ${source}` })
+      return true
+    } catch (error) {
+      setImportStatus({ kind: 'error', text: error instanceof Error ? error.message : 'Не удалось заменить текущий кредит' })
+      return false
+    }
   }
 
   const createLoanFromSharedCalculation = () => {
     if (!sharedCalculation) return
-    createLoanFromData(sharedCalculation, 'ссылки')
-    setSharedCalculation(null)
-    clearSharedHash()
+    if (createLoanFromData(sharedCalculation, 'ссылки')) {
+      setSharedCalculation(null)
+      clearSharedHash()
+    }
   }
 
   const replaceActiveWithSharedCalculation = () => {
     if (!sharedCalculation) return
-    replaceActiveWithData(sharedCalculation, 'ссылки')
-    setSharedCalculation(null)
-    clearSharedHash()
+    if (replaceActiveWithData(sharedCalculation, 'ссылки')) {
+      setSharedCalculation(null)
+      clearSharedHash()
+    }
   }
 
   const declineSharedCalculation = () => {

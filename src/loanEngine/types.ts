@@ -4,6 +4,30 @@ export type RepaymentStrategy = 'reduceTerm' | 'reducePayment' | 'full' | 'custo
 export type EarlySource = 'own' | 'subsidy' | 'insurance' | 'other'
 export type DayCountBasis = '365' | '366' | '360' | 'actual365' | 'actualActual'
 export type RoundingMode = 'kopecks' | 'rubles' | 'bank'
+export type ScheduleEventType =
+  | 'loanIssued'
+  | 'earlyReduceTerm'
+  | 'earlyReducePayment'
+  | 'earlyFull'
+  | 'earlyFullInsufficient'
+  | 'earlyCombined'
+  | 'firstInterestOnly'
+  | 'graceFull'
+  | 'graceInterestOnly'
+  | 'graceSpecialPayment'
+  | 'deferredInterestPayment'
+  | 'autoClose'
+  | 'finalBalloon'
+
+export interface InterestAuditSegment {
+  from: string
+  to: string
+  days: number
+  balance: number
+  rateBasis: DayCountBasis
+  rawInterest: number
+  reason: string
+}
 
 export interface InterestConfig {
   method: 'annuity' | 'daily'
@@ -76,6 +100,11 @@ export interface PaymentScheduleItem {
   fee: number
   comment: string
   event: string
+  eventTypes: ScheduleEventType[]
+  paymentRecalculated: boolean
+  fullyClosedByEarlyRepayment: boolean
+  isRegularPayment: boolean
+  isGracePayment: boolean
   audit?: {
     periodStart: string
     periodEnd: string
@@ -89,6 +118,7 @@ export interface PaymentScheduleItem {
     dayCountBasis: DayCountBasis
     interestBalance: number
     interestBeforeRounding: number
+    interestSegments: InterestAuditSegment[]
     rounding: RoundingMode
     operationOrder: string
   }

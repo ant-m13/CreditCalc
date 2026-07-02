@@ -20,16 +20,20 @@ export function GraceModal({ close, add }: GraceModalProps) {
   const save = () => {
     if (!isISODate(start) || !isISODate(end)) { setError('Укажите корректные даты льготного периода'); return }
     if (end < start) { setError('Дата окончания не может быть раньше даты начала'); return }
-    add({
-      id: createId('grace'),
-      startDate: start,
-      endDate: end,
-      type,
-      extendTerm: extend,
-      accrueInterest: true,
-      capitalizeInterest: false
-    })
-    close()
+    try {
+      add({
+        id: createId('grace'),
+        startDate: start,
+        endDate: end,
+        type,
+        extendTerm: extend,
+        accrueInterest: true,
+        capitalizeInterest: false
+      })
+      close()
+    } catch (error) {
+      setError(error instanceof Error ? error.message : 'Не удалось сохранить льготный период')
+    }
   }
 
   return <div className="modal-backdrop">

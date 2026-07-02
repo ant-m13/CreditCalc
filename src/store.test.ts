@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { defaultConfig, normalizePersistedState } from './store'
+import { MAX_EARLY_REPAYMENTS, MAX_REPAYMENT_RULES } from './loanEngine/limits'
+import { defaultConfig, MAX_LOANS, normalizePersistedState, useLoanStore, type LoanProfile } from './store'
+import type { EarlyRepayment } from './loanEngine'
+import type { RepaymentRule } from './repaymentRules'
 
 const repaymentBase = {
   strategy: 'reduceTerm',
@@ -7,6 +10,53 @@ const repaymentBase = {
   sameDayOrder: 'earlyFirst',
   interestFirst: true
 } as const
+
+const loanProfile = (patch: Partial<LoanProfile> = {}): LoanProfile => ({
+  id: 'loan-active',
+  name: 'Рабочий',
+  config: defaultConfig,
+  repayments: [],
+  repaymentRules: [],
+  gracePeriods: [],
+  selectedScenario: 'reduceTerm',
+  termUnit: 'months',
+  displayDecimals: 2,
+  appFontSize: 'normal',
+  scheduleFontSize: 'large',
+  theme: 'emerald',
+  customAccentColor: '#0b9873',
+  useCustomAccentColor: false,
+  ...patch
+})
+
+const repayment = (index: number): EarlyRepayment => ({
+  id: `early-${index}`,
+  date: defaultConfig.firstPaymentDate,
+  amount: 1000 + index,
+  amountMode: 'extra',
+  strategy: 'reduceTerm',
+  source: 'own',
+  sameDayOrder: 'regularFirst',
+  interestFirst: true
+})
+
+const rule = (index: number): RepaymentRule => ({
+  id: `rule-${index}`,
+  name: `Правило ${index}`,
+  type: 'monthlyFixed',
+  startDate: defaultConfig.firstPaymentDate,
+  endDate: '2027-12-01',
+  amount: 1000,
+  strategy: 'reduceTerm',
+  source: 'own',
+  sameDayOrder: 'regularFirst',
+  interestFirst: true,
+  skipMonths: []
+})
+
+const setStoreLoan = (loan: LoanProfile) => {
+  useLoanStore.setState({ ...loan, loans: [loan], activeLoanId: loan.id })
+}
 
 describe('миграция локального хранилища', () => {
   it('создаёт новый кредит без демонстрационного досрочного платежа', () => {
@@ -100,5 +150,45 @@ describe('миграция локального хранилища', () => {
     }) as any
     expect(new Set(normalized.loans.map((loan: any) => loan.id)).size).toBe(2)
     expect(new Set(normalized.loans[0].repayments.map((item: any) => item.id)).size).toBe(2)
+  })
+})
+
+describe('лимиты store до мутации', () => {
+  it('не создаёт 101-й кредит', () => {
+    const loans = Array.from({ length: MAX_LOANS }, (_, index) => loanProfile({ id: `loan-${index}`, name: `Кредит ${index}` }))
+    const normalized = normalizePersistedState({ loans, activeLoanId: loans[0].id }) as Partial<ReturnType<typeof useLoanStore.getState>>
+    useLoanStore.setState(normalized)
+    expect(() => useLoanStore.getState().createLoan()).toThrow(String(MAX_LOANS))
+    expect(useLoanStore.getState().loans).toHaveLength(MAX_LOANS)
+  })
+
+  it('не добавляет 5001-й разовый платёж', () => {
+    const repayments = Array.from({ length: MAX_EARLY_REPAYMENTS }, (_, index) => repayment(index))
+    setStoreLoan(loanProfile({ repayments }))
+    expect(() => useLoanStore.getState().addRepayment(repayment(MAX_EARLY_REPAYMENTS + 1))).toThrow(String(MAX_EARLY_REPAYMENTS))
+    expect(useLoanStore.getState().repayments).toHaveLength(MAX_EARLY_REPAYMENTS)
+  })
+
+  it('не добавляет 5001-е регулярное правило', () => {
+    const repaymentRules = Array.from({ length: MAX_REPAYMENT_RULES }, (_, index) => rule(index))
+    setStoreLoan(loanProfile({ repaymentRules }))
+    expect(() => useLoanStore.getState().addRepaymentRule(rule(MAX_REPAYMENT_RULES + 1))).toThrow(String(MAX_REPAYMENT_RULES))
+    expect(useLoanStore.getState().repaymentRules).toHaveLength(MAX_REPAYMENT_RULES)
+  })
+
+  it('не импортирует кредит с количеством правил сверх лимита', () => {
+    setStoreLoan(loanProfile())
+    const repaymentRules = Array.from({ length: MAX_REPAYMENT_RULES + 1 }, (_, index) => rule(index))
+    expect(() => useLoanStore.getState().addLoanFromData({
+      config: defaultConfig,
+      repayments: [],
+      repaymentRules,
+      gracePeriods: [],
+      selectedScenario: 'combined',
+      termUnit: 'months',
+      displayDecimals: 2,
+      theme: 'emerald'
+    })).toThrow('правил')
+    expect(useLoanStore.getState().loans).toHaveLength(1)
   })
 })

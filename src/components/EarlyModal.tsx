@@ -30,18 +30,22 @@ export function EarlyModal({ close, save, initial, defaultDate, isRegularPayment
     if (!isISODate(date)) { setError('Укажите корректную дату досрочного платежа'); return }
     if (!Number.isFinite(parsed) || parsed <= 0) { setError('Сумма должна быть больше нуля'); return }
     if (amountMode === 'total' && !isRegularPaymentDate(date)) { setError('Общую сумму по телу и процентам без комиссий можно указать только в дату регулярного платежа'); return }
-    save({
-      id: initial?.id ?? createId('early'),
-      date,
-      amount: parsed,
-      amountMode,
-      strategy,
-      source,
-      sameDayOrder: amountMode === 'total' ? 'regularFirst' : sameDayOrder,
-      interestFirst,
-      comment
-    })
-    close()
+    try {
+      save({
+        id: initial?.id ?? createId('early'),
+        date,
+        amount: parsed,
+        amountMode,
+        strategy,
+        source,
+        sameDayOrder: amountMode === 'total' ? 'regularFirst' : sameDayOrder,
+        interestFirst,
+        comment
+      })
+      close()
+    } catch (error) {
+      setError(error instanceof Error ? error.message : 'Не удалось сохранить досрочный платёж')
+    }
   }
 
   return <div className="modal-backdrop" onMouseDown={event => event.target === event.currentTarget && close()}>

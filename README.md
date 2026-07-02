@@ -133,11 +133,11 @@ pnpm typecheck
 pnpm test
 pnpm build
 git add package.json CHANGELOG.md README.md docs src .github
-git commit -m "Release v1.5.4"
+git commit -m "Release v1.5.5"
 git push origin main
 ```
 
-После push workflow сам создаст тег и релиз. Ручной запуск `release-dist.yml` тоже возможен, но нужно указать существующий тег, например `v1.5.4`.
+После push workflow сам создаст тег и релиз. Ручной запуск `release-dist.yml` тоже возможен, но нужно указать существующий тег, например `v1.5.5`.
 
 Архив релиза содержит готовую папку `dist` и подходит для размещения на любом статическом хостинге.
 

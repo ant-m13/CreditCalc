@@ -23,7 +23,7 @@ export interface RepaymentRule {
 }
 
 const firstRegularPayment = (config: LoanConfig) => {
-  const row = generateBaseSchedule(config).find(item => item.payment > 0 && !item.event.includes('Первый платёж · только проценты') && !item.event.includes('Льготный период'))
+  const row = generateBaseSchedule(config).find(item => item.isRegularPayment)
   return row?.payment ?? 0
 }
 

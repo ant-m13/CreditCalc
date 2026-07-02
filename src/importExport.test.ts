@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { parseLoanBackup } from './importExport'
+import { MAX_REPAYMENT_RULES } from './loanEngine/limits'
 import { defaultConfig } from './store'
 
 const repayment = { id: 'early-1', date: '2026-01-26', amount: 8704.99, amountMode: 'extra', strategy: 'reduceTerm', source: 'own', sameDayOrder: 'regularFirst', interestFirst: true }
@@ -26,6 +27,11 @@ describe('импорт резервной копии', () => {
     const rule = { id: 'rule-1', name: 'Ежемесячно', type: 'monthlyFixed', startDate: '2026-02-26', endDate: '2026-12-26', amount: 20000, strategy: 'reduceTerm', source: 'own', sameDayOrder: 'regularFirst', interestFirst: true, skipMonths: ['2026-05'] }
     const result = parseLoanBackup(JSON.stringify({ config: defaultConfig, repayments: [], repaymentRules: [rule], gracePeriods: [], selectedScenario: 'combined' }))
     expect(result.repaymentRules[0]).toMatchObject(rule)
+  })
+
+  it('отклоняет импорт с количеством правил сверх лимита', () => {
+    const rules = Array.from({ length: MAX_REPAYMENT_RULES + 1 }, (_, index) => ({ id: `rule-${index}`, name: 'Ежемесячно', type: 'monthlyFixed', startDate: '2026-02-26', endDate: '2026-12-26', amount: 20000, strategy: 'reduceTerm', source: 'own', sameDayOrder: 'regularFirst', interestFirst: true, skipMonths: [] }))
+    expect(() => parseLoanBackup(JSON.stringify({ config: defaultConfig, repayments: [], repaymentRules: rules, gracePeriods: [], selectedScenario: 'combined' }))).toThrow('Слишком много правил')
   })
 
   it('отклоняет повреждённый файл', () => {
@@ -87,5 +93,11 @@ describe('импорт резервной копии', () => {
   it('отклоняет обратный льготный период', () => {
     const grace = { id: 'g1', startDate: '2026-05-01', endDate: '2026-04-01', type: 'full', extendTerm: true, accrueInterest: true, capitalizeInterest: false }
     expect(() => parseLoanBackup(JSON.stringify({ config: defaultConfig, repayments: [], gracePeriods: [grace] }))).toThrow('окончание раньше начала')
+  })
+
+  it('отклоняет пересекающиеся льготные периоды в preview импорта', () => {
+    const first = { id: 'g1', startDate: '2026-05-01', endDate: '2026-05-31', type: 'full', extendTerm: true, accrueInterest: true, capitalizeInterest: false }
+    const second = { id: 'g2', startDate: '2026-05-15', endDate: '2026-06-15', type: 'interestOnly', extendTerm: false, accrueInterest: true, capitalizeInterest: false }
+    expect(() => parseLoanBackup(JSON.stringify({ config: defaultConfig, repayments: [], gracePeriods: [first, second] }))).toThrow('не должны пересекаться')
   })
 })

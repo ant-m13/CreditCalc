@@ -2,7 +2,7 @@ import type { EarlyRepayment, GracePeriod, LoanConfig } from './loanEngine'
 import { isRegularPaymentDate } from './loanEngine'
 import { defaultConfig } from './loanDefaults'
 import type { RepaymentRule } from './repaymentRules'
-import { MAX_EARLY_REPAYMENTS, MAX_GRACE_PERIODS, MAX_TERM_MONTHS } from './loanEngine/limits'
+import { MAX_EARLY_REPAYMENTS, MAX_GRACE_PERIODS, MAX_REPAYMENT_RULES, MAX_TERM_MONTHS } from './loanEngine/limits'
 import { isISODate, isISOYearMonth } from './utils/dateValidation'
 
 export interface LoanBackupData {
@@ -82,9 +82,14 @@ export function parseLoanBackupObject(raw: unknown): LoanBackupData {
     return item as unknown as GracePeriod
   })
   ensureUniqueIds(gracePeriods, 'Льготные периоды')
+  const sortedGrace = [...gracePeriods].sort((a, b) => a.startDate.localeCompare(b.startDate))
+  sortedGrace.forEach((period, index) => {
+    if (index > 0 && period.startDate <= sortedGrace[index - 1].endDate) throw new Error('Льготные периоды не должны пересекаться')
+  })
 
   const rulesRaw = raw.repaymentRules ?? []
   if (!Array.isArray(rulesRaw)) throw new Error('Список правил досрочных платежей повреждён')
+  if (rulesRaw.length > MAX_REPAYMENT_RULES) throw new Error(`Слишком много правил досрочных платежей. Максимум: ${MAX_REPAYMENT_RULES}`)
   const repaymentRules = rulesRaw.map((item, index) => {
     if (!isObject(item) || typeof item.id !== 'string' || typeof item.name !== 'string' || !oneOf(item.type, ['monthlyFixed', 'annualBonus', 'paymentPercent']) || !isISODate(item.startDate) || !isISODate(item.endDate) || !oneOf(item.strategy, ['reduceTerm', 'reducePayment', 'full', 'custom']) || !oneOf(item.source, ['own', 'subsidy', 'insurance', 'other']) || !oneOf(item.sameDayOrder, ['regularFirst', 'earlyFirst']) || typeof item.interestFirst !== 'boolean' || !Array.isArray(item.skipMonths) || !item.skipMonths.every(isISOYearMonth)) throw new Error(`Ошибка в правиле досрочных платежей №${index + 1}`)
     if (item.endDate < item.startDate) throw new Error(`Ошибка в правиле досрочных платежей №${index + 1}: окончание раньше начала`)

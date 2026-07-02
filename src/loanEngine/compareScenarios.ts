@@ -8,10 +8,10 @@ function toResult(id: string, name: string, strategy: ScenarioResult['strategy']
   const totalPaid = schedule.reduce((s, x) => s + (x.cashFlowTotal ?? x.payment + x.earlyPayment + x.fee), 0)
   const closingDate = last?.date ?? config.issueDate
   let recalculationIndex = -1
-  schedule.forEach((row, index) => { if (row.event.includes('уменьшение платежа')) recalculationIndex = index })
-  const isRegularPayment = (row: (typeof schedule)[number]) => row.payment > 0 && !row.event.includes('Первый платёж · только проценты') && !row.event.includes('Льготный период')
+  schedule.forEach((row, index) => { if (row.paymentRecalculated) recalculationIndex = index })
+  const isRegularPayment = (row: (typeof schedule)[number]) => row.isRegularPayment
   const paymentAfterRecalculation = recalculationIndex >= 0 ? schedule.slice(recalculationIndex + 1).find(isRegularPayment)?.payment : undefined
-  const closedByFullEarlyRepayment = last?.closingBalance === 0 && (last.deferredInterestClosing ?? 0) === 0 && last.earlyPayment > 0 && last.event.includes('Полное досрочное погашение')
+  const closedByFullEarlyRepayment = last?.closingBalance === 0 && (last.deferredInterestClosing ?? 0) === 0 && last.earlyPayment > 0 && last.fullyClosedByEarlyRepayment
   const monthlyPayment = closedByFullEarlyRepayment ? 0 : paymentAfterRecalculation ?? schedule.find(isRegularPayment)?.payment ?? schedule.find(x => x.payment > 0)?.payment ?? 0
   const termMonths = Math.max(0, differenceInCalendarMonths(parseISO(closingDate), parseISO(config.issueDate)))
   return { id, name, strategy, schedule, monthlyPayment, totalPaid, totalInterest, overpayment: Math.max(0, totalPaid - config.principal), closingDate, termMonths, interestSavings: base ? base.totalInterest - totalInterest : 0, monthsSaved: base ? Math.max(0, differenceInCalendarMonths(parseISO(base.closingDate), parseISO(closingDate))) : 0 }
