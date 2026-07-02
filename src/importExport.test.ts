@@ -45,8 +45,18 @@ describe('импорт резервной копии', () => {
     expect(() => parseLoanBackup(JSON.stringify({ config: { ...defaultConfig, termMonths: 1201 }, repayments: [], gracePeriods: [] }))).toThrow('недопустимые числа')
   })
 
+  it('отклоняет нулевую сумму кредита и дробные календарные поля', () => {
+    expect(() => parseLoanBackup(JSON.stringify({ config: { ...defaultConfig, principal: 0 }, repayments: [], gracePeriods: [] }))).toThrow('недопустимые числа')
+    expect(() => parseLoanBackup(JSON.stringify({ config: { ...defaultConfig, termMonths: 12.5 }, repayments: [], gracePeriods: [] }))).toThrow('недопустимые числа')
+    expect(() => parseLoanBackup(JSON.stringify({ config: { ...defaultConfig, paymentDay: 15.7 }, repayments: [], gracePeriods: [] }))).toThrow('недопустимые числа')
+  })
+
   it('отклоняет комиссию за досрочное погашение выше 100%', () => {
     expect(() => parseLoanBackup(JSON.stringify({ config: { ...defaultConfig, earlyRepaymentFeePercent: 150 }, repayments: [], gracePeriods: [] }))).toThrow('недопустимые числа')
+  })
+
+  it('отклоняет неизвестный выбранный сценарий', () => {
+    expect(() => parseLoanBackup(JSON.stringify({ config: defaultConfig, repayments: [], gracePeriods: [], selectedScenario: 'broken' }))).toThrow('неизвестный сценарий')
   })
 
   it('отклоняет общую сумму строки банка с порядком earlyFirst', () => {
@@ -56,6 +66,22 @@ describe('импорт резервной копии', () => {
   it('отклоняет общую сумму строки банка не в дату регулярного платежа', () => {
     const config = { ...defaultConfig, issueDate: '2026-01-01', firstPaymentDate: '2026-01-26', paymentDay: 26 }
     expect(() => parseLoanBackup(JSON.stringify({ config, repayments: [{ ...repayment, date: '2026-01-27', amountMode: 'total', sameDayOrder: 'regularFirst' }], gracePeriods: [] }))).toThrow('дату регулярного платежа')
+  })
+
+  it('нормализует legacy amountMode до preview и не допускает две общие суммы на дату', () => {
+    const config = { ...defaultConfig, issueDate: '2026-01-01', firstPaymentDate: '2026-01-26', paymentDay: 26 }
+    const legacy = parseLoanBackup(JSON.stringify({ config, repayments: [{ ...repayment, date: '2026-01-26', amountMode: undefined }], gracePeriods: [] }))
+    expect(legacy.repayments[0]).toMatchObject({ amountMode: 'total', sameDayOrder: 'regularFirst' })
+    expect(() => parseLoanBackup(JSON.stringify({ config, repayments: [
+      { ...repayment, id: 'total-1', date: '2026-01-26', amountMode: 'total', sameDayOrder: 'regularFirst' },
+      { ...repayment, id: 'total-2', date: '2026-01-26', amountMode: 'total', sameDayOrder: 'regularFirst' }
+    ], gracePeriods: [] }))).toThrow('дублирующийся ID: 2026-01-26')
+  })
+
+  it('отклоняет дублирующиеся ID в импортируемых коллекциях', () => {
+    const grace = { id: 'same', startDate: '2026-05-01', endDate: '2026-05-31', type: 'full', extendTerm: true, accrueInterest: true, capitalizeInterest: false }
+    expect(() => parseLoanBackup(JSON.stringify({ config: defaultConfig, repayments: [{ ...repayment, id: 'same' }, { ...repayment, id: 'same' }], gracePeriods: [] }))).toThrow('дублирующийся ID')
+    expect(() => parseLoanBackup(JSON.stringify({ config: defaultConfig, repayments: [], gracePeriods: [grace, grace] }))).toThrow('дублирующийся ID')
   })
 
   it('отклоняет обратный льготный период', () => {

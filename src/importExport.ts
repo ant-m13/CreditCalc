@@ -24,9 +24,19 @@ export interface LoanBackupData {
 const isObject = (value: unknown): value is Record<string, unknown> => Boolean(value) && typeof value === 'object' && !Array.isArray(value)
 const oneOf = <T extends string>(value: unknown, values: readonly T[]): value is T => typeof value === 'string' && values.includes(value as T)
 const finite = (value: unknown, minimum = 0) => typeof value === 'number' && Number.isFinite(value) && value >= minimum
+const integer = (value: unknown, minimum = 0) => finite(value, minimum) && Number.isInteger(value)
 const positive = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value) && value > 0
 const hexColor = (value: unknown): value is string => typeof value === 'string' && /^#[0-9a-fA-F]{6}$/.test(value)
 const currencies = ['RUB', 'USD', 'EUR', 'CNY'] as const
+const scenarioIds = ['base', 'reduceTerm', 'reducePayment', 'combined'] as const
+
+const ensureUniqueIds = (items: { id: string }[], label: string) => {
+  const seen = new Set<string>()
+  for (const item of items) {
+    if (seen.has(item.id)) throw new Error(`${label} содержат дублирующийся ID: ${item.id}`)
+    seen.add(item.id)
+  }
+}
 
 export function parseLoanBackup(text: string): LoanBackupData {
   let raw: unknown
@@ -40,7 +50,7 @@ export function parseLoanBackupObject(raw: unknown): LoanBackupData {
   const source = raw.config
   const interest = isObject(source.interest) ? source.interest : {}
   const config = { ...defaultConfig, ...source, interest: { ...defaultConfig.interest, ...interest } } as LoanConfig
-  if (!finite(config.principal) || !finite(config.annualRate) || config.annualRate > 100 || !finite(config.termMonths, 1) || config.termMonths > MAX_TERM_MONTHS || !finite(config.paymentDay, 1) || config.paymentDay > 31 || !finite(config.closeThreshold) || !finite(config.oneTimeFee) || !finite(config.monthlyFee) || !finite(config.earlyRepaymentFeePercent) || config.earlyRepaymentFeePercent > 100) throw new Error('Параметры кредита содержат недопустимые числа')
+  if (!positive(config.principal) || !finite(config.annualRate) || config.annualRate > 100 || !integer(config.termMonths, 1) || config.termMonths > MAX_TERM_MONTHS || !integer(config.paymentDay, 1) || config.paymentDay > 31 || !finite(config.closeThreshold) || !finite(config.oneTimeFee) || !finite(config.monthlyFee) || !finite(config.earlyRepaymentFeePercent) || config.earlyRepaymentFeePercent > 100) throw new Error('Параметры кредита содержат недопустимые числа')
   if (!isISODate(config.issueDate) || !isISODate(config.firstPaymentDate)) throw new Error('Проверьте даты выдачи и первого платежа')
   if (config.firstPaymentDate <= config.issueDate) throw new Error('Первый платёж должен быть после даты выдачи')
   if (!oneOf(config.currency, currencies)) throw new Error('Файл содержит неподдерживаемую валюту')
@@ -53,10 +63,14 @@ export function parseLoanBackupObject(raw: unknown): LoanBackupData {
   const repayments = repaymentsRaw.map((item, index) => {
     if (!isObject(item) || typeof item.id !== 'string' || !isISODate(item.date) || !positive(item.amount) || !oneOf(item.strategy, ['reduceTerm', 'reducePayment', 'full', 'custom']) || !oneOf(item.source, ['own', 'subsidy', 'insurance', 'other']) || !oneOf(item.sameDayOrder, ['regularFirst', 'earlyFirst']) || typeof item.interestFirst !== 'boolean') throw new Error(`Ошибка в досрочном платеже №${index + 1}`)
     if (item.amountMode !== undefined && !oneOf(item.amountMode, ['extra', 'total'])) throw new Error(`Ошибка в досрочном платеже №${index + 1}`)
-    if (item.amountMode === 'total' && item.sameDayOrder === 'earlyFirst') throw new Error(`Ошибка в досрочном платеже №${index + 1}: общая сумма из графика банка применяется после регулярного платежа`)
-    if (item.amountMode === 'total' && !isRegularPaymentDate(item.date, config)) throw new Error(`Ошибка в досрочном платеже №${index + 1}: общую сумму строки банка можно указать только в дату регулярного платежа`)
-    return item as unknown as EarlyRepayment
+    const isRegularDate = isRegularPaymentDate(item.date, config)
+    const amountMode = item.amountMode === undefined ? (isRegularDate ? 'total' : 'extra') : item.amountMode
+    if (amountMode === 'total' && item.sameDayOrder === 'earlyFirst') throw new Error(`Ошибка в досрочном платеже №${index + 1}: общая сумма по телу и процентам без комиссий применяется после регулярного платежа`)
+    if (amountMode === 'total' && !isRegularDate) throw new Error(`Ошибка в досрочном платеже №${index + 1}: общую сумму по телу и процентам без комиссий можно указать только в дату регулярного платежа`)
+    return { ...item, amountMode, sameDayOrder: amountMode === 'total' ? 'regularFirst' : item.sameDayOrder } as unknown as EarlyRepayment
   })
+  ensureUniqueIds(repayments, 'Досрочные платежи')
+  ensureUniqueIds(repayments.filter(item => item.amountMode === 'total').map(item => ({ id: item.date })), 'Операции с общей суммой по телу и процентам без комиссий')
 
   const graceRaw = raw.gracePeriods ?? []
   if (!Array.isArray(graceRaw)) throw new Error('Список льготных периодов повреждён')
@@ -67,6 +81,7 @@ export function parseLoanBackupObject(raw: unknown): LoanBackupData {
     if (item.paymentAmount !== undefined && !finite(item.paymentAmount)) throw new Error(`Ошибка в льготном периоде №${index + 1}`)
     return item as unknown as GracePeriod
   })
+  ensureUniqueIds(gracePeriods, 'Льготные периоды')
 
   const rulesRaw = raw.repaymentRules ?? []
   if (!Array.isArray(rulesRaw)) throw new Error('Список правил досрочных платежей повреждён')
@@ -79,11 +94,14 @@ export function parseLoanBackupObject(raw: unknown): LoanBackupData {
     if (item.comment !== undefined && typeof item.comment !== 'string') throw new Error(`Ошибка в правиле досрочных платежей №${index + 1}`)
     return item as unknown as RepaymentRule
   })
+  ensureUniqueIds(repaymentRules, 'Правила досрочных платежей')
 
   const settings = isObject(raw.settings) ? raw.settings : raw
   const name = typeof raw.name === 'string' ? raw.name : undefined
   const scenarioFromLegacyExport = isObject(raw.scenario) && typeof raw.scenario.id === 'string' ? raw.scenario.id : undefined
-  const selectedScenario = typeof raw.selectedScenario === 'string' ? raw.selectedScenario : scenarioFromLegacyExport ?? 'reduceTerm'
+  const selectedCandidate = typeof raw.selectedScenario === 'string' ? raw.selectedScenario : scenarioFromLegacyExport ?? 'reduceTerm'
+  if (!oneOf(selectedCandidate, scenarioIds)) throw new Error('Файл содержит неизвестный сценарий')
+  const selectedScenario = selectedCandidate
   const termUnit = oneOf(settings.termUnit, ['months', 'years']) ? settings.termUnit : 'months'
   const displayDecimals = settings.displayDecimals === 0 ? 0 : 2
   const appFontSize = oneOf(settings.appFontSize, ['normal', 'large', 'xlarge']) ? settings.appFontSize : 'normal'

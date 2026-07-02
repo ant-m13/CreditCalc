@@ -147,6 +147,16 @@ describe('loan engine', () => {
     expect(debt.interest).toBeCloseTo(4838.71,2)
   })
 
+  it('считает текущий долг периодическим методом по полному периоду перед промежуточной досрочкой', () => {
+    const periodic={...config,principal:1_000_000,annualRate:12,issueDate:'2024-01-01',firstPaymentDate:'2024-02-01',paymentDay:1,interest:{...config.interest,method:'annuity' as const,includePaymentDate:false}}
+    const s=generateBaseSchedule(periodic,{earlyRepayments:[early({date:'2024-01-11',amount:100_000})]})
+    const earlyRow=s.find(row=>row.date==='2024-01-11')!
+    expect(earlyRow.audit?.regularPeriodDays).toBe(31)
+    expect(earlyRow.audit?.segmentDays).toBe(10)
+    const debt=calculateDebtAtDate(periodic,s,[],'2024-01-06')
+    expect(debt.interest).toBeCloseTo(1612.90,2)
+  })
+
   it('учитывает момент остатка в день досрочного платежа', () => {
     const baseDaily={...config,interest:{...config.interest,method:'daily' as const,dayCountBasis:'actual365' as const,includePaymentDate:true}}
     const start=generateBaseSchedule({...baseDaily,interest:{...baseDaily.interest,balanceMoment:'startOfDay' as const}},{earlyRepayments:[early({date:'2024-03-01'})]})
@@ -340,10 +350,35 @@ describe('early repayment amount modes', () => {
     expect(earlyPart + regularPayment).toBeCloseTo(200_000, 2);
   });
 
+  it('amountMode: "total" не включает комиссии в введённую сумму', () => {
+    const s = generateBaseSchedule({ ...config, monthlyFee: 1000 }, {
+      earlyRepayments: [early({ amountMode: 'total', amount: 200_000 })],
+    });
+    const row = s.find(r => r.date === '2024-08-15')!;
+    expect(row.payment + row.earlyPayment).toBeCloseTo(200_000, 2);
+    expect(row.feePaid).toBe(1000);
+    expect(row.cashFlowTotal).toBeCloseTo(201_000, 2);
+  });
+
   it('amountMode: "total" доступен только в дату регулярного платежа', () => {
     expect(() => generateBaseSchedule(config, {
       earlyRepayments: [early({ date: '2024-08-16', amountMode: 'total', amount: 200_000 })],
     })).toThrow('дату регулярного платежа')
+  })
+
+  it('amountMode: "total" должен быть не меньше обязательного платежа', () => {
+    expect(() => generateBaseSchedule(config, {
+      earlyRepayments: [early({ amountMode: 'total', amount: 1 })],
+    })).toThrow('не меньше обязательного платежа')
+  })
+
+  it('amountMode: "total" разрешён только один раз на дату', () => {
+    expect(() => generateBaseSchedule(config, {
+      earlyRepayments: [
+        early({ id: 't1', amountMode: 'total', amount: 200_000 }),
+        early({ id: 't2', amountMode: 'total', amount: 250_000 }),
+      ],
+    })).toThrow('только одну общую сумму')
   })
 })
 

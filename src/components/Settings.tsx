@@ -1,4 +1,5 @@
 import type { LoanConfig } from '../loanEngine'
+import { currencySymbol } from '../formatters'
 import { Field, NumberInput } from './ui'
 
 type TextScale = 'normal' | 'large' | 'xlarge'
@@ -33,12 +34,12 @@ export function Settings({
     <section className="panel form-panel loan-settings-panel">
       <div className="panel-head"><div><h3>Параметры кредита</h3><p>Основные условия из кредитного договора</p></div></div>
       <div className="form-grid">
-        <Field label="Сумма кредита"><NumberInput value={config.principal} min="0" onCommit={principal => update({ principal })}/></Field>
-        <Field label="Годовая ставка"><div className="with-suffix"><NumberInput value={config.annualRate} min="0" step="0.1" onCommit={annualRate => update({ annualRate })}/><i>%</i></div></Field>
+        <Field label="Сумма кредита"><NumberInput value={config.principal} min="1" onCommit={principal => update({ principal })}/></Field>
+        <Field label="Годовая ставка"><div className="with-suffix"><NumberInput value={config.annualRate} min="0" max="100" step="0.1" onCommit={annualRate => update({ annualRate })}/><i>%</i></div></Field>
         <Field label="Дата выдачи"><input type="date" value={config.issueDate} onChange={e => update({ issueDate: e.target.value })}/></Field>
         <Field label="Первый платёж"><input type="date" value={config.firstPaymentDate} onChange={e => update({ firstPaymentDate: e.target.value })}/></Field>
         <Field label="Срок кредита"><div className="term-control"><NumberInput min="1" step={termUnit === 'years' ? .25 : 1} value={termUnit === 'years' ? Number((config.termMonths / 12).toFixed(2)) : config.termMonths} onCommit={value => update({ termMonths: Math.max(1, Math.round(value * (termUnit === 'years' ? 12 : 1))) })}/><select aria-label="Единица срока" value={termUnit} onChange={e => setTermUnit(e.target.value as 'months' | 'years')}><option value="months">месяцев</option><option value="years">лет</option></select></div></Field>
-        <Field label="День платежа"><NumberInput min="1" max="31" value={config.paymentDay} onCommit={paymentDay => update({ paymentDay })}/></Field>
+        <Field label="День платежа"><NumberInput min="1" max="31" step="1" value={config.paymentDay} onCommit={paymentDay => update({ paymentDay })}/></Field>
         <Field label="Тип платежа"><select value={config.paymentType} onChange={e => update({ paymentType: e.target.value as LoanConfig['paymentType'] })}><option value="annuity">Аннуитетный</option><option value="differentiated">Дифференцированный</option></select></Field>
         <Field label="Периодичность"><select value={config.frequency} onChange={e => update({ frequency: e.target.value as LoanConfig['frequency'] })}><option value="monthly">Ежемесячно</option><option value="biweekly">Раз в 2 недели</option><option value="quarterly">Ежеквартально</option></select></Field>
         <Field label="Валюта"><select value={config.currency} onChange={e => update({ currency: e.target.value as LoanConfig['currency'] })}><option value="RUB">Российский рубль (₽)</option><option value="USD">Доллар США ($)</option><option value="EUR">Евро (€)</option><option value="CNY">Китайский юань (¥)</option></select></Field>
@@ -51,7 +52,7 @@ export function Settings({
         <Field label="Метод"><select value={config.interest.method} onChange={e => updateInterest({ method: e.target.value as LoanConfig['interest']['method'] })}><option value="daily">По фактическим дням</option><option value="annuity">Номинальная ставка / период</option></select></Field>
         <Field label="База года"><select value={config.interest.dayCountBasis} onChange={e => updateInterest({ dayCountBasis: e.target.value as LoanConfig['interest']['dayCountBasis'] })}><option value="actualActual">Фактические дни / фактический год</option><option value="actual365">Фактические дни / 365 дней</option><option value="365">365 дней</option><option value="366">366 дней</option><option value="360">360 дней</option></select></Field>
         <Field label="Округление"><select value={config.rounding} onChange={e => update({ rounding: e.target.value as LoanConfig['rounding'] })}><option value="kopecks">До копеек</option><option value="rubles">До рублей</option><option value="bank">Банковское</option></select></Field>
-        <Field label="Порог закрытия"><div className="with-suffix"><NumberInput min="0" value={config.closeThreshold} onCommit={closeThreshold => update({ closeThreshold })}/><i>₽</i></div></Field>
+        <Field label="Порог закрытия"><div className="with-suffix"><NumberInput min="0" value={config.closeThreshold} onCommit={closeThreshold => update({ closeThreshold })}/><i>{currencySymbol()}</i></div></Field>
         <label className="toggle-row"><div><b>Включать дату платежа</b><span>В расчёт процентного периода</span></div><input type="checkbox" checked={config.interest.includePaymentDate} onChange={e => updateInterest({ includePaymentDate: e.target.checked })}/></label>
         <Field label="Остаток для начисления"><select value={config.interest.balanceMoment} onChange={e => updateInterest({ balanceMoment: e.target.value as LoanConfig['interest']['balanceMoment'] })}><option value="startOfDay">На начало дня</option><option value="endOfDay">На конец дня</option></select></Field>
       </div>

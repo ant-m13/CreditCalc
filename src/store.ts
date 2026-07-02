@@ -58,6 +58,7 @@ interface LoanState extends LoanData {
   createLoan: (name?: string) => void
   renameLoan: (id: string, name: string) => void
   removeLoan: (id: string) => void
+  loadExampleLoan: () => void
   addLoanFromData: (data: LoanImportData) => void
   replaceData: (data: LoanImportData) => void
 }
@@ -87,6 +88,7 @@ const graceTypes = ['full', 'interestOnly', 'reduced', 'custom'] as const
 const scenarioIds = ['base', 'reduceTerm', 'reducePayment', 'combined'] as const
 const termUnits = ['months', 'years'] as const
 const fontSizes = ['normal', 'large', 'xlarge'] as const
+const MAX_LOANS = 100
 const normalizeTheme = (value: unknown): ThemeName => typeof value === 'string' && themeNames.includes(value as ThemeName) ? value as ThemeName : 'emerald'
 const normalizeAccentColor = (value: unknown): string => typeof value === 'string' && /^#[0-9a-fA-F]{6}$/.test(value) ? value : defaultAccentColor
 const oneOf = <T extends string>(value: unknown, values: readonly T[], fallback: T): T => typeof value === 'string' && values.includes(value as T) ? value as T : fallback
@@ -94,9 +96,22 @@ const finiteNumber = (value: unknown, fallback: number, min = 0, max = Number.PO
 const isObject = (value: unknown): value is Record<string, unknown> => Boolean(value) && typeof value === 'object' && !Array.isArray(value)
 const nextMonthDate = (date: string) => format(addMonths(parseISO(date), 1), 'yyyy-MM-dd')
 
-const defaultLoanData = (withSeedRepayment = true): LoanData => ({
-  config: defaultConfig,
-  repayments: withSeedRepayment ? seedRepayments : [],
+const withUniqueIds = <T extends { id: string }>(items: T[], prefix: string): T[] => {
+  const seen = new Set<string>()
+  return items.map(item => {
+    if (!seen.has(item.id)) {
+      seen.add(item.id)
+      return item
+    }
+    const id = createId(prefix)
+    seen.add(id)
+    return { ...item, id }
+  })
+}
+
+const defaultLoanData = (withSeedRepayment = false): LoanData => ({
+  config: { ...defaultConfig, interest: { ...defaultConfig.interest } },
+  repayments: withSeedRepayment ? seedRepayments.map(item => ({ ...item })) : [],
   repaymentRules: [],
   gracePeriods: [],
   selectedScenario: 'reduceTerm',
@@ -145,7 +160,7 @@ const normalizeConfig = (config: Partial<LoanConfig> | undefined): LoanConfig =>
 
 const normalizeRepayments = (value: unknown, config: LoanConfig): EarlyRepayment[] => {
   if (!Array.isArray(value)) return []
-  return sortRepayments(value.slice(0, MAX_EARLY_REPAYMENTS).flatMap((item): EarlyRepayment[] => {
+  return withUniqueIds(sortRepayments(value.slice(0, MAX_EARLY_REPAYMENTS).flatMap((item): EarlyRepayment[] => {
     if (!isObject(item) || typeof item.id !== 'string' || !isISODate(item.date)) return []
     const amount = finiteNumber(item.amount, 0, 0)
     if (amount <= 0) return []
@@ -162,12 +177,12 @@ const normalizeRepayments = (value: unknown, config: LoanConfig): EarlyRepayment
       interestFirst: typeof item.interestFirst === 'boolean' ? item.interestFirst : true,
       ...(typeof item.comment === 'string' ? { comment: item.comment } : {})
     }]
-  }))
+  })), 'early')
 }
 
 const normalizeRepaymentRules = (value: unknown): RepaymentRule[] => {
   if (!Array.isArray(value)) return []
-  return sortRules(value.slice(0, MAX_EARLY_REPAYMENTS).flatMap((item): RepaymentRule[] => {
+  return withUniqueIds(sortRules(value.slice(0, MAX_EARLY_REPAYMENTS).flatMap((item): RepaymentRule[] => {
     if (!isObject(item) || typeof item.id !== 'string' || typeof item.name !== 'string' || !isISODate(item.startDate) || !isISODate(item.endDate) || item.endDate < item.startDate) return []
     const type = oneOf(item.type, repaymentRuleTypes, 'monthlyFixed')
     const amount = item.amount === undefined ? undefined : finiteNumber(item.amount, 0, 0)
@@ -188,12 +203,12 @@ const normalizeRepaymentRules = (value: unknown): RepaymentRule[] => {
       skipMonths: Array.isArray(item.skipMonths) ? item.skipMonths.filter(isISOYearMonth) : [],
       ...(typeof item.comment === 'string' ? { comment: item.comment } : {})
     }]
-  }))
+  })), 'rule')
 }
 
 const normalizeGracePeriods = (value: unknown): GracePeriod[] => {
   if (!Array.isArray(value)) return []
-  return value.slice(0, MAX_GRACE_PERIODS).flatMap((item): GracePeriod[] => {
+  return withUniqueIds(value.slice(0, MAX_GRACE_PERIODS).flatMap((item): GracePeriod[] => {
     if (!isObject(item) || typeof item.id !== 'string' || !isISODate(item.startDate) || !isISODate(item.endDate) || item.endDate < item.startDate) return []
     const paymentAmount = item.paymentAmount === undefined ? undefined : finiteNumber(item.paymentAmount, 0, 0)
     return [{
@@ -206,7 +221,7 @@ const normalizeGracePeriods = (value: unknown): GracePeriod[] => {
       accrueInterest: typeof item.accrueInterest === 'boolean' ? item.accrueInterest : true,
       capitalizeInterest: typeof item.capitalizeInterest === 'boolean' ? item.capitalizeInterest : false
     }]
-  }).sort((a, b) => a.startDate.localeCompare(b.startDate) || a.id.localeCompare(b.id))
+  }).sort((a, b) => a.startDate.localeCompare(b.startDate) || a.id.localeCompare(b.id)), 'grace')
 }
 
 const normalizeLoanData = (data: Partial<LoanImportData | LoanData>): LoanData => {
@@ -281,11 +296,22 @@ const initialLoan = loanFromData(defaultLoanData(), 'Мой кредит', 'loan
 
 export const normalizePersistedState = (persisted: unknown): Partial<LoanState> => {
   const state = (isObject(persisted) ? persisted : {}) as Partial<LoanState>
-  const hasLoans = Array.isArray(state.loans) && state.loans.length > 0
-  const loans = hasLoans
-    ? state.loans!.map((loan, index) => loanFromData(loan, loan.name || `Кредит ${index + 1}`, loan.id || createId('loan')))
+  const rawLoans = Array.isArray(state.loans) ? state.loans.filter(isObject).slice(0, MAX_LOANS) : []
+  const seenLoanIds = new Set<string>()
+  const uniqueLoanId = (value: unknown) => {
+    const id = typeof value === 'string' && value.trim() ? value : createId('loan')
+    if (!seenLoanIds.has(id)) {
+      seenLoanIds.add(id)
+      return id
+    }
+    const nextId = createId('loan')
+    seenLoanIds.add(nextId)
+    return nextId
+  }
+  const loans = rawLoans.length
+    ? rawLoans.map((loan, index) => loanFromData(loan, typeof loan.name === 'string' ? loan.name : `Кредит ${index + 1}`, uniqueLoanId(loan.id)))
     : [loanFromData(state, 'Мой кредит', 'loan-default')]
-  const activeLoanId = state.activeLoanId && loans.some(loan => loan.id === state.activeLoanId) ? state.activeLoanId : loans[0].id
+  const activeLoanId = typeof state.activeLoanId === 'string' && loans.some(loan => loan.id === state.activeLoanId) ? state.activeLoanId : loans[0].id
   const active = loans.find(loan => loan.id === activeLoanId) ?? loans[0]
   return { loans, activeLoanId, ...publicData(active) }
 }
@@ -325,6 +351,10 @@ export const useLoanStore = create<LoanState>()(persist((set) => ({
     const activeLoanId = s.activeLoanId === id ? loans[0].id : s.activeLoanId
     const active = loans.find(loan => loan.id === activeLoanId) ?? loans[0]
     return { loans, activeLoanId, ...publicData(active) }
+  }),
+  loadExampleLoan: () => set(s => {
+    const data = defaultLoanData(true)
+    return { ...data, loans: s.loans.map(loan => loan.id === s.activeLoanId ? { ...loan, name: 'Пример кредита', ...data } : loan) }
   }),
   addLoanFromData: (data) => set(s => {
     const loan = loanFromData(data, data.name ?? 'Кредит из ссылки')

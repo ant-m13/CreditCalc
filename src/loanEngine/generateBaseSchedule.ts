@@ -85,6 +85,12 @@ export function generateBaseSchedule(config: LoanConfig, options: Options = {}):
     const audit = (from: string, to: string, includeTo: boolean, currentBalance: Decimal, order: string) => ({
       periodStart: from,
       periodEnd: to,
+      regularPeriodStart: previousPaymentDate,
+      regularPeriodEnd: paymentDate,
+      regularPeriodDays: periodCalendarDays,
+      segmentStart: from,
+      segmentEnd: to,
+      segmentDays: periodDays(from, to, includeTo),
       days: periodDays(from, to, includeTo),
       dayCountBasis: config.interest.dayCountBasis,
       interestBalance: num(currentBalance, config.rounding),
@@ -226,7 +232,14 @@ export function generateBaseSchedule(config: LoanConfig, options: Options = {}):
     for (const early of regularFirst) {
       // Older saved bank rows have no amountMode. Treat them as the total paid
       // on that date; explicit "extra" records preserve the previous behavior.
-      const effectiveAmount = early.amountMode !== 'extra' ? Decimal.max(0, new Decimal(early.amount).minus(regularPayment)) : undefined
+      let effectiveAmount: Decimal | undefined
+      if (early.amountMode !== 'extra') {
+        const totalAmount = new Decimal(early.amount)
+        if (totalAmount.lt(regularPayment)) {
+          throw new Error(`Досрочный платёж ${early.date}: общая сумма по телу и процентам без комиссий должна быть не меньше обязательного платежа ${num(regularPayment, config.rounding)}`)
+        }
+        effectiveAmount = totalAmount.minus(regularPayment)
+      }
       const applied = applyEarly(early, interestDue, maxPeriods - regularIndex, effectiveAmount)
       interestDue = applied.interestLeft
       earlyTotal = earlyTotal.add(applied.paidInterest).add(applied.paidPrincipal)

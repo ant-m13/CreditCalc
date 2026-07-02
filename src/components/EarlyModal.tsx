@@ -29,7 +29,7 @@ export function EarlyModal({ close, save, initial, defaultDate, isRegularPayment
     const parsed = Number(amount)
     if (!isISODate(date)) { setError('Укажите корректную дату досрочного платежа'); return }
     if (!Number.isFinite(parsed) || parsed <= 0) { setError('Сумма должна быть больше нуля'); return }
-    if (amountMode === 'total' && !isRegularPaymentDate(date)) { setError('Общую сумму строки банка можно указать только в дату регулярного платежа'); return }
+    if (amountMode === 'total' && !isRegularPaymentDate(date)) { setError('Общую сумму по телу и процентам без комиссий можно указать только в дату регулярного платежа'); return }
     save({
       id: initial?.id ?? createId('early'),
       date,
@@ -54,7 +54,7 @@ export function EarlyModal({ close, save, initial, defaultDate, isRegularPayment
         <div className="form-grid">
           <Field label="Дата"><input type="date" value={date} onChange={event => setDate(event.target.value)}/></Field>
           <Field label="Сумма"><div className="with-suffix"><input autoFocus type="number" value={amount} onChange={event => setAmount(event.target.value)}/><i>{currencySymbol()}</i></div></Field>
-          <Field label="Как указана сумма"><select value={amountMode} onChange={event => setAmountMode(event.target.value as NonNullable<EarlyRepayment['amountMode']>)}><option value="extra">Сумма списания сверх платежа</option><option value="total">Общая сумма строки банка</option></select></Field>
+          <Field label="Как указана сумма"><select value={amountMode} onChange={event => setAmountMode(event.target.value as NonNullable<EarlyRepayment['amountMode']>)}><option value="extra">Сумма списания сверх платежа</option><option value="total">Итого по телу и процентам без комиссий</option></select></Field>
           <Field label="Стратегия"><select value={strategy} onChange={event => setStrategy(event.target.value as EarlyRepayment['strategy'])}><option value="reduceTerm">Уменьшить срок</option><option value="reducePayment">Уменьшить платёж</option><option value="full">Закрыть полностью</option></select></Field>
           <Field label="Источник"><select value={source} onChange={event => setSource(event.target.value as EarlyRepayment['source'])}><option value="own">Собственные средства</option><option value="subsidy">Маткапитал / субсидия</option><option value="insurance">Страховое возмещение</option><option value="other">Прочее</option></select></Field>
           {amountMode === 'extra' && <Field label="Порядок в дату платежа"><select value={sameDayOrder} onChange={event => setSameDayOrder(event.target.value as EarlyRepayment['sameDayOrder'])}><option value="regularFirst">Сначала регулярный платёж</option><option value="earlyFirst">Сначала досрочный платёж</option></select></Field>}

@@ -79,6 +79,12 @@ export interface PaymentScheduleItem {
   audit?: {
     periodStart: string
     periodEnd: string
+    regularPeriodStart?: string
+    regularPeriodEnd?: string
+    regularPeriodDays?: number
+    segmentStart?: string
+    segmentEnd?: string
+    segmentDays?: number
     days: number
     dayCountBasis: DayCountBasis
     interestBalance: number

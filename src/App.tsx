@@ -229,7 +229,7 @@ function App() {
 
   const accentStyle = store.useCustomAccentColor ? ({ '--green': store.customAccentColor } as CSSProperties) : undefined
 
-  return <div className="app-shell" data-theme={store.theme} data-ui-font={store.appFontSize} data-schedule-font={store.appFontSize} style={accentStyle}>
+  return <div className="app-shell" data-theme={store.theme} data-ui-font={store.appFontSize} data-schedule-font={store.scheduleFontSize} style={accentStyle}>
     <aside className={mobileNav ? 'sidebar open' : 'sidebar'}>
       <div className="brand"><div className="brand-mark"><Landmark size={22}/></div><div><b>Кредитный калькулятор</b><span>версия {APP_VERSION}</span></div><button className="icon-btn close-nav" aria-label="Закрыть меню" onClick={() => setMobileNav(false)}><X/></button></div>
       <nav>{nav.map(([id, Icon, label]) => <button key={id} className={section === id ? 'active' : ''} onClick={() => { setSection(id); setMobileNav(false) }}><Icon size={18}/><span>{label}</span>{id === 'early' && store.repayments.length > 0 && <em>{store.repayments.length}</em>}</button>)}</nav>
@@ -253,7 +253,7 @@ function App() {
       </div>
     </main>
     {comparison && selected && <PrintReport config={store.config} repayments={allRepayments} comparison={comparison} selected={selected}/>}
-    {showOnboarding && <OnboardingModal close={finishOnboarding} showExample={() => { finishOnboarding(); setSection('overview') }} startSettings={() => { finishOnboarding(); setSection('settings') }}/>}
+    {showOnboarding && <OnboardingModal close={finishOnboarding} showExample={() => { store.loadExampleLoan(); finishOnboarding(); setSection('overview') }} startSettings={() => { finishOnboarding(); setSection('settings') }}/>}
     {showWhatsNew && <WhatsNewModal close={closeWhatsNew} openChanges={() => { closeWhatsNew(); setSection('changes') }}/>}
     {sharedCalculation && <SharedCalculationModal data={sharedCalculation} createNew={createLoanFromSharedCalculation} replaceCurrent={replaceActiveWithSharedCalculation} decline={declineSharedCalculation}/>}
     {showEarly && <EarlyModal close={closeEarly} save={editingEarly ? store.updateRepayment : store.addRepayment} initial={editingEarly} defaultDate={defaultEarlyDate} isRegularPaymentDate={(date) => isRegularPaymentDate(date, store.config)}/>}

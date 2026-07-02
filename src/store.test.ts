@@ -9,6 +9,11 @@ const repaymentBase = {
 } as const
 
 describe('миграция локального хранилища', () => {
+  it('создаёт новый кредит без демонстрационного досрочного платежа', () => {
+    const normalized = normalizePersistedState({}) as any
+    expect(normalized.repayments).toEqual([])
+  })
+
   it('нормализует старые кредиты и очищает повреждённые массивы', () => {
     const normalized = normalizePersistedState({
       activeLoanId: 'legacy',
@@ -59,5 +64,41 @@ describe('миграция локального хранилища', () => {
     expect(normalized.repaymentRules[0]).toMatchObject({ id: 'good-rule', name: 'Регулярный платёж', skipMonths: ['2030-04'] })
     expect(normalized.gracePeriods).toHaveLength(1)
     expect(normalized.gracePeriods[0]).toMatchObject({ id: 'good-grace', accrueInterest: false })
+  })
+
+  it('игнорирует повреждённые элементы массива loans и ограничивает их число', () => {
+    const validLoan = { id: 'valid', name: 'Рабочий', config: defaultConfig, repayments: [], repaymentRules: [], gracePeriods: [], selectedScenario: 'reduceTerm', termUnit: 'months', displayDecimals: 2, appFontSize: 'normal', scheduleFontSize: 'large', theme: 'emerald' }
+    const manyLoans = Array.from({ length: 105 }, (_, index) => ({ ...validLoan, id: `loan-${index}` }))
+    const normalized = normalizePersistedState({ activeLoanId: 'valid', loans: [null, 15, 'broken', validLoan, ...manyLoans] }) as any
+    expect(normalized.loans).toHaveLength(100)
+    expect(normalized.loans[0].id).toBe('valid')
+    expect(normalized.activeLoanId).toBe('valid')
+  })
+
+  it('перевыпускает повторяющиеся ID кредитов и вложенных записей', () => {
+    const normalized = normalizePersistedState({
+      loans: [
+        {
+          id: 'duplicate',
+          name: 'Первый',
+          config: defaultConfig,
+          repayments: [
+            { id: 'same', date: defaultConfig.firstPaymentDate, amount: 1000, amountMode: 'extra', ...repaymentBase },
+            { id: 'same', date: defaultConfig.firstPaymentDate, amount: 2000, amountMode: 'extra', ...repaymentBase }
+          ],
+          repaymentRules: [],
+          gracePeriods: [],
+          selectedScenario: 'reduceTerm',
+          termUnit: 'months',
+          displayDecimals: 2,
+          appFontSize: 'normal',
+          scheduleFontSize: 'large',
+          theme: 'emerald'
+        },
+        { id: 'duplicate', name: 'Второй', config: defaultConfig, repayments: [], repaymentRules: [], gracePeriods: [], selectedScenario: 'reduceTerm', termUnit: 'months', displayDecimals: 2, appFontSize: 'normal', scheduleFontSize: 'large', theme: 'emerald' }
+      ]
+    }) as any
+    expect(new Set(normalized.loans.map((loan: any) => loan.id)).size).toBe(2)
+    expect(new Set(normalized.loans[0].repayments.map((item: any) => item.id)).size).toBe(2)
   })
 })
