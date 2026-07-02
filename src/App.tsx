@@ -4,7 +4,7 @@ import { ru } from 'date-fns/locale'
 import { ArrowDownToLine, CalendarDays, CircleHelp, History, Landmark, Menu, Moon, Plus, Printer, ReceiptText, Settings2, ShieldCheck, Sun, Trash2, TrendingDown, X } from 'lucide-react'
 import { compareScenarios, isRegularPaymentDate, validateScenario, type EarlyRepayment, type GracePeriod, type PaymentScheduleItem } from './loanEngine'
 import type { LoanBackupData } from './importExport'
-import { loanToBackupData, useLoanStore, type LoanProfile } from './store'
+import { loanToBackupData, STORAGE_ERROR_EVENT, useLoanStore, type LoanProfile } from './store'
 import { FontControls } from './components/FontControls'
 import { LoanSwitcher } from './components/LoanSwitcher'
 import { SharedCalculationModal } from './components/SharedCalculationModal'
@@ -13,7 +13,7 @@ import { Changelog, WhatsNewModal } from './components/Changelog'
 import { OnboardingModal } from './components/OnboardingModal'
 import { EarlyModal } from './components/EarlyModal'
 import { GraceModal } from './components/GraceModal'
-import { configureFormatters, money, shortDate } from './formatters'
+import { configureFormatters, shortDate } from './formatters'
 import { buildShareUrl, createLoanSnapshot, decodeSharedCalculation, encodeSharedCalculation, looksLikeSharedCalculationUrl, normalizeSharedCalculationPayload, readSharedCalculationFromLocation } from './shareCalculation'
 import { expandRepaymentRules } from './repaymentRules'
 import { APP_VERSION } from './version'
@@ -47,6 +47,7 @@ function App() {
   const [showWhatsNew, setShowWhatsNew] = useState(false)
   const [showOnboarding, setShowOnboarding] = useState(false)
   const [lastLightTheme, setLastLightTheme] = useState<'emerald' | 'ocean' | 'violet' | 'graphite' | 'warm'>('emerald')
+  const [storageWarning, setStorageWarning] = useState(false)
 
   const calculationConfig = useDeferredValue(store.config)
   const calculationRepayments = useDeferredValue(store.repayments)
@@ -62,7 +63,8 @@ function App() {
     }
   }, [calculationConfig, calculationRepaymentRules, validationErrors])
   const generatedRepayments = generatedResult.items
-  const allRepayments = useMemo(() => [...calculationRepayments, ...generatedRepayments].sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id)), [calculationRepayments, generatedRepayments])
+  const activeManualRepayments = useMemo(() => calculationRepayments.filter(item => item.enabled !== false && item.amount > 0), [calculationRepayments])
+  const allRepayments = useMemo(() => [...activeManualRepayments, ...generatedRepayments].sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id)), [activeManualRepayments, generatedRepayments])
   const preliminaryErrors = useMemo(() => generatedResult.error ? [...validationErrors, generatedResult.error] : validationErrors, [validationErrors, generatedResult.error])
   const comparisonResult = useMemo(() => {
     if (preliminaryErrors.length > 0) return { comparison: null, error: null as string | null }
@@ -98,7 +100,8 @@ function App() {
 
   const download = (kind: 'csv' | 'json' | 'xls') => {
     const loan = activeLoan()
-    let body = '', type = '', ext = kind
+    const escapeHtml = (value: unknown) => String(value).replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]!))
+    let body: string, type: string, ext: string = kind
     if (kind === 'json') { body = JSON.stringify({ ...createLoanSnapshot(loanToBackupData(loan)), exportedAt: new Date().toISOString() }, null, 2); type = 'application/json' }
     else {
       let schedule: PaymentScheduleItem[]
@@ -111,8 +114,8 @@ function App() {
       const showFees = schedule.some(r => Math.abs(r.feePaid ?? r.fee) > 0.004)
       const head = showFees ? ['№ п/п','Дата','По кредиту','По процентам','Комиссия','Итого','Остаток задолженности'] : ['№ п/п','Дата','По кредиту','По процентам','Итого','Остаток задолженности']
       const table = [head, ...schedule.map(r => showFees ? [r.number,r.date,r.principalPaid ?? r.principal,r.interestPaid ?? r.interest,r.feePaid ?? r.fee,r.cashFlowTotal ?? r.payment + r.earlyPayment + r.fee,r.closingBalance] : [r.number,r.date,r.principalPaid ?? r.principal,r.interestPaid ?? r.interest,r.cashFlowTotal ?? r.payment + r.earlyPayment + r.fee,r.closingBalance])]
-      body = kind === 'csv' ? '\ufeff' + table.map(r => r.join(';')).join('\n') : `<table>${table.map(r => `<tr>${r.map(c => `<td>${c}</td>`).join('')}</tr>`).join('')}</table>`
-      type = kind === 'csv' ? 'text/csv;charset=utf-8' : 'application/vnd.ms-excel'; ext = kind
+      body = kind === 'csv' ? '\ufeff' + table.map(r => r.join(';')).join('\n') : `<!doctype html><html lang="ru"><head><meta charset="utf-8"><title>${escapeHtml(loan.name)}</title></head><body><table>${table.map(r => `<tr>${r.map(c => `<td>${escapeHtml(c)}</td>`).join('')}</tr>`).join('')}</table></body></html>`
+      type = kind === 'csv' ? 'text/csv;charset=utf-8' : 'text/html;charset=utf-8'; ext = kind === 'csv' ? 'csv' : 'html'
     }
     const safeName = loan.name.toLowerCase().replace(/[^a-zа-яё0-9]+/gi, '-').replace(/^-|-$/g, '') || 'credit'
     const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([body], { type })); a.download = `credit-${safeName}.${ext}`; a.click(); URL.revokeObjectURL(a.href)
@@ -160,10 +163,24 @@ function App() {
   }, [])
 
   useEffect(() => {
-    const onboardingDone = localStorage.getItem('credit-calculator-onboarding-done') === 'yes'
+    const safeGet = (key: string) => {
+      try {
+        return localStorage.getItem(key)
+      } catch {
+        setStorageWarning(true)
+        return null
+      }
+    }
+    const onboardingDone = safeGet('credit-calculator-onboarding-done') === 'yes'
     if (!onboardingDone) { setShowOnboarding(true); return }
-    const seenVersion = localStorage.getItem('credit-calculator-seen-version')
+    const seenVersion = safeGet('credit-calculator-seen-version')
     if (seenVersion !== APP_VERSION) setShowWhatsNew(true)
+  }, [])
+
+  useEffect(() => {
+    const showWarning = () => setStorageWarning(true)
+    window.addEventListener(STORAGE_ERROR_EVENT, showWarning)
+    return () => window.removeEventListener(STORAGE_ERROR_EVENT, showWarning)
   }, [])
 
   useEffect(() => {
@@ -171,12 +188,16 @@ function App() {
   }, [store.theme])
 
   const closeWhatsNew = () => {
-    localStorage.setItem('credit-calculator-seen-version', APP_VERSION)
+    try { localStorage.setItem('credit-calculator-seen-version', APP_VERSION) } catch { setStorageWarning(true) }
     setShowWhatsNew(false)
   }
   const finishOnboarding = () => {
-    localStorage.setItem('credit-calculator-onboarding-done', 'yes')
-    localStorage.setItem('credit-calculator-seen-version', APP_VERSION)
+    try {
+      localStorage.setItem('credit-calculator-onboarding-done', 'yes')
+      localStorage.setItem('credit-calculator-seen-version', APP_VERSION)
+    } catch {
+      setStorageWarning(true)
+    }
     setShowOnboarding(false)
   }
 
@@ -258,8 +279,9 @@ function App() {
       <div className="sidebar-note"><ShieldCheck size={20}/><div><b>Расчёт локально</b><span>Ваши данные не покидают устройство</span></div></div>
     </aside>
     <main>
-      <header><button className="icon-btn menu-btn" aria-label="Открыть меню" onClick={() => setMobileNav(true)}><Menu/></button><div className="header-title"><p>Финансовый план · v{APP_VERSION}</p><h1>{section === 'overview' ? 'Ваш кредит' : nav.find(x => x[0] === section)?.[2]}</h1></div><LoanSwitcher loans={store.loans} activeLoanId={store.activeLoanId} switchLoan={store.switchLoan} createLoan={store.createLoan} renameLoan={store.renameLoan} removeLoan={store.removeLoan}/><button className="icon-btn theme-toggle" onClick={toggleNightTheme} title={store.theme === 'night' ? 'Вернуть светлую тему' : 'Включить ночной режим'} aria-label={store.theme === 'night' ? 'Вернуть светлую тему' : 'Включить ночной режим'}>{store.theme === 'night' ? <Sun/> : <Moon/>}</button><FontControls fontSize={store.appFontSize} setFontSize={store.setAppFontSize}/><div className="header-actions"><span className="status-dot"><i/> Данные сохранены</span><button className="ghost print-action" onClick={() => window.print()}><Printer size={16}/> Печать</button><button className="primary add-payment-action" onClick={() => openEarly()}><Plus size={17}/> Досрочный платёж</button></div></header>
+      <header><button className="icon-btn menu-btn" aria-label="Открыть меню" onClick={() => setMobileNav(true)}><Menu/></button><div className="header-title"><p>Финансовый план · v{APP_VERSION}</p><h1>{section === 'overview' ? 'Ваш кредит' : nav.find(x => x[0] === section)?.[2]}</h1></div><LoanSwitcher loans={store.loans} activeLoanId={store.activeLoanId} switchLoan={store.switchLoan} createLoan={store.createLoan} renameLoan={store.renameLoan} removeLoan={store.removeLoan}/><button className="icon-btn theme-toggle" onClick={toggleNightTheme} title={store.theme === 'night' ? 'Вернуть светлую тему' : 'Включить ночной режим'} aria-label={store.theme === 'night' ? 'Вернуть светлую тему' : 'Включить ночной режим'}>{store.theme === 'night' ? <Sun/> : <Moon/>}</button><FontControls fontSize={store.appFontSize} setFontSize={store.setAppFontSize}/><div className="header-actions"><span className={storageWarning ? 'status-dot warning' : 'status-dot'}><i/> {storageWarning ? 'Сохранение недоступно' : 'Данные сохранены'}</span><button className="ghost print-action" onClick={() => window.print()}><Printer size={16}/> Печать</button><button className="primary add-payment-action" onClick={() => openEarly()}><Plus size={17}/> Досрочный платёж</button></div></header>
       <div className="content">
+        {storageWarning && <div className="alert">Браузер не дал сохранить данные локально. Экспортируйте расчёт в JSON, чтобы не потерять изменения.</div>}
         {errors.length > 0 && <div className="alert">{errors.join(' · ')}</div>}
         <Suspense fallback={<SectionLoading/>}>
           {section === 'overview' && comparison && selected && <Overview config={store.config} repayments={allRepayments} gracePeriods={store.gracePeriods} comparison={comparison} selected={selected} chartData={overviewChartData} onSelect={store.selectScenario} onOpen={() => openEarly()}/>}

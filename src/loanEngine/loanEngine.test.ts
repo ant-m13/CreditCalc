@@ -237,6 +237,22 @@ describe('loan engine', () => {
     expect(s.at(-1)?.date).toBe('2040-04-21')
   })
 
+  it('уменьшает платёж после сокращения срока по актуальному оставшемуся сроку', () => {
+    const short: LoanConfig = { ...config, principal: 1_000_000, annualRate: 12, termMonths: 60, issueDate: '2024-01-01', firstPaymentDate: '2024-02-01', paymentDay: 1, interest: { ...config.interest, method: 'annuity', includePaymentDate: false } }
+    const termReduction = early({ id: 'term-first', date: '2024-08-01', amount: 300_000, strategy: 'reduceTerm' })
+    const paymentReduction = early({ id: 'payment-second', date: '2024-09-01', amount: 100_000, strategy: 'reducePayment' })
+    const termOnly = generateBaseSchedule(short, { earlyRepayments: [termReduction] })
+    const termOnlySecondIndex = termOnly.findIndex(row => row.date === paymentReduction.date)
+    const actualRemainingPeriods = termOnly.slice(termOnlySecondIndex + 1).filter(row => row.isRegularPayment).length
+    const mixed = generateBaseSchedule(short, { earlyRepayments: [termReduction, paymentReduction] })
+    const secondIndex = mixed.findIndex(row => row.date === paymentReduction.date)
+    const secondRow = mixed[secondIndex]
+    const nextRegular = mixed.slice(secondIndex + 1).find(row => row.isRegularPayment)!
+    const expectedReduction = calculateAnnuityPayment(paymentReduction.amount, short.annualRate, actualRemainingPeriods).toNumber()
+    expect(actualRemainingPeriods).toBeLessThan(short.termMonths - 8)
+    expect(nextRegular.payment).toBeCloseTo(secondRow.payment - expectedReduction, 2)
+  })
+
   it('учитывает порядок операций в дату регулярного платежа', () => {
     const earlyFirst=generateBaseSchedule(config,{earlyRepayments:[early({date:'2024-08-15',strategy:'reducePayment',sameDayOrder:'earlyFirst'})]})
     const regularFirst=generateBaseSchedule(config,{earlyRepayments:[early({date:'2024-08-15',strategy:'reducePayment',sameDayOrder:'regularFirst'})]})
@@ -383,6 +399,13 @@ describe('loan engine', () => {
   it('выражает длительность квартального графика в месяцах, а не периодах', () => {
     const result=compareScenarios({...config,frequency:'quarterly'},[])
     expect(result.scenarios[0].termMonths).toBeGreaterThan(100)
+  })
+
+  it('не раздувает двухнедельный график на коротком сроке', () => {
+    const shortBiweekly = { ...config, principal: 100_000, annualRate: 0, termMonths: 1, frequency: 'biweekly' as const, issueDate: '2024-01-01', firstPaymentDate: '2024-01-15', paymentDay: 15 }
+    const s = generateBaseSchedule(shortBiweekly)
+    expect(s.filter(row => row.isRegularPayment)).toHaveLength(2)
+    expect(s.at(-1)?.closingBalance).toBe(0)
   })
 })
 
@@ -552,6 +575,28 @@ describe('early repayment amount modes', () => {
         early({ id: 't2', amountMode: 'total', amount: 250_000 }),
       ],
     })).toThrow('только одну общую сумму')
+  })
+
+  it('нулевая сумма временно отключает разовый досрочный платёж', () => {
+    const s = generateBaseSchedule(config, {
+      earlyRepayments: [early({ amount: 0 })],
+    })
+    expect(s.reduce((sum, row) => sum + row.earlyPayment, 0)).toBe(0)
+    expect(s.some(row => row.eventTypes.includes('earlyReduceTerm'))).toBe(false)
+  })
+
+  it('явный флаг enabled=false временно отключает разовый досрочный платёж', () => {
+    const s = generateBaseSchedule(config, {
+      earlyRepayments: [early({ amount: 300_000, enabled: false })],
+    })
+    expect(s.reduce((sum, row) => sum + row.earlyPayment, 0)).toBe(0)
+    expect(s.some(row => row.eventTypes.includes('earlyReduceTerm'))).toBe(false)
+  })
+
+  it('отрицательная сумма досрочного платежа остаётся ошибкой', () => {
+    expect(() => generateBaseSchedule(config, {
+      earlyRepayments: [early({ amount: -1 })],
+    })).toThrow('не может быть отрицательной')
   })
 })
 

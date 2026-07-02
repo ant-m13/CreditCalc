@@ -3,3 +3,9 @@ dist
 .vite
 *.log
 *.tsbuildinfo
+coverage
+.env
+.env.*
+!.env.example
+.DS_Store
+Thumbs.db

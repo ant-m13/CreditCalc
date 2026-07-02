@@ -44,4 +44,13 @@ describe('правила досрочных платежей', () => {
     const items = expandRepaymentRules({ ...defaultConfig, rounding: 'rubles' }, [rule({ amount: 10000.49, startDate: '2026-01-26', endDate: '2026-01-26' })])
     expect(items[0].amount).toBe(10000)
   })
+
+  it('пропускает временно отключенные правила с нулевой суммой или процентом', () => {
+    expect(expandRepaymentRules(defaultConfig, [rule({ amount: 0 })])).toEqual([])
+    expect(expandRepaymentRules(defaultConfig, [rule({ type: 'paymentPercent', amount: undefined, percent: 0 })])).toEqual([])
+  })
+
+  it('пропускает явно выключенное правило с ненулевой суммой', () => {
+    expect(expandRepaymentRules(defaultConfig, [rule({ amount: 10000, enabled: false })])).toEqual([])
+  })
 })

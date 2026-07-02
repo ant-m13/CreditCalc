@@ -14,28 +14,126 @@ function Empty({ title, action }: { title: string; action: () => void }) {
   return <div className="empty"><span><TrendingDown/></span><h3>{title}</h3><p>Добавьте событие, и мы сразу покажем его влияние на кредит.</p><button className="ghost" onClick={action}><Plus/> Добавить</button></div>
 }
 
+const repaymentDisabled = (item: EarlyRepayment) => item.enabled === false || item.amount <= 0
+const ruleHasNoAmount = (rule: RepaymentRule) => rule.type === 'paymentPercent' ? (rule.percent ?? 0) <= 0 : (rule.amount ?? 0) <= 0
+const ruleDisabled = (rule: RepaymentRule) => rule.enabled === false || ruleHasNoAmount(rule)
+const ruleValueLabel = (rule: RepaymentRule) => rule.type === 'paymentPercent' ? `${rule.percent ?? 0}% от регулярного платежа` : money(rule.amount ?? 0)
+const disabledClass = (disabled: boolean) => disabled ? ' disabled-event' : ''
+
 function RepaymentRulesPanel({ rules, addRule, updateRule, removeRule, defaultStart }: { rules: RepaymentRule[]; addRule: (rule: RepaymentRule) => void; updateRule: (rule: RepaymentRule) => void; removeRule: (id: string) => void; defaultStart: string }) {
-  const [editingRule,setEditingRule]=useState<RepaymentRule|null>(null)
+  const [editingRule, setEditingRule] = useState<RepaymentRule | null>(null)
   const safeDefaultStart = isISODate(defaultStart) ? defaultStart : format(new Date(), 'yyyy-MM-dd')
   const defaultEnd = () => format(addMonths(parseISO(safeDefaultStart), 12), 'yyyy-MM-dd')
-  const [type,setType]=useState<RepaymentRule['type']>('monthlyFixed'), [start,setStart]=useState(safeDefaultStart), [end,setEnd]=useState(defaultEnd()), [amount,setAmount]=useState('20000'), [percent,setPercent]=useState('10'), [skip,setSkip]=useState(''), [error,setError]=useState('')
-  const [strategy,setStrategy]=useState<EarlyRepayment['strategy']>('reduceTerm'), [source,setSource]=useState<EarlyRepayment['source']>('own'), [sameDayOrder,setSameDayOrder]=useState<EarlyRepayment['sameDayOrder']>('regularFirst')
-  const reset=()=>{setEditingRule(null);setType('monthlyFixed');setStart(safeDefaultStart);setEnd(defaultEnd());setAmount('20000');setPercent('10');setSkip('');setError('');setStrategy('reduceTerm');setSource('own');setSameDayOrder('regularFirst')}
-  const startEdit=(rule:RepaymentRule)=>{setEditingRule(rule);setType(rule.type);setStart(rule.startDate);setEnd(rule.endDate);setAmount(String(rule.amount??20000));setPercent(String(rule.percent??10));setSkip(rule.skipMonths.join(', '));setStrategy(rule.strategy === 'custom' ? 'reduceTerm' : rule.strategy);setSource(rule.source);setSameDayOrder(rule.sameDayOrder)}
-  const submit=()=>{ const value=Number(type==='paymentPercent'?percent:amount); const skipMonths=skip.split(/[,\s;]+/).map(x=>x.trim()).filter(Boolean); if(!Number.isFinite(value)||value<=0){setError('Сумма или процент должны быть больше нуля');return} if(!isISODate(start)||!isISODate(end)){setError('Укажите корректные даты регулярного платежа');return} if(start>end){setError('Дата окончания не может быть раньше даты начала');return} if(!skipMonths.every(isISOYearMonth)){setError('Месяцы пропуска должны иметь формат ГГГГ-ММ');return} const rule={id:editingRule?.id??createId('rule'),name:type==='monthlyFixed'?'Ежемесячное пополнение':type==='annualBonus'?'Ежегодная премия':'Процент от платежа',type,startDate:start,endDate:end,amount:type==='paymentPercent'?undefined:value,percent:type==='paymentPercent'?value:undefined,strategy,source,sameDayOrder,interestFirst:true,skipMonths,comment:type==='paymentPercent'?`${value}% от регулярного платежа`:undefined}; try{editingRule?updateRule(rule):addRule(rule); reset()}catch(error){setError(error instanceof Error ? error.message : 'Не удалось сохранить регулярный платёж')} }
-  return <section className="panel list-panel rule-panel early-card"><div className="panel-head"><div><h3>Регулярные досрочные платежи</h3><p>{editingRule?'Редактирование регулярного платежа':'Повторяющиеся операции до заданной даты'}</p></div><span className="early-counter">{rules.length}</span></div><div className="rule-form form-grid"><Field label="Тип регулярного платежа"><select value={type} onChange={e=>setType(e.target.value as RepaymentRule['type'])}><option value="monthlyFixed">Каждый месяц фиксированная сумма</option><option value="annualBonus">Ежегодно вносить премию</option><option value="paymentPercent">Процент от регулярного платежа</option></select></Field><Field label={type==='paymentPercent'?'Процент':'Сумма'}>{type==='paymentPercent'?<div className="with-suffix"><input type="number" min="0" value={percent} onChange={e=>setPercent(e.target.value)}/><i>%</i></div>:<div className="with-suffix"><input type="number" min="0" value={amount} onChange={e=>setAmount(e.target.value)}/><i>{currencySymbol()}</i></div>}</Field><Field label="Начать с"><input type="date" value={start} onChange={e=>setStart(e.target.value)}/></Field><Field label="Применять до"><input type="date" value={end} onChange={e=>setEnd(e.target.value)}/></Field><Field label="Стратегия"><select value={strategy} onChange={e=>setStrategy(e.target.value as EarlyRepayment['strategy'])}><option value="reduceTerm">Уменьшить срок</option><option value="reducePayment">Уменьшить платёж</option><option value="full">Закрыть полностью</option></select></Field><Field label="Источник"><select value={source} onChange={e=>setSource(e.target.value as EarlyRepayment['source'])}><option value="own">Собственные средства</option><option value="subsidy">Маткапитал / субсидия</option><option value="insurance">Страховое возмещение</option><option value="other">Прочее</option></select></Field><Field label="Порядок в дату платежа"><select value={sameDayOrder} onChange={e=>setSameDayOrder(e.target.value as EarlyRepayment['sameDayOrder'])}><option value="regularFirst">Сначала регулярный платёж</option><option value="earlyFirst">Сначала досрочный платёж</option></select></Field><Field label="Пропустить месяцы"><input value={skip} onChange={e=>setSkip(e.target.value)} placeholder="2027-01, 2027-05"/></Field></div>{error&&<div className="alert modal-alert">{error}</div>}<div className="rule-actions"><button className="primary rule-add" onClick={submit}><Plus/> {editingRule?'Сохранить изменения':'Добавить регулярный платёж'}</button>{editingRule&&<button className="ghost" onClick={reset}>Отмена</button>}</div>{rules.length ? <div className="event-list rule-list">{rules.map(rule => <div className="event compact-event" key={rule.id}><div className="date-tile"><CalendarDays/></div><div><b>{rule.name}</b><span>{ruleTypeName(rule.type)} · {rule.type==='paymentPercent'?`${rule.percent}% от регулярного платежа`:money(rule.amount ?? 0)} · {shortDate(rule.startDate)} — {shortDate(rule.endDate)}</span><small>{scenarioName(rule.strategy)} · {sourceName(rule.source)} · пропусков: {rule.skipMonths.length}</small></div><div className="event-actions"><button className="icon-btn" aria-label={`Редактировать регулярный платёж ${rule.name}`} onClick={()=>startEdit(rule)}><Pencil/></button><button className="icon-btn danger" aria-label={`Удалить регулярный платёж ${rule.name}`} onClick={()=>removeRule(rule.id)}><Trash2/></button></div></div>)}</div> : <div className="tip"><CircleHelp/> Например: +20 000 ₽ каждый месяц до 2030 года, премия раз в год или 10% от регулярного платежа.</div>}</section>
+  const [type, setType] = useState<RepaymentRule['type']>('monthlyFixed')
+  const [start, setStart] = useState(safeDefaultStart)
+  const [end, setEnd] = useState(defaultEnd())
+  const [amount, setAmount] = useState('20000')
+  const [percent, setPercent] = useState('10')
+  const [enabled, setEnabled] = useState(true)
+  const [skip, setSkip] = useState('')
+  const [error, setError] = useState('')
+  const [strategy, setStrategy] = useState<EarlyRepayment['strategy']>('reduceTerm')
+  const [source, setSource] = useState<EarlyRepayment['source']>('own')
+  const [sameDayOrder, setSameDayOrder] = useState<EarlyRepayment['sameDayOrder']>('regularFirst')
+
+  const reset = () => {
+    setEditingRule(null)
+    setType('monthlyFixed')
+    setStart(safeDefaultStart)
+    setEnd(defaultEnd())
+    setAmount('20000')
+    setPercent('10')
+    setEnabled(true)
+    setSkip('')
+    setError('')
+    setStrategy('reduceTerm')
+    setSource('own')
+    setSameDayOrder('regularFirst')
+  }
+
+  const startEdit = (rule: RepaymentRule) => {
+    setEditingRule(rule)
+    setType(rule.type)
+    setStart(rule.startDate)
+    setEnd(rule.endDate)
+    setAmount(String(rule.amount ?? 20000))
+    setPercent(String(rule.percent ?? 10))
+    setEnabled(rule.enabled ?? true)
+    setSkip(rule.skipMonths.join(', '))
+    setStrategy(rule.strategy === 'custom' ? 'reduceTerm' : rule.strategy)
+    setSource(rule.source)
+    setSameDayOrder(rule.sameDayOrder)
+  }
+
+  const submit = () => {
+    const value = Number(type === 'paymentPercent' ? percent : amount)
+    const skipMonths = skip.split(/[,\s;]+/).map(x => x.trim()).filter(Boolean)
+    if (!Number.isFinite(value) || value < 0) { setError('Сумма или процент не могут быть отрицательными'); return }
+    if (!isISODate(start) || !isISODate(end)) { setError('Укажите корректные даты регулярного платежа'); return }
+    if (start > end) { setError('Дата окончания не может быть раньше даты начала'); return }
+    if (!skipMonths.every(isISOYearMonth)) { setError('Месяцы пропуска должны иметь формат ГГГГ-ММ'); return }
+    const rule: RepaymentRule = {
+      id: editingRule?.id ?? createId('rule'),
+      name: type === 'monthlyFixed' ? 'Ежемесячное пополнение' : type === 'annualBonus' ? 'Ежегодная премия' : 'Процент от платежа',
+      type,
+      startDate: start,
+      endDate: end,
+      amount: type === 'paymentPercent' ? undefined : value,
+      percent: type === 'paymentPercent' ? value : undefined,
+      enabled,
+      strategy,
+      source,
+      sameDayOrder,
+      interestFirst: true,
+      skipMonths,
+      comment: type === 'paymentPercent' ? `${value}% от регулярного платежа` : undefined
+    }
+    try {
+      if (editingRule) updateRule(rule)
+      else addRule(rule)
+      reset()
+    } catch (error) {
+      setError(error instanceof Error ? error.message : 'Не удалось сохранить регулярный платёж')
+    }
+  }
+
+  return <section className="panel list-panel rule-panel early-card">
+    <div className="panel-head"><div><h3>Регулярные досрочные платежи</h3><p>{editingRule ? 'Редактирование регулярного платежа' : 'Повторяющиеся операции до заданной даты'}</p></div><span className="early-counter">{rules.length}</span></div>
+    <div className="rule-form form-grid">
+      <Field label="Тип регулярного платежа"><select value={type} onChange={event => setType(event.target.value as RepaymentRule['type'])}><option value="monthlyFixed">Каждый месяц фиксированная сумма</option><option value="annualBonus">Ежегодно вносить премию</option><option value="paymentPercent">Процент от регулярного платежа</option></select></Field>
+      <Field label={type === 'paymentPercent' ? 'Процент' : 'Сумма'}>{type === 'paymentPercent' ? <div className="with-suffix"><input type="number" min="0" value={percent} onChange={event => setPercent(event.target.value)}/><i>%</i></div> : <div className="with-suffix"><input type="number" min="0" value={amount} onChange={event => setAmount(event.target.value)}/><i>{currencySymbol()}</i></div>}</Field>
+      <Field label="Начать с"><input type="date" value={start} onChange={event => setStart(event.target.value)}/></Field>
+      <Field label="Применять до"><input type="date" value={end} onChange={event => setEnd(event.target.value)}/></Field>
+      <Field label="Стратегия"><select value={strategy} onChange={event => setStrategy(event.target.value as EarlyRepayment['strategy'])}><option value="reduceTerm">Уменьшить срок</option><option value="reducePayment">Уменьшить платёж</option><option value="full">Закрыть полностью</option></select></Field>
+      <Field label="Источник"><select value={source} onChange={event => setSource(event.target.value as EarlyRepayment['source'])}><option value="own">Собственные средства</option><option value="subsidy">Маткапитал / субсидия</option><option value="insurance">Страховое возмещение</option><option value="other">Прочее</option></select></Field>
+      <Field label="Порядок в дату платежа"><select value={sameDayOrder} onChange={event => setSameDayOrder(event.target.value as EarlyRepayment['sameDayOrder'])}><option value="regularFirst">Сначала регулярный платёж</option><option value="earlyFirst">Сначала досрочный платёж</option></select></Field>
+      <Field label="Пропустить месяцы"><input value={skip} onChange={event => setSkip(event.target.value)} placeholder="2027-01, 2027-05"/></Field>
+      <label className="toggle-row"><div><b>Правило включено</b><span>Выключенное правило сохранится, но не создаст операции</span></div><input type="checkbox" checked={enabled} onChange={event => setEnabled(event.target.checked)}/></label>
+    </div>
+    {error && <div className="alert modal-alert">{error}</div>}
+    <div className="rule-actions"><button className="primary rule-add" onClick={submit}><Plus/> {editingRule ? 'Сохранить изменения' : 'Добавить регулярный платёж'}</button>{editingRule && <button className="ghost" onClick={reset}>Отмена</button>}</div>
+    {rules.length ? <div className="event-list rule-list">{rules.map(rule => {
+      const disabled = ruleDisabled(rule)
+      return <div className={`event compact-event${disabledClass(disabled)}`} key={rule.id}>
+        <div className="date-tile"><CalendarDays/></div>
+        <div><b>{rule.name}</b><span>{ruleTypeName(rule.type)} · {ruleValueLabel(rule)} · {shortDate(rule.startDate)} — {shortDate(rule.endDate)}</span><small>{disabled ? 'Временно отключено' : `${scenarioName(rule.strategy)} · ${sourceName(rule.source)} · пропусков: ${rule.skipMonths.length}`}</small></div>
+        <div className="event-actions"><button className="icon-btn" aria-label={`Редактировать регулярный платёж ${rule.name}`} onClick={() => startEdit(rule)}><Pencil/></button><button className="icon-btn danger" aria-label={`Удалить регулярный платёж ${rule.name}`} onClick={() => removeRule(rule.id)}><Trash2/></button></div>
+      </div>
+    })}</div> : <div className="tip"><CircleHelp/> Например: +20 000 ₽ каждый месяц до 2030 года, премия раз в год или 10% от регулярного платежа.</div>}
+  </section>
 }
 
 export function EarlyList({ items, rules, generated, remove, edit, open, addRule, updateRule, removeRule, defaultStart }: { items: EarlyRepayment[]; rules: RepaymentRule[]; generated: EarlyRepayment[]; remove: (id: string) => void; edit: (item: EarlyRepayment) => void; open: () => void; addRule: (rule: RepaymentRule) => void; updateRule: (rule: RepaymentRule) => void; removeRule: (id: string) => void; defaultStart: string }) {
   const ruleNames = useMemo(() => new Map(rules.map(rule => [rule.id, rule.name])), [rules])
+  const activeItems = useMemo(() => items.filter(item => !repaymentDisabled(item)), [items])
   const combined = useMemo(() => [
-    ...items.map(item => ({ item, kind: 'manual' as const, label: 'Разовый платёж' })),
+    ...activeItems.map(item => ({ item, kind: 'manual' as const, label: 'Разовый платёж' })),
     ...generated.map(item => {
       const ruleId = item.id.startsWith('rule-') ? item.id.slice(5, -11) : ''
       return { item, kind: 'rule' as const, label: ruleNames.get(ruleId) ?? 'Регулярный платёж' }
     })
-  ].sort((a, b) => a.item.date.localeCompare(b.item.date) || a.item.id.localeCompare(b.item.id)), [items, generated, ruleNames])
-  const manualTotal = items.reduce((sum, item) => sum + item.amount, 0)
+  ].sort((a, b) => a.item.date.localeCompare(b.item.date) || a.item.id.localeCompare(b.item.id)), [activeItems, generated, ruleNames])
+  const manualTotal = activeItems.reduce((sum, item) => sum + item.amount, 0)
   const generatedTotal = generated.reduce((sum, item) => sum + item.amount, 0)
 
   return <>
@@ -43,13 +141,20 @@ export function EarlyList({ items, rules, generated, remove, edit, open, addRule
       <section className="panel list-panel early-card">
         <div className="panel-head"><div><h3>Разовые платежи</h3><p>Операции, введённые вручную</p></div><button className="primary" onClick={open}><Plus/> Добавить</button></div>
         <div className="early-summary"><div><span>Операций</span><b>{items.length}</b></div><div><span>Сумма</span><b>{money(manualTotal)}</b></div></div>
-        {items.length ? <div className="event-list">{items.map(x => <div className="event" key={x.id}><div className="date-tile"><b>{format(parseISO(x.date),'dd')}</b><span>{format(parseISO(x.date),'MMM yy',{locale:ru})}</span></div><div><b>{money(x.amount)}</b><span>{scenarioName(x.strategy)} · {x.amountMode === 'total' ? 'тело и проценты без комиссий' : 'сумма списания'} · {sourceName(x.source)}</span>{x.comment && <small>{x.comment}</small>}</div><div className="event-actions"><button className="icon-btn" aria-label={`Редактировать платёж ${shortDate(x.date)}`} onClick={() => edit(x)}><Pencil/></button><button className="icon-btn danger" aria-label={`Удалить платёж ${shortDate(x.date)}`} onClick={() => remove(x.id)}><Trash2/></button></div></div>)}</div> : <Empty title="Пока нет разовых платежей" action={open}/>}
+        {items.length ? <div className="event-list">{items.map(item => {
+          const disabled = repaymentDisabled(item)
+          return <div className={`event${disabledClass(disabled)}`} key={item.id}>
+            <div className="date-tile"><b>{format(parseISO(item.date), 'dd')}</b><span>{format(parseISO(item.date), 'MMM yy', { locale: ru })}</span></div>
+            <div><b>{money(item.amount)}</b><span>{disabled ? 'Временно отключено' : `${scenarioName(item.strategy)} · ${item.amountMode === 'total' ? 'тело и проценты без комиссий' : 'сумма списания'} · ${sourceName(item.source)}`}</span>{item.comment && <small>{item.comment}</small>}</div>
+            <div className="event-actions"><button className="icon-btn" aria-label={`Редактировать платёж ${shortDate(item.date)}`} onClick={() => edit(item)}><Pencil/></button><button className="icon-btn danger" aria-label={`Удалить платёж ${shortDate(item.date)}`} onClick={() => remove(item.id)}><Trash2/></button></div>
+          </div>
+        })}</div> : <Empty title="Пока нет разовых платежей" action={open}/>}
       </section>
       <RepaymentRulesPanel rules={rules} addRule={addRule} updateRule={updateRule} removeRule={removeRule} defaultStart={defaultStart}/>
     </div>
     <section className="panel list-panel early-calendar">
       <div className="panel-head"><div><h3>Календарь досрочных платежей</h3><p>Разовые и регулярные досрочные платежи</p></div><div className="early-summary inline"><div><span>Всего</span><b>{combined.length}</b></div><div><span>Регулярные</span><b>{money(generatedTotal)}</b></div></div></div>
-      {combined.length ? <div className="event-list">{combined.map(({ item, kind, label }) => <div className={`event combined-event ${kind === 'rule' ? 'generated-event' : ''}`} key={`${kind}-${item.id}`}><div className="date-tile">{kind === 'rule' ? <ListChecks/> : <><b>{format(parseISO(item.date),'dd')}</b><span>{format(parseISO(item.date),'MMM yy',{locale:ru})}</span></>}</div><div><b>{money(item.amount)}</b><span><em className={`event-badge ${kind === 'rule' ? 'rule' : ''}`}>{kind === 'rule' ? 'Регулярный' : 'Разовый'}</em> {label} · {shortDate(item.date)} · {scenarioName(item.strategy)} · {sourceName(item.source)}</span>{item.comment && <small>{item.comment}</small>}</div>{kind === 'manual' ? <div className="event-actions"><button className="icon-btn" aria-label={`Редактировать платёж ${shortDate(item.date)}`} onClick={() => edit(item)}><Pencil/></button><button className="icon-btn danger" aria-label={`Удалить платёж ${shortDate(item.date)}`} onClick={() => remove(item.id)}><Trash2/></button></div> : <span className="generated-note">авто</span>}</div>)}</div> : <div className="tip"><CircleHelp/> Добавьте разовый или регулярный платёж, чтобы увидеть общий календарь досрочных операций.</div>}
+      {combined.length ? <div className="event-list">{combined.map(({ item, kind, label }) => <div className={`event combined-event ${kind === 'rule' ? 'generated-event' : ''}`} key={`${kind}-${item.id}`}><div className="date-tile">{kind === 'rule' ? <ListChecks/> : <><b>{format(parseISO(item.date), 'dd')}</b><span>{format(parseISO(item.date), 'MMM yy', { locale: ru })}</span></>}</div><div><b>{money(item.amount)}</b><span><em className={`event-badge ${kind === 'rule' ? 'rule' : ''}`}>{kind === 'rule' ? 'Регулярный' : 'Разовый'}</em> {label} · {shortDate(item.date)} · {scenarioName(item.strategy)} · {sourceName(item.source)}</span>{item.comment && <small>{item.comment}</small>}</div>{kind === 'manual' ? <div className="event-actions"><button className="icon-btn" aria-label={`Редактировать платёж ${shortDate(item.date)}`} onClick={() => edit(item)}><Pencil/></button><button className="icon-btn danger" aria-label={`Удалить платёж ${shortDate(item.date)}`} onClick={() => remove(item.id)}><Trash2/></button></div> : <span className="generated-note">авто</span>}</div>)}</div> : <div className="tip"><CircleHelp/> Добавьте разовый или регулярный платёж, чтобы увидеть общий календарь досрочных операций.</div>}
     </section>
   </>
 }

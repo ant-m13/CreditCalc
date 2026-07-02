@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { persist } from 'zustand/middleware'
+import { createJSONStorage, persist } from 'zustand/middleware'
 import { addMonths, format, parseISO } from 'date-fns'
 import { isRegularPaymentDate, type EarlyRepayment, type GracePeriod, type LoanConfig } from './loanEngine'
 import { defaultConfig } from './loanDefaults'
@@ -9,6 +9,42 @@ import { createId } from './utils/createId'
 import { isISODate, isISOYearMonth } from './utils/dateValidation'
 import { MAX_EARLY_REPAYMENTS, MAX_GRACE_PERIODS, MAX_REPAYMENT_RULES, MAX_TERM_MONTHS } from './loanEngine/limits'
 export { defaultConfig } from './loanDefaults'
+
+export const STORAGE_ERROR_EVENT = 'credit-calculator-storage-error'
+
+const notifyStorageError = (error: unknown) => {
+  if (typeof window === 'undefined') return
+  const message = error instanceof Error ? error.message : 'Локальное хранилище недоступно'
+  window.dispatchEvent(new CustomEvent(STORAGE_ERROR_EVENT, { detail: { message } }))
+}
+
+const safeLocalStorage = {
+  getItem: (name: string) => {
+    if (typeof window === 'undefined') return null
+    try {
+      return window.localStorage.getItem(name)
+    } catch (error) {
+      notifyStorageError(error)
+      return null
+    }
+  },
+  setItem: (name: string, value: string) => {
+    if (typeof window === 'undefined') return
+    try {
+      window.localStorage.setItem(name, value)
+    } catch (error) {
+      notifyStorageError(error)
+    }
+  },
+  removeItem: (name: string) => {
+    if (typeof window === 'undefined') return
+    try {
+      window.localStorage.removeItem(name)
+    } catch (error) {
+      notifyStorageError(error)
+    }
+  }
+}
 
 type ThemeName = 'emerald' | 'ocean' | 'violet' | 'graphite' | 'warm' | 'night'
 
@@ -94,6 +130,7 @@ const normalizeTheme = (value: unknown): ThemeName => typeof value === 'string' 
 const normalizeAccentColor = (value: unknown): string => typeof value === 'string' && /^#[0-9a-fA-F]{6}$/.test(value) ? value : defaultAccentColor
 const oneOf = <T extends string>(value: unknown, values: readonly T[], fallback: T): T => typeof value === 'string' && values.includes(value as T) ? value as T : fallback
 const finiteNumber = (value: unknown, fallback: number, min = 0, max = Number.POSITIVE_INFINITY) => typeof value === 'number' && Number.isFinite(value) ? Math.min(max, Math.max(min, value)) : fallback
+const optionalFiniteNumber = (value: unknown, min = 0, max = Number.POSITIVE_INFINITY) => typeof value === 'number' && Number.isFinite(value) ? Math.min(max, Math.max(min, value)) : undefined
 const isObject = (value: unknown): value is Record<string, unknown> => Boolean(value) && typeof value === 'object' && !Array.isArray(value)
 const nextMonthDate = (date: string) => format(addMonths(parseISO(date), 1), 'yyyy-MM-dd')
 
@@ -164,14 +201,15 @@ const normalizeRepayments = (value: unknown, config: LoanConfig): EarlyRepayment
   if (!Array.isArray(value)) return []
   return withUniqueIds(sortRepayments(value.slice(0, MAX_EARLY_REPAYMENTS).flatMap((item): EarlyRepayment[] => {
     if (!isObject(item) || typeof item.id !== 'string' || !isISODate(item.date)) return []
-    const amount = finiteNumber(item.amount, 0, 0)
-    if (amount <= 0) return []
+    const amount = optionalFiniteNumber(item.amount, 0)
+    if (amount === undefined) return []
     const requestedAmountMode = item.amountMode === undefined ? 'total' : oneOf(item.amountMode, ['extra', 'total'] as const, 'extra')
     const amountMode = requestedAmountMode === 'total' && isRegularPaymentDate(item.date, config) ? 'total' : 'extra'
     return [{
       id: item.id,
       date: item.date,
       amount,
+      enabled: typeof item.enabled === 'boolean' ? item.enabled : true,
       amountMode,
       strategy: oneOf(item.strategy, repaymentStrategies, 'reduceTerm'),
       source: oneOf(item.source, repaymentSources, 'own'),
@@ -187,9 +225,9 @@ const normalizeRepaymentRules = (value: unknown): RepaymentRule[] => {
   return withUniqueIds(sortRules(value.slice(0, MAX_REPAYMENT_RULES).flatMap((item): RepaymentRule[] => {
     if (!isObject(item) || typeof item.id !== 'string' || typeof item.name !== 'string' || !isISODate(item.startDate) || !isISODate(item.endDate) || item.endDate < item.startDate) return []
     const type = oneOf(item.type, repaymentRuleTypes, 'monthlyFixed')
-    const amount = item.amount === undefined ? undefined : finiteNumber(item.amount, 0, 0)
-    const percent = item.percent === undefined ? undefined : finiteNumber(item.percent, 0, 0)
-    if (type === 'paymentPercent' ? !percent : !amount) return []
+    const amount = optionalFiniteNumber(item.amount, 0)
+    const percent = optionalFiniteNumber(item.percent, 0)
+    if (type === 'paymentPercent' ? percent === undefined : amount === undefined) return []
     return [{
       id: item.id,
       name: item.name.trim() || 'Регулярный платёж',
@@ -198,6 +236,7 @@ const normalizeRepaymentRules = (value: unknown): RepaymentRule[] => {
       endDate: item.endDate,
       amount: type === 'paymentPercent' ? undefined : amount,
       percent: type === 'paymentPercent' ? percent : undefined,
+      enabled: typeof item.enabled === 'boolean' ? item.enabled : true,
       strategy: oneOf(item.strategy, repaymentStrategies, 'reduceTerm'),
       source: oneOf(item.source, repaymentSources, 'own'),
       sameDayOrder: oneOf(item.sameDayOrder, sameDayOrders, 'regularFirst'),
@@ -392,6 +431,7 @@ export const useLoanStore = create<LoanState>()(persist((set) => ({
   })
 }), {
   name: 'ipoteka-calculator-v1',
+  storage: createJSONStorage(() => safeLocalStorage),
   version: 6,
   migrate: normalizePersistedState,
   merge: (persisted, current) => ({ ...current, ...normalizePersistedState(persisted) })

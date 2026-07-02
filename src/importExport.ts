@@ -61,16 +61,19 @@ export function parseLoanBackupObject(raw: unknown): LoanBackupData {
   if (!Array.isArray(repaymentsRaw)) throw new Error('Список досрочных платежей повреждён')
   if (repaymentsRaw.length > MAX_EARLY_REPAYMENTS) throw new Error(`Слишком много досрочных платежей. Максимум: ${MAX_EARLY_REPAYMENTS}`)
   const repayments = repaymentsRaw.map((item, index) => {
-    if (!isObject(item) || typeof item.id !== 'string' || !isISODate(item.date) || !positive(item.amount) || !oneOf(item.strategy, ['reduceTerm', 'reducePayment', 'full', 'custom']) || !oneOf(item.source, ['own', 'subsidy', 'insurance', 'other']) || !oneOf(item.sameDayOrder, ['regularFirst', 'earlyFirst']) || typeof item.interestFirst !== 'boolean') throw new Error(`Ошибка в досрочном платеже №${index + 1}`)
+    if (!isObject(item) || typeof item.id !== 'string' || !isISODate(item.date) || !finite(item.amount) || !oneOf(item.strategy, ['reduceTerm', 'reducePayment', 'full', 'custom']) || !oneOf(item.source, ['own', 'subsidy', 'insurance', 'other']) || !oneOf(item.sameDayOrder, ['regularFirst', 'earlyFirst']) || typeof item.interestFirst !== 'boolean') throw new Error(`Ошибка в досрочном платеже №${index + 1}`)
     if (item.amountMode !== undefined && !oneOf(item.amountMode, ['extra', 'total'])) throw new Error(`Ошибка в досрочном платеже №${index + 1}`)
+    if (item.enabled !== undefined && typeof item.enabled !== 'boolean') throw new Error(`Ошибка в досрочном платеже №${index + 1}`)
     const isRegularDate = isRegularPaymentDate(item.date, config)
     const amountMode = item.amountMode === undefined ? (isRegularDate ? 'total' : 'extra') : item.amountMode
-    if (amountMode === 'total' && item.sameDayOrder === 'earlyFirst') throw new Error(`Ошибка в досрочном платеже №${index + 1}: общая сумма по телу и процентам без комиссий применяется после регулярного платежа`)
-    if (amountMode === 'total' && !isRegularDate) throw new Error(`Ошибка в досрочном платеже №${index + 1}: общую сумму по телу и процентам без комиссий можно указать только в дату регулярного платежа`)
-    return { ...item, amountMode, sameDayOrder: amountMode === 'total' ? 'regularFirst' : item.sameDayOrder } as unknown as EarlyRepayment
+    const enabled = item.enabled ?? true
+    const disabled = !enabled || item.amount === 0
+    if (!disabled && amountMode === 'total' && item.sameDayOrder === 'earlyFirst') throw new Error(`Ошибка в досрочном платеже №${index + 1}: общая сумма по телу и процентам без комиссий применяется после регулярного платежа`)
+    if (!disabled && amountMode === 'total' && !isRegularDate) throw new Error(`Ошибка в досрочном платеже №${index + 1}: общую сумму по телу и процентам без комиссий можно указать только в дату регулярного платежа`)
+    return { ...item, enabled, amountMode, sameDayOrder: amountMode === 'total' ? 'regularFirst' : item.sameDayOrder } as unknown as EarlyRepayment
   })
   ensureUniqueIds(repayments, 'Досрочные платежи')
-  ensureUniqueIds(repayments.filter(item => item.amountMode === 'total').map(item => ({ id: item.date })), 'Операции с общей суммой по телу и процентам без комиссий')
+  ensureUniqueIds(repayments.filter(item => item.enabled !== false && item.amount > 0 && item.amountMode === 'total').map(item => ({ id: item.date })), 'Операции с общей суммой по телу и процентам без комиссий')
 
   const graceRaw = raw.gracePeriods ?? []
   if (!Array.isArray(graceRaw)) throw new Error('Список льготных периодов повреждён')
@@ -94,10 +97,11 @@ export function parseLoanBackupObject(raw: unknown): LoanBackupData {
     if (!isObject(item) || typeof item.id !== 'string' || typeof item.name !== 'string' || !oneOf(item.type, ['monthlyFixed', 'annualBonus', 'paymentPercent']) || !isISODate(item.startDate) || !isISODate(item.endDate) || !oneOf(item.strategy, ['reduceTerm', 'reducePayment', 'full', 'custom']) || !oneOf(item.source, ['own', 'subsidy', 'insurance', 'other']) || !oneOf(item.sameDayOrder, ['regularFirst', 'earlyFirst']) || typeof item.interestFirst !== 'boolean' || !Array.isArray(item.skipMonths) || !item.skipMonths.every(isISOYearMonth)) throw new Error(`Ошибка в правиле досрочных платежей №${index + 1}`)
     if (item.endDate < item.startDate) throw new Error(`Ошибка в правиле досрочных платежей №${index + 1}: окончание раньше начала`)
     if (item.type === 'paymentPercent' ? item.percent === undefined : item.amount === undefined) throw new Error(`Ошибка в правиле досрочных платежей №${index + 1}`)
-    if (item.amount !== undefined && !positive(item.amount)) throw new Error(`Ошибка в правиле досрочных платежей №${index + 1}`)
-    if (item.percent !== undefined && !positive(item.percent)) throw new Error(`Ошибка в правиле досрочных платежей №${index + 1}`)
+    if (item.amount !== undefined && !finite(item.amount)) throw new Error(`Ошибка в правиле досрочных платежей №${index + 1}`)
+    if (item.percent !== undefined && !finite(item.percent)) throw new Error(`Ошибка в правиле досрочных платежей №${index + 1}`)
+    if (item.enabled !== undefined && typeof item.enabled !== 'boolean') throw new Error(`Ошибка в правиле досрочных платежей №${index + 1}`)
     if (item.comment !== undefined && typeof item.comment !== 'string') throw new Error(`Ошибка в правиле досрочных платежей №${index + 1}`)
-    return item as unknown as RepaymentRule
+    return { ...item, enabled: item.enabled ?? true } as unknown as RepaymentRule
   })
   ensureUniqueIds(repaymentRules, 'Правила досрочных платежей')
 

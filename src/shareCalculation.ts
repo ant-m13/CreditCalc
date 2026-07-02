@@ -101,7 +101,7 @@ export function serializeLoanSnapshot(snapshot: SharedCalculationV1) {
 export function parseLoanSnapshot(value: unknown): LoanBackupData {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Ссылка повреждена. Проверьте ссылку или используйте JSON-файл')
   const version = (value as { version?: unknown }).version
-  if (version !== 1) throw new Error('Версия ссылки не поддерживается')
+  if (version !== undefined && version !== 1) throw new Error('Версия ссылки не поддерживается')
   return parseLoanBackupObject(value)
 }
 
@@ -126,7 +126,7 @@ export async function decodeSharedCalculation(payload: string) {
     raw = JSON.parse(json)
   } catch (error) {
     if (error instanceof Error && error.message.includes('слишком большой')) throw error
-    throw new Error('Ссылка повреждена. Проверьте ссылку или используйте JSON-файл')
+    throw new Error('Ссылка повреждена. Проверьте ссылку или используйте JSON-файл', { cause: error })
   }
   return parseLoanSnapshot(raw)
 }
