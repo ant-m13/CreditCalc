@@ -142,3 +142,27 @@ export function readSharedCalculationFromLocation(location: Pick<Location, 'hash
   if (!hash.startsWith('calc=')) return null
   return hash.slice('calc='.length)
 }
+
+export function normalizeSharedCalculationPayload(input: string) {
+  const value = input.trim()
+  if (/^https?:\/\//i.test(value)) {
+    try {
+      const payload = readSharedCalculationFromLocation(new URL(value))
+      if (payload) return payload
+    } catch {
+      throw new Error('Не удалось прочитать ссылку')
+    }
+    throw new Error('В ссылке не найден код параметров')
+  }
+  return value.startsWith('calc=') ? value.slice('calc='.length).trim() : value
+}
+
+export function looksLikeSharedCalculationUrl(input: string) {
+  const value = input.trim()
+  if (!/^https?:\/\//i.test(value)) return false
+  try {
+    return Boolean(readSharedCalculationFromLocation(new URL(value)))
+  } catch {
+    return false
+  }
+}

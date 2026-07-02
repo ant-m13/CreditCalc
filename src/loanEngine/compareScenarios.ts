@@ -36,7 +36,7 @@ export function compareScenarios(config: LoanConfig, repayments: EarlyRepayment[
   const term = make('reduceTerm', 'Сократить срок')
   const payment = make('reducePayment', 'Снизить платёж')
   const combinedSchedule = addCumulativeSavings(generateBaseSchedule(config, { earlyRepayments: repayments, gracePeriods }), base.schedule)
-  const combined = toResult('combined', 'Комбинированный', 'combined', combinedSchedule, config, base)
+  const combined = toResult('combined', 'По операциям', 'combined', combinedSchedule, config, base)
   const scenarios = [base, term, payment, combined]
   return {
     scenarios,

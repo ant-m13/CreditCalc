@@ -115,7 +115,7 @@ const defaultLoanData = (withSeedRepayment = false): LoanData => ({
   repayments: withSeedRepayment ? seedRepayments.map(item => ({ ...item })) : [],
   repaymentRules: [],
   gracePeriods: [],
-  selectedScenario: 'reduceTerm',
+  selectedScenario: 'combined',
   termUnit: 'months',
   displayDecimals: 2,
   appFontSize: 'normal',

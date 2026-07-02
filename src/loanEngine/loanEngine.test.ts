@@ -208,16 +208,32 @@ describe('loan engine', () => {
       early({id:'mix-4',date:'2026-05-21',amount:10,strategy:'reducePayment'})
     ]
     const s=generateBaseSchedule(bank,{earlyRepayments:repayments})
+    const april=s.find(row=>row.date==='2026-04-21')!
     const may=s.find(row=>row.date==='2026-05-21')!
     const june=s.find(row=>row.date==='2026-06-21')!
+    const december2030=s.find(row=>row.date==='2030-12-21')!
+    const debt=calculateDebtAtDate(bank,s,[],'2026-07-02')
+    expect(april.principal).toBe(12455.14)
+    expect(april.interest).toBe(13614.73)
+    expect(april.payment + april.earlyPayment).toBeCloseTo(26069.87, 2)
+    expect(april.closingBalance).toBe(2032555.26)
     expect(may.eventTypes).toEqual(expect.arrayContaining(['earlyReduceTerm','earlyReducePayment']))
     expect(may.paymentRecalculated).toBe(true)
     expect(may.payment).toBe(20013.52)
     expect(may.earlyPayment).toBe(26083.59)
+    expect(may.principal).toBe(32565.30)
+    expect(may.interest).toBe(13531.81)
     expect(june.payment).toBe(20013.42)
     expect(june.interest).toBe(13758.84)
     expect(june.principal).toBe(6254.58)
     expect(june.closingBalance).toBe(1993735.38)
+    expect(december2030.payment).toBe(20013.42)
+    expect(december2030.principal).toBe(9507.18)
+    expect(december2030.interest).toBe(10506.24)
+    expect(december2030.closingBalance).toBe(1568590.22)
+    expect(debt.principal).toBe(1993735.38)
+    expect(debt.interest).toBe(4866.90)
+    expect(debt.total).toBeCloseTo(1998602.28, 2)
     expect(s.at(-1)?.date).toBe('2040-04-21')
   })
 

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { defaultConfig } from './loanDefaults'
 import { parseLoanBackup } from './importExport'
-import { buildShareUrl, createLoanSnapshot, decodeSharedCalculation, encodeSharedCalculation, parseLoanSnapshot, readSharedCalculationFromLocation } from './shareCalculation'
+import { buildShareUrl, createLoanSnapshot, decodeSharedCalculation, encodeSharedCalculation, looksLikeSharedCalculationUrl, normalizeSharedCalculationPayload, parseLoanSnapshot, readSharedCalculationFromLocation } from './shareCalculation'
 import type { EarlyRepayment, GracePeriod, LoanConfig } from './loanEngine'
 import type { RepaymentRule } from './repaymentRules'
 
@@ -129,6 +129,18 @@ describe('ссылка на расчёт', () => {
     expect(parsed.pathname).toBe('/CreditCalc/index.html')
     expect(parsed.search).toBe('?tab=export')
     expect(readSharedCalculationFromLocation({ hash: parsed.hash } as Location)?.startsWith('v1.')).toBe(true)
+  })
+
+  it('позволяет переносить расчёт чистым кодом параметров без полной ссылки', async () => {
+    const code = await encodeSharedCalculation(snapshot())
+    expect(code.startsWith('v1.')).toBe(true)
+    expect(normalizeSharedCalculationPayload(code)).toBe(code)
+    expect(normalizeSharedCalculationPayload(`calc=${code}`)).toBe(code)
+    expect((await decodeSharedCalculation(normalizeSharedCalculationPayload(code))).config.principal).toBe(5_917_734)
+    const url = `https://example.test/#calc=${code}`
+    expect(looksLikeSharedCalculationUrl(url)).toBe(true)
+    expect(normalizeSharedCalculationPayload(url)).toBe(code)
+    expect(() => normalizeSharedCalculationPayload('https://example.test/')).toThrow('не найден')
   })
 
   it('старый JSON-импорт продолжает работать', () => {

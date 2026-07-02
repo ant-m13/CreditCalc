@@ -14,7 +14,7 @@ import { OnboardingModal } from './components/OnboardingModal'
 import { EarlyModal } from './components/EarlyModal'
 import { GraceModal } from './components/GraceModal'
 import { configureFormatters, money, shortDate } from './formatters'
-import { buildShareUrl, createLoanSnapshot, decodeSharedCalculation, readSharedCalculationFromLocation } from './shareCalculation'
+import { buildShareUrl, createLoanSnapshot, decodeSharedCalculation, encodeSharedCalculation, looksLikeSharedCalculationUrl, normalizeSharedCalculationPayload, readSharedCalculationFromLocation } from './shareCalculation'
 import { expandRepaymentRules } from './repaymentRules'
 import { APP_VERSION } from './version'
 import { graceTypeName } from './labels'
@@ -198,6 +198,14 @@ function App() {
     }
   }
 
+  const createParameterCode = async () => {
+    const loan = store.loans.find(item => item.id === exportLoanId) ?? store.loans.find(item => item.id === store.activeLoanId) ?? store.loans[0]
+    return encodeSharedCalculation(createLoanSnapshot(loanToBackupData(loan)))
+  }
+
+  const decodeParameterCode = (code: string) =>
+    decodeSharedCalculation(normalizeSharedCalculationPayload(code))
+
   const replaceActiveWithData = (data: LoanBackupData, source = 'данных') => {
     try {
       store.replaceData(data)
@@ -261,7 +269,7 @@ function App() {
           {section === 'grace' && <GraceList items={store.gracePeriods} remove={store.removeGrace} open={() => setShowGrace(true)}/>}
           {section === 'schedule' && selected && base && <Schedule schedule={selected.schedule} baseSchedule={base.schedule} repayments={allRepayments} rows={rows} setRows={setRows} more={() => setRows(r => r + 24)}/>}
           {section === 'schedule' && (!selected || !base) && <section className="panel list-panel"><div className="panel-head"><div><h3>График недоступен</h3><p>Сначала исправьте ошибки в параметрах расчёта.</p></div></div></section>}
-          {section === 'export' && <ExportPanel loans={store.loans} exportLoanId={exportLoanId} setExportLoanId={setExportLoanId} download={download} createFromJson={(data, fileName) => createLoanFromData(data, `файла «${fileName}»`)} replaceFromJson={(data, fileName) => replaceActiveWithData(data, `файла «${fileName}»`)} copyShareLink={copyShareLink} status={importStatus}/>}
+          {section === 'export' && <ExportPanel loans={store.loans} exportLoanId={exportLoanId} setExportLoanId={setExportLoanId} download={download} createImported={createLoanFromData} replaceImported={replaceActiveWithData} copyShareLink={copyShareLink} createParameterCode={createParameterCode} decodeParameterCode={decodeParameterCode} looksLikeParameterLink={looksLikeSharedCalculationUrl} status={importStatus}/>}
           {section === 'changes' && <Changelog/>}
         </Suspense>
       </div>

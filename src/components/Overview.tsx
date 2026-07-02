@@ -15,7 +15,7 @@ function ProgressBar({ title, value }: { title: string; value: number }) {
 
 export function Overview({ config, repayments, gracePeriods, comparison, selected, chartData, onSelect, onOpen }: { config: LoanConfig; repayments: EarlyRepayment[]; gracePeriods: GracePeriod[]; comparison: ComparisonResult; selected: ScenarioResult; chartData: { date: string; base: number; balance: number | null }[]; onSelect: (id: string) => void; onOpen: () => void }) {
   const base = comparison.scenarios[0]
-  const earlyTotal = repayments.reduce((sum, item) => sum + item.amount, 0)
+  const earlyTotal = selected.schedule.reduce((sum, row) => sum + row.earlyPayment, 0)
   const today = todayISO()
   const debt = calculateDebtAtDate(config, selected.schedule, gracePeriods, today)
   const nextPayment = selected.schedule.find(row => row.date >= today && rowCashFlow(row) > 0)
