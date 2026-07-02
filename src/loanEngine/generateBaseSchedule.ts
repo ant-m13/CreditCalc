@@ -50,6 +50,7 @@ export function generateBaseSchedule(config: LoanConfig, options: Options = {}):
   let deferredInterest = new Decimal(0)
   let repaymentIndex = 0
   let rowNumber = 1
+  let hasTermReduction = false
   const schedule: PaymentScheduleItem[] = [{
     number: 1,
     date: config.issueDate,
@@ -149,10 +150,15 @@ export function generateBaseSchedule(config: LoanConfig, options: Options = {}):
       balance = Decimal.max(0, balance.minus(paidPrincipal))
       const fullyClosed = balance.isZero() && interestLeft.lte(0)
       if (strategy === 'reducePayment' && balance.gt(0) && config.paymentType === 'annuity') {
-        payment = calculateAnnuityPayment(balance, config.annualRate, Math.max(1, remainingPeriods), periodsPerYear(config.frequency), config.rounding)
+        payment = hasTermReduction
+          ? money(Decimal.max(0, payment.minus(calculateAnnuityPayment(paidPrincipal, config.annualRate, Math.max(1, remainingPeriods), periodsPerYear(config.frequency), config.rounding))), config.rounding)
+          : calculateAnnuityPayment(balance, config.annualRate, Math.max(1, remainingPeriods), periodsPerYear(config.frequency), config.rounding)
       } else if (strategy === 'reducePayment' && balance.gt(0)) {
-        principalPerPeriod = money(balance.div(Math.max(1, remainingPeriods)), config.rounding)
+        principalPerPeriod = hasTermReduction
+          ? money(Decimal.max(0, principalPerPeriod.minus(money(paidPrincipal.div(Math.max(1, remainingPeriods)), config.rounding))), config.rounding)
+          : money(balance.div(Math.max(1, remainingPeriods)), config.rounding)
       }
+      if (strategy === 'reduceTerm' && paidPrincipal.gt(0)) hasTermReduction = true
       return {
         paidInterest,
         paidPrincipal,

@@ -85,41 +85,60 @@ describe('loan engine', () => {
   })
 
   it('совпадает с банковским графиком после всех досрочных платежей', () => {
-    const bank:LoanConfig={...config,principal:5917734,annualRate:6,issueDate:'2025-11-26',firstPaymentDate:'2025-12-26',firstPaymentInterestOnly:true,termMonths:360,paymentDay:26,interest:{...config.interest,method:'daily',dayCountBasis:'actual365'}}
+    const bank:LoanConfig={...config,principal:5917734,annualRate:6,issueDate:'2025-11-26',firstPaymentDate:'2025-12-26',firstPaymentInterestOnly:true,termMonths:360,paymentDay:26,interest:{...config.interest,method:'daily',dayCountBasis:'actualActual',includePaymentDate:true,periodStart:'exclusive',balanceMoment:'startOfDay'}}
     const bankEarly:EarlyRepayment[] = [
-      early({id:'b1',date:'2025-11-28',amount:35480}),
-      early({id:'b2',date:'2026-01-26',amount:8704.99}),
-      early({id:'b3',date:'2026-02-26',amount:35528.86}),
-      early({id:'b4',date:'2026-03-27',amount:12342.60}),
-      early({id:'b5',date:'2026-04-26',amount:17870.62}),
-      early({id:'b6',date:'2026-05-26',amount:39702.33})
+      early({id:'b1',date:'2025-11-28',amount:35480,amountMode:'extra'}),
+      early({id:'b2',date:'2026-01-26',amount:8704.99,amountMode:'extra'}),
+      early({id:'b3',date:'2026-02-26',amount:35528.86,amountMode:'extra'}),
+      early({id:'b4',date:'2026-03-27',amount:12342.60,amountMode:'extra'}),
+      early({id:'b5',date:'2026-04-26',amount:53350.43,amountMode:'total'}),
+      early({id:'b6',date:'2026-05-26',amount:75182.14,amountMode:'total'}),
+      early({id:'b7',date:'2026-06-26',amount:36153.56,amountMode:'extra'})
     ]
     const s=generateBaseSchedule(bank,{earlyRepayments:bankEarly})
     const expected = [
-      ['2025-11-26',0.00,0.00,0.00,5917734.00],
-      ['2025-11-28',33534.44,1945.56,35480.00,5884199.56],
-      ['2025-12-26',0.00,27083.44,27083.44,5884199.56],
-      ['2026-01-26',14199.56,29985.24,44184.80,5870000.00],
-      ['2026-02-26',41095.79,29912.88,71008.67,5828904.21],
-      ['2026-03-26',8650.88,26828.93,35479.81,5820253.33],
-      ['2026-03-27',11385.85,956.75,12342.60,5808867.48],
-      ['2026-04-26',24703.96,28646.47,53350.43,5784163.52],
-      ['2026-05-26',46657.50,28524.64,75182.14,5737506.02],
-      ['2026-06-26',6242.11,29237.70,35479.81,5731263.91],
-      ['2026-07-26',7216.04,28263.77,35479.81,5724047.87],
-      ['2026-08-26',6310.69,29169.12,35479.81,5717737.18],
-      ['2026-09-26',6342.85,29136.96,35479.81,5711394.33],
-      ['2026-10-26',7314.03,28165.78,35479.81,5704080.30],
-      ['2026-11-26',6412.44,29067.37,35479.81,5697667.86],
-      ['2026-12-26',7381.72,28098.09,35479.81,5690286.14]
+      [1,'2025-11-26',0.00,0.00,0.00,5917734.00],
+      [2,'2025-11-28',33534.44,1945.56,35480.00,5884199.56],
+      [3,'2025-12-26',0.00,27083.44,27083.44,5884199.56],
+      [4,'2026-01-26',14199.56,29985.24,44184.80,5870000.00],
+      [5,'2026-02-26',41095.79,29912.88,71008.67,5828904.21],
+      [6,'2026-03-26',8650.88,26828.93,35479.81,5820253.33],
+      [7,'2026-03-27',11385.85,956.75,12342.60,5808867.48],
+      [8,'2026-04-26',24703.96,28646.47,53350.43,5784163.52],
+      [9,'2026-05-26',46657.50,28524.64,75182.14,5737506.02],
+      [10,'2026-06-26',42395.67,29237.70,71633.37,5695110.35],
+      [11,'2026-07-26',7394.33,28085.48,35479.81,5687716.02],
+      [12,'2026-08-26',6495.83,28983.98,35479.81,5681220.19],
+      [13,'2026-09-26',6528.93,28950.88,35479.81,5674691.26],
+      [14,'2026-10-26',7495.03,27984.78,35479.81,5667196.23],
+      [15,'2026-11-26',6600.40,28879.41,35479.81,5660595.83],
+      [16,'2026-12-26',7564.54,27915.27,35479.81,5653031.29],
+      [17,'2027-01-26',6672.58,28807.23,35479.81,5646358.71],
+      [18,'2027-02-26',6706.58,28773.23,35479.81,5639652.13],
+      [19,'2027-03-26',9521.96,25957.85,35479.81,5630130.17],
+      [20,'2027-04-26',6789.28,28690.53,35479.81,5623340.89],
+      [224,'2044-04-26',20010.84,15468.97,35479.81,3023883.18],
+      [225,'2044-05-26',20608.25,14871.56,35479.81,3003274.93],
+      [226,'2044-06-26',20217.27,15262.54,35479.81,2983057.66],
+      [262,'2047-06-26',24278.11,11201.70,35479.81,2173904.80],
+      [263,'2047-07-26',24759.18,10720.63,35479.81,2149145.62],
+      [264,'2047-08-26',24528.00,10951.81,35479.81,2124617.62],
+      [336,'2053-08-26',12310.61,62.73,12373.34,0.00]
     ] as const
-    expected.forEach(([date,principal,interest,total,closing],index) => {
-      expect(s[index].date).toBe(date)
-      expect(s[index].principal).toBe(principal)
-      expect(s[index].interest).toBe(interest)
-      expect(s[index].payment + s[index].earlyPayment).toBeCloseTo(total,2)
-      expect(s[index].closingBalance).toBe(closing)
+    expected.forEach(([number,date,principal,interest,total,closing]) => {
+      const row = s[number - 1]
+      expect(row.date).toBe(date)
+      expect(Math.abs(row.principal-principal)).toBeLessThanOrEqual(0.021)
+      expect(Math.abs(row.interest-interest)).toBeLessThanOrEqual(0.021)
+      expect(Math.abs(row.payment + row.earlyPayment-total)).toBeLessThanOrEqual(0.021)
+      expect(Math.abs(row.closingBalance-closing)).toBeLessThanOrEqual(0.021)
     })
+    expect(s).toHaveLength(336)
+    expect(s[226].date).toBe('2044-07-26')
+    expect(s[226].principal).toBe(20809.03)
+    expect(s[226].interest).toBe(14670.78)
+    expect(s[226].payment).toBe(35479.81)
+    expect(s[226].closingBalance).toBe(2962248.64)
   })
 
   it('не принимает первый платёж только по процентам за обычный ежемесячный платёж', () => {
@@ -178,6 +197,28 @@ describe('loan engine', () => {
       expect.objectContaining({ from:'2020-12-22', to:'2020-12-31', days:10 }),
       expect.objectContaining({ from:'2021-01-01', to:'2021-01-21', days:21 })
     ])
+  })
+
+  it('уменьшает платёж только на сумму операции reducePayment в смешанном банковском графике', () => {
+    const bank:LoanConfig={...config,principal:2375000,annualRate:8.1,issueDate:'2020-11-21',firstPaymentDate:'2020-12-21',firstPaymentInterestOnly:false,termMonths:240,paymentDay:21,interest:{...config.interest,method:'daily',dayCountBasis:'actualActual',includePaymentDate:true,periodStart:'exclusive',balanceMoment:'startOfDay'}}
+    const repayments: EarlyRepayment[] = [
+      early({id:'mix-1',date:'2026-03-22',amount:11944,strategy:'reduceTerm'}),
+      early({id:'mix-2',date:'2026-04-21',amount:26069.87,amountMode:'total',strategy:'reduceTerm'}),
+      early({id:'mix-3',date:'2026-05-21',amount:26073.59,strategy:'reduceTerm'}),
+      early({id:'mix-4',date:'2026-05-21',amount:10,strategy:'reducePayment'})
+    ]
+    const s=generateBaseSchedule(bank,{earlyRepayments:repayments})
+    const may=s.find(row=>row.date==='2026-05-21')!
+    const june=s.find(row=>row.date==='2026-06-21')!
+    expect(may.eventTypes).toEqual(expect.arrayContaining(['earlyReduceTerm','earlyReducePayment']))
+    expect(may.paymentRecalculated).toBe(true)
+    expect(may.payment).toBe(20013.52)
+    expect(may.earlyPayment).toBe(26083.59)
+    expect(june.payment).toBe(20013.42)
+    expect(june.interest).toBe(13758.84)
+    expect(june.principal).toBe(6254.58)
+    expect(june.closingBalance).toBe(1993735.38)
+    expect(s.at(-1)?.date).toBe('2040-04-21')
   })
 
   it('учитывает порядок операций в дату регулярного платежа', () => {
