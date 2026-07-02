@@ -79,6 +79,7 @@ const frequencies = ['monthly', 'biweekly', 'quarterly'] as const
 const roundingModes = ['kopecks', 'rubles', 'bank'] as const
 const interestMethods = ['annuity', 'daily'] as const
 const dayCountBases = ['365', '366', '360', 'actual365', 'actualActual'] as const
+const periodStarts = ['inclusive', 'exclusive'] as const
 const balanceMoments = ['startOfDay', 'endOfDay'] as const
 const repaymentStrategies = ['reduceTerm', 'reducePayment', 'full', 'custom'] as const
 const repaymentSources = ['own', 'subsidy', 'insurance', 'other'] as const
@@ -153,6 +154,7 @@ const normalizeConfig = (config: Partial<LoanConfig> | undefined): LoanConfig =>
       method: oneOf(interest.method, interestMethods, defaultConfig.interest.method),
       dayCountBasis: oneOf(interest.dayCountBasis, dayCountBases, defaultConfig.interest.dayCountBasis),
       includePaymentDate: typeof interest.includePaymentDate === 'boolean' ? interest.includePaymentDate : defaultConfig.interest.includePaymentDate,
+      periodStart: oneOf(interest.periodStart, periodStarts, defaultConfig.interest.periodStart),
       balanceMoment: oneOf(interest.balanceMoment, balanceMoments, defaultConfig.interest.balanceMoment)
     }
   }

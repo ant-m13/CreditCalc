@@ -22,7 +22,7 @@ const config: LoanConfig = {
   oneTimeFee: 1000,
   monthlyFee: 50,
   earlyRepaymentFeePercent: 0.1,
-  interest: { method: 'daily', dayCountBasis: 'actualActual', includePaymentDate: false, balanceMoment: 'startOfDay' }
+  interest: { method: 'daily', dayCountBasis: 'actualActual', includePaymentDate: false, periodStart: 'inclusive', balanceMoment: 'startOfDay' }
 }
 
 const repayments: EarlyRepayment[] = [

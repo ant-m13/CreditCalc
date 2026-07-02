@@ -15,7 +15,7 @@ export interface DebtAtDate {
 }
 
 const fallbackAccrualStart = (date: string, config: LoanConfig) =>
-  config.interest.includePaymentDate && config.interest.balanceMoment === 'startOfDay'
+  config.interest.includePaymentDate && config.interest.balanceMoment === 'startOfDay' && config.interest.periodStart !== 'exclusive'
     ? iso(addDays(parseISO(date), 1))
     : date
 

@@ -91,6 +91,9 @@ export function generateBaseSchedule(config: LoanConfig, options: Options = {}):
     appendUnique(labels, label)
     appendUnique(types, type)
   }
+  const excludeStartDate = () => config.interest.periodStart === 'exclusive'
+  const nextAccrualStart = (date: string, includedEndDate: boolean) =>
+    includedEndDate && !excludeStartDate() ? iso(addDays(parseISO(date), 1)) : date
   const eventInfo = (strategy: RepaymentStrategy, fullyClosed: boolean) => {
     if (strategy === 'reduceTerm') return { label: 'Пересчёт · сокращение срока', type: 'earlyReduceTerm' as const }
     if (strategy === 'reducePayment') return { label: 'Пересчёт · уменьшение платежа', type: 'earlyReducePayment' as const }
@@ -116,7 +119,7 @@ export function generateBaseSchedule(config: LoanConfig, options: Options = {}):
       regularPeriodDays: periodCalendarDays,
       segmentStart: from,
       segmentEnd: to,
-      segmentDays: periodDays(from, to, includeTo),
+      segmentDays: periodDays(from, to, includeTo, excludeStartDate()),
       days: segments.reduce((sum, segment) => sum + segment.days, 0),
       dayCountBasis: config.interest.dayCountBasis,
       interestBalance: num(segments[0]?.balance ?? currentBalance, config.rounding),
@@ -203,7 +206,7 @@ export function generateBaseSchedule(config: LoanConfig, options: Options = {}):
       cumulativeInterest = cumulativeInterest.add(chargedInterest)
       const cashFlowTotal = earlyTotal.add(fees)
       pushScheduleRow({
-        number: ++rowNumber, date: eventDate, days: periodDays(accrualStart, eventDate, includeEventDay),
+        number: ++rowNumber, date: eventDate, days: periodDays(accrualStart, eventDate, includeEventDay, excludeStartDate()),
         openingBalance: num(opening, config.rounding), payment: 0, interest: num(chargedInterest, config.rounding), principal: num(earlyPrincipal, config.rounding),
         earlyPayment: num(earlyTotal, config.rounding), closingBalance: num(balance, config.rounding),
         interestAccrued: num(chargedInterest, config.rounding), interestPaid: num(earlyInterest, config.rounding), principalPaid: num(earlyPrincipal, config.rounding),
@@ -213,14 +216,14 @@ export function generateBaseSchedule(config: LoanConfig, options: Options = {}):
         eventTypes, paymentRecalculated, fullyClosedByEarlyRepayment, isRegularPayment: false, isGracePayment: false,
         audit: audit(accrualStart, eventDate, includeEventDay, opening, 'Досрочное погашение между регулярными платежами', interestSegments)
       })
-      accrualStart = includeEventDay ? iso(addDays(parseISO(eventDate), 1)) : eventDate
+      accrualStart = nextAccrualStart(eventDate, includeEventDay)
     }
 
     if (balance.lte(0) && deferredInterest.lte(0)) break
 
     const opening = balance
     const rowStart = accrualStart
-    const days = periodDays(rowStart, paymentDate, config.interest.includePaymentDate && config.interest.balanceMoment === 'startOfDay')
+    const days = periodDays(rowStart, paymentDate, config.interest.includePaymentDate && config.interest.balanceMoment === 'startOfDay', excludeStartDate())
     const grace = activeGrace(paymentDate, gracePeriods)
     const includeFinalDay = config.interest.includePaymentDate && config.interest.balanceMoment === 'startOfDay'
     const interestSegments = accrueSegments(rowStart, paymentDate, includeFinalDay, balance, 'Начисление до регулярного платежа')
@@ -330,14 +333,14 @@ export function generateBaseSchedule(config: LoanConfig, options: Options = {}):
     if (interestDue.gt(0)) deferredInterest = deferredInterest.add(interestDue)
 
     if (config.interest.includePaymentDate && config.interest.balanceMoment === 'endOfDay' && balance.gt(0)) {
-      const endDaySegments = accrueSegments(paymentDate, iso(addDays(parseISO(paymentDate), 1)), false, balance, 'Начисление на конец дня')
+      const endDaySegments = accrueInterestSegmentsRaw({ ...config, interest: { ...config.interest, periodStart: 'inclusive' } }, balance, paymentDate, iso(addDays(parseISO(paymentDate), 1)), false, periodCalendarDays, gracePeriods, 'Начисление на конец дня')
       const endDayInterest = roundRawInterest(endDaySegments)
       chargedInterest = chargedInterest.add(endDayInterest)
       auditInterestSegments = [...auditInterestSegments, ...endDaySegments]
       deferredInterest = deferredInterest.add(endDayInterest)
-      accrualStart = iso(addDays(parseISO(paymentDate), 1))
+      accrualStart = nextAccrualStart(paymentDate, true)
     } else {
-      accrualStart = includeFinalDay ? iso(addDays(parseISO(paymentDate), 1)) : paymentDate
+      accrualStart = nextAccrualStart(paymentDate, includeFinalDay)
     }
 
     if (balance.gt(0) && balance.lte(config.closeThreshold)) {

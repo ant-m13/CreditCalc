@@ -1,5 +1,5 @@
 import Decimal from 'decimal.js'
-import { addDays, parseISO } from 'date-fns'
+import { addDays, differenceInCalendarDays, parseISO } from 'date-fns'
 import { calculateInterest, periodDays } from './calculateInterest'
 import { iso } from './dates'
 import type { GracePeriod, LoanConfig } from './types'
@@ -30,12 +30,27 @@ export function accrueInterestSegmentsRaw(
   gracePeriods: GracePeriod[] = [],
   reason = 'Начисление процентов'
 ) {
-  const accrueRawSegment = (segmentFrom: string, segmentTo: string, segmentIncludeTo: boolean) => {
+  const excludeStartDate = config.interest.periodStart === 'exclusive'
+  const includedDates = () => {
+    const dates: string[] = []
+    const calendarDays = differenceInCalendarDays(parseISO(to), parseISO(from))
+    const startOffset = excludeStartDate ? 1 : 0
+    const endOffset = calendarDays + (includeTo ? 1 : 0)
+    for (let day = startOffset; day < endOffset; day += 1) {
+      dates.push(iso(addDays(parseISO(from), day)))
+    }
+    return dates
+  }
+  const accrueRawSegment = (segmentFrom: string, segmentTo: string, segmentIncludeTo: boolean, segmentExcludeStartDate: boolean) => {
     if (segmentTo < segmentFrom || currentBalance.lte(0)) return new Decimal(0)
     if (config.interest.method === 'daily') {
-      return calculateInterest(currentBalance, config.annualRate, segmentFrom, segmentTo, { ...config.interest, includePaymentDate: segmentIncludeTo })
+      return calculateInterest(currentBalance, config.annualRate, segmentFrom, segmentTo, {
+        ...config.interest,
+        includePaymentDate: segmentIncludeTo,
+        periodStart: segmentExcludeStartDate ? 'exclusive' : 'inclusive'
+      })
     }
-    const segmentDays = periodDays(segmentFrom, segmentTo, segmentIncludeTo)
+    const segmentDays = periodDays(segmentFrom, segmentTo, segmentIncludeTo, segmentExcludeStartDate)
     return currentBalance
       .mul(config.annualRate)
       .div(100)
@@ -43,40 +58,45 @@ export function accrueInterestSegmentsRaw(
       .mul(segmentDays)
       .div(Math.max(1, periodCalendarDays))
   }
-  const segment = (segmentFrom: string, segmentTo: string, segmentIncludeTo: boolean, shouldAccrue: boolean, segmentReason: string) => {
-    const segmentDays = periodDays(segmentFrom, segmentTo, segmentIncludeTo)
+  const segment = (segmentFrom: string, segmentTo: string, segmentIncludeTo: boolean, shouldAccrue: boolean, segmentReason: string, segmentExcludeStartDate = false) => {
+    const segmentDays = periodDays(segmentFrom, segmentTo, segmentIncludeTo, segmentExcludeStartDate)
     return {
       from: segmentFrom,
       to: segmentTo,
       days: segmentDays,
       balance: currentBalance,
-      rawInterest: shouldAccrue ? accrueRawSegment(segmentFrom, segmentTo, segmentIncludeTo) : new Decimal(0),
+      rawInterest: shouldAccrue ? accrueRawSegment(segmentFrom, segmentTo, segmentIncludeTo, segmentExcludeStartDate) : new Decimal(0),
       reason: segmentReason
     }
   }
 
-  const days = periodDays(from, to, includeTo)
+  const dates = includedDates()
+  const days = dates.length
   const noAccrualGracePeriods = gracePeriods.filter(period => period.accrueInterest === false)
   if (days === 0) return []
-  if (noAccrualGracePeriods.length === 0) return [segment(from, to, includeTo, true, reason)]
 
   let segmentStart: string | null = null
   let segmentAccrues = false
-  let segmentEnd = from
+  let segmentReason = reason
+  let segmentYear = ''
+  let segmentEnd = dates[0]
   const segments: ReturnType<typeof segment>[] = []
   const closeSegment = () => {
     if (!segmentStart) return
-    segments.push(segment(segmentStart, segmentEnd, true, segmentAccrues, segmentAccrues ? reason : 'Беспроцентная льгота'))
+    segments.push(segment(segmentStart, segmentEnd, true, segmentAccrues, segmentReason))
     segmentStart = null
   }
 
-  for (let day = 0; day < days; day += 1) {
-    const currentDate = iso(addDays(parseISO(from), day))
+  for (const currentDate of dates) {
     const shouldAccrue = !noAccrualGracePeriods.some(period => period.startDate <= currentDate && currentDate <= period.endDate)
-    if (!segmentStart || segmentAccrues !== shouldAccrue) {
+    const currentReason = shouldAccrue ? reason : 'Беспроцентная льгота'
+    const currentYear = shouldAccrue && config.interest.dayCountBasis === 'actualActual' ? currentDate.slice(0, 4) : ''
+    if (!segmentStart || segmentAccrues !== shouldAccrue || segmentReason !== currentReason || segmentYear !== currentYear) {
       closeSegment()
       if (!segmentStart) segmentStart = currentDate
       segmentAccrues = shouldAccrue
+      segmentReason = currentReason
+      segmentYear = currentYear
     }
     segmentEnd = currentDate
   }

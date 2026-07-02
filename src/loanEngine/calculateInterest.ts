@@ -2,14 +2,15 @@ import Decimal from 'decimal.js'
 import { addDays, differenceInCalendarDays, isLeapYear, parseISO } from 'date-fns'
 import type { InterestConfig } from './types'
 
-export function periodDays(from: string, to: string, includePaymentDate = false) {
-  return Math.max(0, differenceInCalendarDays(parseISO(to), parseISO(from)) + (includePaymentDate ? 1 : 0))
+export function periodDays(from: string, to: string, includePaymentDate = false, excludeStartDate = false) {
+  return Math.max(0, differenceInCalendarDays(parseISO(to), parseISO(from)) + (includePaymentDate ? 1 : 0) - (excludeStartDate ? 1 : 0))
 }
 
 export function calculateInterest(balance: Decimal.Value, annualRate: number, from: string, to: string, config: InterestConfig) {
-  const days = periodDays(from, to, config.includePaymentDate)
+  const excludeStartDate = config.periodStart === 'exclusive'
+  const days = periodDays(from, to, config.includePaymentDate, excludeStartDate)
   if (annualRate === 0 || days === 0) return new Decimal(0)
-  const start = parseISO(from)
+  const start = addDays(parseISO(from), excludeStartDate ? 1 : 0)
   const annualFraction = new Decimal(annualRate).div(100)
   if (config.dayCountBasis === 'actualActual') {
     let result = new Decimal(0)

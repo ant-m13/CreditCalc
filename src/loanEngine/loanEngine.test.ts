@@ -6,7 +6,7 @@ const config: LoanConfig = {
   principal: 3_000_000, annualRate: 12, issueDate: '2024-01-01', firstPaymentDate: '2024-02-15', firstPaymentInterestOnly: false, termMonths: 120,
   paymentDay: 15, paymentType: 'annuity', frequency: 'monthly', currency: 'RUB', rounding: 'kopecks', closeThreshold: 300,
   oneTimeFee: 0, monthlyFee: 0, earlyRepaymentFeePercent: 0,
-  interest: { method: 'annuity', dayCountBasis: 'actualActual', includePaymentDate: false, balanceMoment: 'startOfDay' }
+  interest: { method: 'annuity', dayCountBasis: 'actualActual', includePaymentDate: false, periodStart: 'inclusive', balanceMoment: 'startOfDay' }
 }
 const early = (patch: Partial<EarlyRepayment> = {}): EarlyRepayment => ({ id: 'e1', date: '2024-08-15', amount: 300_000, amountMode: 'extra', strategy: 'reduceTerm', source: 'own', sameDayOrder: 'regularFirst', interestFirst: true, ...patch })
 
@@ -142,6 +142,42 @@ describe('loan engine', () => {
     expect(interestOnlyFirst.payment).toBe(15768.44)
     expect(interestOnlyFirst.principal).toBe(0)
     expect(interestOnlyFirst.eventTypes).toContain('firstInterestOnly')
+  })
+
+  it('совпадает с банковским графиком при начислении со следующего дня по дату платежа', () => {
+    const bank:LoanConfig={...config,principal:2375000,annualRate:8.1,issueDate:'2020-11-21',firstPaymentDate:'2020-12-21',firstPaymentInterestOnly:false,termMonths:240,paymentDay:21,interest:{...config.interest,method:'daily',dayCountBasis:'actualActual',includePaymentDate:true,periodStart:'exclusive',balanceMoment:'startOfDay'}}
+    const expected = [
+      ['2020-11-21',0,0,0,2375000],
+      ['2020-12-21',4245.08,15768.44,20013.52,2370754.92],
+      ['2021-01-21',3718.40,16295.12,20013.52,2367036.52],
+      ['2021-02-21',3729.60,16283.92,20013.52,2363306.92],
+      ['2021-03-21',5328.65,14684.87,20013.52,2357978.27],
+      ['2021-04-21',3791.92,16221.60,20013.52,2354186.35],
+      ['2021-05-21',4340.44,15673.08,20013.52,2349845.91],
+      ['2021-06-21',3847.87,16165.65,20013.52,2345998.04],
+      ['2021-07-21',4394.96,15618.56,20013.52,2341603.08],
+      ['2021-08-21',3904.57,16108.95,20013.52,2337698.51],
+      ['2021-09-21',3931.44,16082.08,20013.52,2333767.07],
+      ['2021-10-21',4476.38,15537.14,20013.52,2329290.69],
+      ['2021-11-21',3989.28,16024.24,20013.52,2325301.41],
+      ['2021-12-21',4532.74,15480.78,20013.52,2320768.67],
+      ['2022-01-21',4047.91,15965.61,20013.52,2316720.76],
+      ['2022-02-21',4075.75,15937.77,20013.52,2312645.01]
+    ] as const
+    const schedule=generateBaseSchedule(bank)
+    expected.forEach(([date,principal,interest,total,closing],index) => {
+      const row=schedule[index]
+      expect(row.date).toBe(date)
+      expect(Math.abs(row.principal-principal)).toBeLessThanOrEqual(0.021)
+      expect(Math.abs(row.interest-interest)).toBeLessThanOrEqual(0.021)
+      expect(Math.abs(row.payment-total)).toBeLessThanOrEqual(0.001)
+      expect(Math.abs(row.closingBalance-closing)).toBeLessThanOrEqual(0.021)
+    })
+    expect(schedule[1].audit?.interestSegments[0]).toMatchObject({ from:'2020-11-22', to:'2020-12-21', days:30 })
+    expect(schedule[2].audit?.interestSegments).toEqual([
+      expect.objectContaining({ from:'2020-12-22', to:'2020-12-31', days:10 }),
+      expect.objectContaining({ from:'2021-01-01', to:'2021-01-21', days:21 })
+    ])
   })
 
   it('учитывает порядок операций в дату регулярного платежа', () => {

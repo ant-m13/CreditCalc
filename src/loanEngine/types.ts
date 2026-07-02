@@ -33,6 +33,7 @@ export interface InterestConfig {
   method: 'annuity' | 'daily'
   dayCountBasis: DayCountBasis
   includePaymentDate: boolean
+  periodStart: 'inclusive' | 'exclusive'
   balanceMoment: 'startOfDay' | 'endOfDay'
 }
 
