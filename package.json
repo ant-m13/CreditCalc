@@ -25,10 +25,10 @@
   "dependencies": {
     "date-fns": "4.4.0",
     "decimal.js": "10.6.0",
-    "lucide-react": "1.21.0",
+    "lucide-react": "1.23.0",
     "react": "19.2.7",
     "react-dom": "19.2.7",
-    "recharts": "3.8.1",
+    "recharts": "3.9.1",
     "zustand": "5.0.14"
   },
   "devDependencies": {
