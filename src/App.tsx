@@ -42,13 +42,11 @@ function App() {
   const [showGrace, setShowGrace] = useState(false)
   const [mobileNav, setMobileNav] = useState(false)
   const [rows, setRows] = useState(18)
-  const [exportLoanId, setExportLoanId] = useState(store.activeLoanId)
   const [importStatus, setImportStatus] = useState<{ kind: 'success' | 'error'; text: string } | null>(null)
   const [sharedCalculation, setSharedCalculation] = useState<LoanBackupData | null>(null)
   const [showWhatsNew, setShowWhatsNew] = useState(false)
   const [showOnboarding, setShowOnboarding] = useState(false)
   const [lastLightTheme, setLastLightTheme] = useState<'emerald' | 'ocean' | 'violet' | 'graphite' | 'warm'>('emerald')
-  useEffect(() => { if (!store.loans.some(loan => loan.id === exportLoanId)) setExportLoanId(store.activeLoanId) }, [store.loans, store.activeLoanId, exportLoanId])
 
   const calculationConfig = useDeferredValue(store.config)
   const calculationRepayments = useDeferredValue(store.repayments)
@@ -96,8 +94,10 @@ function App() {
     return [...dates].sort().map(date => ({ date: format(parseISO(date), 'MMM yy', { locale: ru }), base: balanceAt(base.schedule, date), balance: date <= selectedClosingDate ? balanceAt(selected.schedule, date) : null }))
   }, [selected, base])
 
-  const download = (kind: 'csv' | 'json' | 'xls', loanId = exportLoanId) => {
-    const loan = store.loans.find(item => item.id === loanId) ?? store.loans.find(item => item.id === store.activeLoanId) ?? store.loans[0]
+  const activeLoan = () => store.loans.find(item => item.id === store.activeLoanId) ?? store.loans[0]
+
+  const download = (kind: 'csv' | 'json' | 'xls') => {
+    const loan = activeLoan()
     let body = '', type = '', ext = kind
     if (kind === 'json') { body = JSON.stringify({ ...createLoanSnapshot(loanToBackupData(loan)), exportedAt: new Date().toISOString() }, null, 2); type = 'application/json' }
     else {
@@ -137,7 +137,7 @@ function App() {
 
   const copyShareLink = async () => {
     try {
-      const loan = store.loans.find(item => item.id === exportLoanId) ?? store.loans.find(item => item.id === store.activeLoanId) ?? store.loans[0]
+      const loan = activeLoan()
       const snapshot = createLoanSnapshot(loanToBackupData(loan))
       const url = await buildShareUrl(snapshot, window.location.href)
       await copyText(url)
@@ -199,7 +199,7 @@ function App() {
   }
 
   const createParameterCode = async () => {
-    const loan = store.loans.find(item => item.id === exportLoanId) ?? store.loans.find(item => item.id === store.activeLoanId) ?? store.loans[0]
+    const loan = activeLoan()
     return encodeSharedCalculation(createLoanSnapshot(loanToBackupData(loan)))
   }
 
@@ -269,7 +269,7 @@ function App() {
           {section === 'grace' && <GraceList items={store.gracePeriods} remove={store.removeGrace} open={() => setShowGrace(true)}/>}
           {section === 'schedule' && selected && base && <Schedule schedule={selected.schedule} baseSchedule={base.schedule} repayments={allRepayments} rows={rows} setRows={setRows} more={() => setRows(r => r + 24)}/>}
           {section === 'schedule' && (!selected || !base) && <section className="panel list-panel"><div className="panel-head"><div><h3>График недоступен</h3><p>Сначала исправьте ошибки в параметрах расчёта.</p></div></div></section>}
-          {section === 'export' && <ExportPanel loans={store.loans} exportLoanId={exportLoanId} setExportLoanId={setExportLoanId} download={download} createImported={createLoanFromData} replaceImported={replaceActiveWithData} copyShareLink={copyShareLink} createParameterCode={createParameterCode} decodeParameterCode={decodeParameterCode} looksLikeParameterLink={looksLikeSharedCalculationUrl} status={importStatus}/>}
+          {section === 'export' && <ExportPanel download={download} createImported={createLoanFromData} replaceImported={replaceActiveWithData} copyShareLink={copyShareLink} createParameterCode={createParameterCode} decodeParameterCode={decodeParameterCode} looksLikeParameterLink={looksLikeSharedCalculationUrl} status={importStatus}/>}
           {section === 'changes' && <Changelog/>}
         </Suspense>
       </div>

@@ -2,8 +2,10 @@ import { useEffect, useState } from 'react'
 import type React from 'react'
 import { CircleHelp } from 'lucide-react'
 
-export function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
-  return <label className="field"><span>{label}{hint && <span title={hint}><CircleHelp size={13}/></span>}</span>{children}</label>
+export function Field({ label, hint, help, children }: { label: React.ReactNode; hint?: string; help?: string; children: React.ReactNode }) {
+  const helpText = help ?? hint
+  const helpLabel = typeof label === 'string' ? `Что влияет: ${label}` : 'Что влияет'
+  return <label className="field"><span className="field-title">{label}{helpText && <details className="field-help" onClick={event => event.stopPropagation()}><summary aria-label={helpLabel}><CircleHelp size={13}/></summary><p>{helpText}</p></details>}</span>{children}</label>
 }
 
 export function NumberInput({ value, onCommit, ...props }: { value: number; onCommit: (value: number) => void } & Omit<React.InputHTMLAttributes<HTMLInputElement>, 'value' | 'onChange'>) {
