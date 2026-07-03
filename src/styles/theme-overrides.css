@@ -1,0 +1,278 @@
+/* Shared component theme layer. Theme-specific CSS should stay in token values only. */
+
+.app-shell[data-theme] main,
+.app-shell[data-theme] .content{
+  background:var(--theme-page);
+}
+
+.app-shell[data-theme] header,
+.app-shell[data-theme] .panel,
+.app-shell[data-theme] .scenario,
+.app-shell[data-theme] .current-debt,
+.app-shell[data-theme] .modal,
+.app-shell[data-theme] .font-controls{
+  background:var(--theme-panel);
+  border-color:var(--theme-line);
+  color:var(--theme-text);
+}
+
+.app-shell[data-theme] .field input,
+.app-shell[data-theme] .field select,
+.app-shell[data-theme] .parameter-code-area,
+.app-shell[data-theme] .schedule-tools input,
+.app-shell[data-theme] .schedule-filters input,
+.app-shell[data-theme] .schedule-filters select,
+.app-shell[data-theme] .term-control select,
+.app-shell[data-theme] table,
+.app-shell[data-theme] .event,
+.app-shell[data-theme] .progress-item,
+.app-shell[data-theme] .export-grid button,
+.app-shell[data-theme] .toggle-row,
+.app-shell[data-theme] .theme-toggle,
+.app-shell[data-theme] .ghost,
+.app-shell[data-theme] .font-controls div,
+.app-shell[data-theme] .loan-switcher,
+.app-shell[data-theme] .loan-switcher select,
+.app-shell[data-theme] .loan-switcher .icon-btn,
+.app-shell[data-theme] .early-summary div,
+.app-shell[data-theme] .next-payment-grid>div{
+  background:var(--theme-surface)!important;
+  border-color:var(--theme-line)!important;
+  color:var(--theme-text)!important;
+}
+
+.app-shell[data-theme] .table-wrap,
+.app-shell[data-theme] .audit-card,
+.app-shell[data-theme] .share-summary div,
+.app-shell[data-theme] .changelog-entry,
+.app-shell[data-theme] .onboarding-steps div,
+.app-shell[data-theme] .schedule-card,
+.app-shell[data-theme] .schedule-card dl div{
+  background:var(--theme-surface);
+  border-color:var(--theme-line);
+  color:var(--theme-text);
+}
+
+.app-shell[data-theme] th,
+.app-shell[data-theme] .month-row,
+.app-shell[data-theme] .bank-schedule tfoot td{
+  background:var(--theme-surface-2);
+  border-color:var(--theme-line);
+  color:var(--theme-text);
+}
+
+.app-shell[data-theme] td{
+  border-color:var(--theme-line-soft);
+}
+
+.app-shell[data-theme] tbody tr,
+.app-shell[data-theme] .detail-row,
+.app-shell[data-theme] .audit-row td,
+.app-shell[data-theme] .saved-schedule tbody tr,
+.app-shell[data-theme] .saved-schedule tbody tr:nth-child(even),
+.app-shell[data-theme] .schedule-card dl div{
+  background:var(--theme-surface);
+}
+
+.app-shell[data-theme] tbody tr:nth-child(even),
+.app-shell[data-theme] .saved-schedule tbody tr:nth-child(even){
+  background:var(--theme-soft-2);
+}
+
+.app-shell[data-theme] .recalc-row,
+.app-shell[data-theme] .schedule-card.recalc-row,
+.app-shell[data-theme] .generated-event{
+  background:color-mix(in srgb,var(--theme-soft) 58%,var(--theme-surface));
+}
+
+.app-shell[data-theme] .current-debt.main,
+.app-shell[data-theme] .insight,
+.app-shell[data-theme] .parameter-link-confirm,
+.app-shell[data-theme] .modal-tip,
+.app-shell[data-theme] .tip,
+.app-shell[data-theme] .empty>span{
+  background:linear-gradient(125deg,var(--theme-soft-2),var(--theme-soft));
+  border-color:var(--theme-line);
+  color:var(--theme-muted);
+}
+
+.app-shell[data-theme] .current-debt.main b,
+.app-shell[data-theme] .next-payment-panel .panel-head>b,
+.app-shell[data-theme] .mobile-schedule-bar b{
+  color:var(--theme-accent-text);
+}
+
+.app-shell[data-theme] .scenario-icon,
+.app-shell[data-theme] .scenario-icon.c1,
+.app-shell[data-theme] .scenario-icon.c2,
+.app-shell[data-theme] .scenario-title em,
+.app-shell[data-theme] .progress-panel .panel-head b,
+.app-shell[data-theme] .early-counter,
+.app-shell[data-theme] .date-tile,
+.app-shell[data-theme] .event-badge,
+.app-shell[data-theme] .event-badge.rule,
+.app-shell[data-theme] .generated-note,
+.app-shell[data-theme] .saved-period-head b,
+.app-shell[data-theme] .onboarding-steps b,
+.app-shell[data-theme] .audit-toggle{
+  background:var(--theme-soft);
+  border:1px solid var(--theme-line);
+  color:var(--theme-accent-text);
+}
+
+.app-shell[data-theme] .export-icon,
+.app-shell[data-theme] .export-icon.green,
+.app-shell[data-theme] .export-icon.emerald,
+.app-shell[data-theme] .export-icon.violet,
+.app-shell[data-theme] .export-icon.amber,
+.app-shell[data-theme] .export-icon.import,
+.app-shell[data-theme] .export-icon.link{
+  background:var(--theme-soft);
+  border:1px solid var(--theme-line);
+  color:var(--theme-accent-text);
+}
+
+.app-shell[data-theme] .milestone-list span{
+  background:var(--theme-surface);
+  border-color:var(--theme-line);
+  color:var(--theme-muted);
+}
+
+.app-shell[data-theme] .milestone-list .done,
+.app-shell[data-theme] .import-status.success{
+  background:var(--theme-success-bg);
+  border-color:var(--theme-success-line);
+  color:var(--theme-success-text);
+}
+
+.app-shell[data-theme] .saved-schedule tfoot td,
+.app-shell[data-theme] .saved-period-note,
+.app-shell[data-theme] .alert,
+.app-shell[data-theme] .import-status.error{
+  background:var(--theme-warning-bg);
+  border-color:var(--theme-warning-line);
+  color:var(--theme-warning-text);
+}
+
+.app-shell[data-theme] .progress-item i{
+  background:var(--theme-surface-2);
+}
+
+.app-shell[data-theme] .scenario-stats,
+.app-shell[data-theme] .modal-head,
+.app-shell[data-theme] .settings-layout .panel-head,
+.app-shell[data-theme] .audit-card div{
+  border-color:var(--theme-line-soft);
+}
+
+.app-shell[data-theme] .changelog-entry{
+  border-left-color:var(--theme-accent);
+}
+
+.app-shell[data-theme] .eyebrow,
+.app-shell[data-theme] .section-heading .eyebrow,
+.app-shell[data-theme] .modal-head .eyebrow,
+.app-shell[data-theme] .changelog-entry .eyebrow,
+.app-shell[data-theme] .load-more,
+.app-shell[data-theme] .tip svg,
+.app-shell[data-theme] .modal-tip svg{
+  color:var(--theme-accent);
+}
+
+.app-shell[data-theme] .with-suffix i,
+.app-shell[data-theme] .toggle-row span,
+.app-shell[data-theme] .scenario>b small,
+.app-shell[data-theme] .scenario-stats i,
+.app-shell[data-theme] .chart-legend,
+.app-shell[data-theme] .event>div:nth-child(2)>span,
+.app-shell[data-theme] .event>div:nth-child(2)>small,
+.app-shell[data-theme] .empty p,
+.app-shell[data-theme] .panel-head p,
+.app-shell[data-theme] .field>span,
+.app-shell[data-theme] .current-debt span,
+.app-shell[data-theme] .current-debt small,
+.app-shell[data-theme] .progress-item span,
+.app-shell[data-theme] .schedule-filters label>span,
+.app-shell[data-theme] .share-summary dt,
+.app-shell[data-theme] .audit-card dt,
+.app-shell[data-theme] .schedule-card dt,
+.app-shell[data-theme] .schedule-card>div:first-child span,
+.app-shell[data-theme] .changelog-entry ul,
+.app-shell[data-theme] .whats-new-list,
+.app-shell[data-theme] .saved-period-head p,
+.app-shell[data-theme] .share-warning,
+.app-shell[data-theme] .onboarding-steps span,
+.app-shell[data-theme] .accent-picker span,
+.app-shell[data-theme] .loan-switcher span,
+.app-shell[data-theme] .font-controls>span,
+.app-shell[data-theme] .font-controls em,
+.app-shell[data-theme] .next-payment-grid span,
+.app-shell[data-theme] .next-payment-grid small{
+  color:var(--theme-muted);
+}
+
+.app-shell[data-theme] .scenario-stats strong,
+.app-shell[data-theme] .scenario-title,
+.app-shell[data-theme] .event>div:nth-child(2)>b,
+.app-shell[data-theme] .toggle-row b,
+.app-shell[data-theme] .share-summary dd,
+.app-shell[data-theme] .changelog-entry h4,
+.app-shell[data-theme] .audit-card>b,
+.app-shell[data-theme] .audit-card dd,
+.app-shell[data-theme] .schedule-card dd,
+.app-shell[data-theme] .schedule-card>div:first-child b,
+.app-shell[data-theme] .early-summary b,
+.app-shell[data-theme] .next-payment-grid b{
+  color:var(--theme-text);
+}
+
+.app-shell[data-theme] .primary{
+  background:var(--theme-accent);
+  color:var(--theme-accent-contrast);
+  box-shadow:0 5px 14px color-mix(in srgb,var(--theme-accent) 22%,transparent);
+}
+
+.app-shell[data-theme] .primary:hover,
+.app-shell[data-theme] .theme-toggle:hover{
+  background:color-mix(in srgb,var(--theme-accent) 86%,var(--theme-text));
+  color:var(--theme-accent-contrast);
+}
+
+.app-shell[data-theme] .date-tile b,
+.app-shell[data-theme] .date-tile span{
+  color:inherit;
+}
+
+.app-shell[data-theme] .audit-toggle:hover,
+.app-shell[data-theme] .danger:hover{
+  background:var(--theme-surface-2);
+}
+
+.app-shell[data-theme] .field-help summary{
+  background:var(--theme-soft);
+  color:var(--theme-accent-text);
+}
+
+.app-shell[data-theme] .field-help[open] summary{
+  background:var(--theme-accent);
+  color:var(--theme-accent-contrast);
+}
+
+.app-shell[data-theme] .field-help p{
+  background:var(--theme-soft-2);
+  border-color:var(--theme-line);
+  color:var(--theme-muted);
+  box-shadow:0 12px 28px color-mix(in srgb,var(--theme-text) 12%,transparent);
+}
+
+@media(max-width:720px){
+  .app-shell[data-theme] .mobile-schedule-bar{
+    background:var(--theme-panel);
+    border-color:var(--theme-line);
+    box-shadow:0 8px 22px color-mix(in srgb,var(--theme-text) 12%,transparent);
+  }
+
+  .app-shell[data-theme] .mobile-schedule-bar span{
+    color:var(--theme-muted);
+  }
+}
