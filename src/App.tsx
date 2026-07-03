@@ -267,6 +267,7 @@ function App() {
   ] as const
   const openEarly = (repayment: EarlyRepayment | null = null) => { setEditingEarly(repayment); setShowEarly(true) }
   const closeEarly = () => { setShowEarly(false); setEditingEarly(null) }
+  const toggleEarlyRepayment = (repayment: EarlyRepayment) => store.updateRepayment({ ...repayment, enabled: repayment.enabled === false })
   const toggleNightTheme = () => store.setTheme(store.theme === 'night' ? lastLightTheme : 'night')
   const defaultEarlyDate = useMemo(() => isISODate(store.config.firstPaymentDate) ? format(addMonths(parseISO(store.config.firstPaymentDate), 1), 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd'), [store.config.firstPaymentDate])
 
@@ -287,7 +288,7 @@ function App() {
           {section === 'overview' && comparison && selected && <Overview config={store.config} repayments={allRepayments} gracePeriods={store.gracePeriods} comparison={comparison} selected={selected} chartData={overviewChartData} onSelect={store.selectScenario} onOpen={() => openEarly()}/>}
           {section === 'overview' && (!comparison || !selected) && <section className="panel list-panel"><div className="panel-head"><div><h3>Расчёт временно остановлен</h3><p>Исправьте параметры кредита или правила досрочных платежей, чтобы построить график.</p></div></div></section>}
           {section === 'settings' && <Settings config={store.config} update={store.updateConfig} updateInterest={store.updateInterest} termUnit={store.termUnit} setTermUnit={store.setTermUnit} displayDecimals={store.displayDecimals} setDisplayDecimals={store.setDisplayDecimals} appFontSize={store.appFontSize} setAppFontSize={store.setAppFontSize} theme={store.theme} setTheme={store.setTheme} customAccentColor={store.customAccentColor} useCustomAccentColor={store.useCustomAccentColor} setCustomAccentColor={store.setCustomAccentColor} setUseCustomAccentColor={store.setUseCustomAccentColor} resetCustomAccentColor={store.resetCustomAccentColor}/>}
-          {section === 'early' && <EarlyList items={store.repayments} rules={store.repaymentRules} generated={generatedRepayments} remove={store.removeRepayment} edit={openEarly} open={() => openEarly()} addRule={store.addRepaymentRule} updateRule={store.updateRepaymentRule} removeRule={store.removeRepaymentRule} defaultStart={store.config.firstPaymentDate}/>}
+          {section === 'early' && <EarlyList items={store.repayments} rules={store.repaymentRules} generated={generatedRepayments} remove={store.removeRepayment} edit={openEarly} toggle={toggleEarlyRepayment} open={() => openEarly()} addRule={store.addRepaymentRule} updateRule={store.updateRepaymentRule} removeRule={store.removeRepaymentRule} defaultStart={store.config.firstPaymentDate}/>}
           {section === 'grace' && <GraceList items={store.gracePeriods} remove={store.removeGrace} open={() => setShowGrace(true)}/>}
           {section === 'schedule' && selected && base && <Schedule schedule={selected.schedule} baseSchedule={base.schedule} repayments={allRepayments} rows={rows} setRows={setRows} more={() => setRows(r => r + 24)}/>}
           {section === 'schedule' && (!selected || !base) && <section className="panel list-panel"><div className="panel-head"><div><h3>График недоступен</h3><p>Сначала исправьте ошибки в параметрах расчёта.</p></div></div></section>}
