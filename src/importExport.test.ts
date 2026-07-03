@@ -41,23 +41,7 @@ describe('импорт резервной копии', () => {
     expect(result.config.paymentType).toBe(defaultConfig.paymentType)
     expect(result.config.frequency).toBe(defaultConfig.frequency)
     expect(result.config.rounding).toBe(defaultConfig.rounding)
-    expect(result.config.rateChanges).toEqual([])
     expect(result.config.interest).toEqual(defaultConfig.interest)
-  })
-
-  it('восстанавливает и сортирует историю изменения ставки', () => {
-    const rateChanges = [
-      { id: 'rate-2', date: '2026-10-26', annualRate: 7.5 },
-      { id: 'rate-1', date: '2026-08-26', annualRate: 8.2 }
-    ]
-    const result = parseLoanBackup(JSON.stringify({ config: { ...defaultConfig, rateChanges }, repayments: [], gracePeriods: [], selectedScenario: 'combined' }))
-    expect(result.config.rateChanges).toEqual([rateChanges[1], rateChanges[0]])
-  })
-
-  it('отклоняет повреждённую историю изменения ставки', () => {
-    expect(() => parseLoanBackup(JSON.stringify({ config: { ...defaultConfig, rateChanges: [{ id: 'rate-1', date: '2026-08-26', annualRate: 101 }] }, repayments: [], gracePeriods: [] }))).toThrow('изменении ставки')
-    expect(() => parseLoanBackup(JSON.stringify({ config: { ...defaultConfig, rateChanges: [{ id: 'rate-1', date: defaultConfig.issueDate, annualRate: 8 }] }, repayments: [], gracePeriods: [] }))).toThrow('после выдачи')
-    expect(() => parseLoanBackup(JSON.stringify({ config: { ...defaultConfig, rateChanges: [{ id: 'rate-1', date: '2026-08-26', annualRate: 8 }, { id: 'rate-2', date: '2026-08-26', annualRate: 9 }] }, repayments: [], gracePeriods: [] }))).toThrow('дублирующийся ID: 2026-08-26')
   })
 
   it('восстанавливает правила досрочных платежей', () => {

@@ -16,7 +16,6 @@ export type ScheduleEventType =
   | 'graceInterestOnly'
   | 'graceSpecialPayment'
   | 'deferredInterestPayment'
-  | 'rateChange'
   | 'autoClose'
   | 'finalBalloon'
 
@@ -25,16 +24,9 @@ export interface InterestAuditSegment {
   to: string
   days: number
   balance: number
-  annualRate: number
   rateBasis: DayCountBasis
   rawInterest: number
   reason: string
-}
-
-export interface RateChange {
-  id: string
-  date: string
-  annualRate: number
 }
 
 export interface InterestConfig {
@@ -48,7 +40,6 @@ export interface InterestConfig {
 export interface LoanConfig {
   principal: number
   annualRate: number
-  rateChanges: RateChange[]
   issueDate: string
   firstPaymentDate: string
   firstPaymentInterestOnly: boolean

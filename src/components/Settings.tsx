@@ -1,8 +1,5 @@
-import { useState } from 'react'
-import { Plus, Trash2 } from 'lucide-react'
-import { sortRateChanges, type LoanConfig, type RateChange } from '../loanEngine'
+import type { LoanConfig } from '../loanEngine'
 import { currencySymbol } from '../formatters'
-import { createId } from '../utils/createId'
 import { Field, NumberInput } from './ui'
 
 type TextScale = 'normal' | 'large' | 'xlarge'
@@ -38,40 +35,6 @@ export function Settings({
   theme, setTheme, customAccentColor, useCustomAccentColor,
   setCustomAccentColor, setUseCustomAccentColor, resetCustomAccentColor
 }: SettingsProps) {
-  const [newRateDate, setNewRateDate] = useState('')
-  const [newRateAnnualRate, setNewRateAnnualRate] = useState(config.annualRate)
-  const [rateError, setRateError] = useState('')
-  const rateChanges = config.rateChanges ?? []
-  const updateRateChanges = (items: RateChange[]) => update({ rateChanges: sortRateChanges(items) })
-  const addRateChange = () => {
-    if (!newRateDate) {
-      setRateError('Укажите дату изменения ставки')
-      return
-    }
-    if (newRateDate <= config.issueDate) {
-      setRateError('Дата изменения ставки должна быть после выдачи кредита')
-      return
-    }
-    if (rateChanges.some(item => item.date === newRateDate)) {
-      setRateError('На эту дату уже есть изменение ставки')
-      return
-    }
-    updateRateChanges([...rateChanges, { id: createId('rate'), date: newRateDate, annualRate: newRateAnnualRate }])
-    setNewRateDate('')
-    setRateError('')
-  }
-  const editRateChange = (id: string, patch: Partial<RateChange>) => {
-    if (patch.date && rateChanges.some(item => item.id !== id && item.date === patch.date)) {
-      setRateError('На эту дату уже есть изменение ставки')
-      return
-    }
-    setRateError('')
-    updateRateChanges(rateChanges.map(item => item.id === id ? { ...item, ...patch } : item))
-  }
-  const removeRateChange = (id: string) => {
-    setRateError('')
-    updateRateChanges(rateChanges.filter(item => item.id !== id))
-  }
   return <div className="settings-layout">
     <section className="panel form-panel loan-settings-panel">
       <div className="panel-head"><div><h3>Параметры кредита</h3><p>Основные условия из кредитного договора</p></div></div>
@@ -109,24 +72,6 @@ export function Settings({
         <div className="setting-item"><Field label="Ежемесячная" help="Дополнительная комиссия в каждой регулярной строке. Увеличивает общую сумму выплат и переплату."><NumberInput min="0" value={config.monthlyFee} onCommit={monthlyFee => update({ monthlyFee })}/></Field></div>
         <div className="setting-item"><Field label="За досрочное погашение" help="Процент комиссии удерживается из суммы досрочного платежа. Чем выше комиссия, тем меньше денег идет в проценты и тело кредита."><div className="with-suffix"><NumberInput min="0" max="100" value={config.earlyRepaymentFeePercent} onCommit={earlyRepaymentFeePercent => update({ earlyRepaymentFeePercent: Math.min(100, Math.max(0, earlyRepaymentFeePercent)) })}/><i>%</i></div></Field></div>
       </div>
-    </section>
-
-    <section className="panel form-panel rate-settings-panel">
-      <div className="panel-head"><div><h3>Изменение ставки</h3><p>История ставок для сверки с банковским графиком</p></div></div>
-      <div className="rate-change-form">
-        <Field label="Дата изменения" help="Дата, когда банк изменил ставку. Новая ставка начнет влиять со следующего платёжного периода."><input type="date" value={newRateDate} onChange={e => setNewRateDate(e.target.value)}/></Field>
-        <Field label="Новая ставка" help="Годовая ставка, которая будет применяться после ближайшего планового платежа."><div className="with-suffix"><NumberInput value={newRateAnnualRate} min="0" max="100" step="0.1" onCommit={setNewRateAnnualRate}/><i>%</i></div></Field>
-        <button className="primary rate-add-button" onClick={addRateChange}><Plus size={16}/>Добавить</button>
-      </div>
-      <div className="tip">Новая ставка применяется со следующего платёжного периода.</div>
-      {rateError && <p className="inline-error">{rateError}</p>}
-      {rateChanges.length > 0 && <div className="rate-change-list">
-        {rateChanges.map(change => <div className="rate-change-row" key={change.id}>
-          <Field label="Дата"><input type="date" value={change.date} onChange={e => editRateChange(change.id, { date: e.target.value })}/></Field>
-          <Field label="Ставка"><div className="with-suffix"><NumberInput value={change.annualRate} min="0" max="100" step="0.1" onCommit={annualRate => editRateChange(change.id, { annualRate })}/><i>%</i></div></Field>
-          <button className="icon-btn danger" title="Удалить изменение ставки" aria-label="Удалить изменение ставки" onClick={() => removeRateChange(change.id)}><Trash2 size={17}/></button>
-        </div>)}
-      </div>}
     </section>
 
     <section className="panel form-panel appearance-panel">

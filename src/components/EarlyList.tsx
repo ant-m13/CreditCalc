@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { addMonths, format, parseISO } from 'date-fns'
 import { ru } from 'date-fns/locale'
-import { CalendarDays, CircleHelp, ListChecks, Pencil, Plus, Power, PowerOff, Trash2, TrendingDown } from 'lucide-react'
+import { CalendarDays, CircleHelp, ListChecks, Pencil, Plus, Trash2, TrendingDown } from 'lucide-react'
 import type { EarlyRepayment } from '../loanEngine'
 import { currencySymbol, money, shortDate } from '../formatters'
 import { ruleTypeName, scenarioName, sourceName } from '../labels'
@@ -15,18 +15,10 @@ function Empty({ title, action }: { title: string; action: () => void }) {
 }
 
 const repaymentDisabled = (item: EarlyRepayment) => item.enabled === false || item.amount <= 0
-const repaymentEnabled = (item: EarlyRepayment) => item.enabled !== false
 const ruleHasNoAmount = (rule: RepaymentRule) => rule.type === 'paymentPercent' ? (rule.percent ?? 0) <= 0 : (rule.amount ?? 0) <= 0
 const ruleDisabled = (rule: RepaymentRule) => rule.enabled === false || ruleHasNoAmount(rule)
 const ruleValueLabel = (rule: RepaymentRule) => rule.type === 'paymentPercent' ? `${rule.percent ?? 0}% от регулярного платежа` : money(rule.amount ?? 0)
 const disabledClass = (disabled: boolean) => disabled ? ' disabled-event' : ''
-
-function RepaymentToggleButton({ item, toggle }: { item: EarlyRepayment; toggle: (item: EarlyRepayment) => void }) {
-  const enabled = repaymentEnabled(item)
-  const label = `${enabled ? 'Выключить' : 'Включить'} платёж ${shortDate(item.date)}`
-
-  return <button type="button" className={`icon-btn toggle-payment${enabled ? '' : ' is-off'}`} aria-label={label} aria-pressed={enabled} title={enabled ? 'Выключить платёж' : 'Включить платёж'} onClick={() => toggle(item)}>{enabled ? <Power/> : <PowerOff/>}</button>
-}
 
 function RepaymentRulesPanel({ rules, addRule, updateRule, removeRule, defaultStart }: { rules: RepaymentRule[]; addRule: (rule: RepaymentRule) => void; updateRule: (rule: RepaymentRule) => void; removeRule: (id: string) => void; defaultStart: string }) {
   const [editingRule, setEditingRule] = useState<RepaymentRule | null>(null)
@@ -131,16 +123,16 @@ function RepaymentRulesPanel({ rules, addRule, updateRule, removeRule, defaultSt
   </section>
 }
 
-export function EarlyList({ items, rules, generated, remove, edit, toggle, open, addRule, updateRule, removeRule, defaultStart }: { items: EarlyRepayment[]; rules: RepaymentRule[]; generated: EarlyRepayment[]; remove: (id: string) => void; edit: (item: EarlyRepayment) => void; toggle: (item: EarlyRepayment) => void; open: () => void; addRule: (rule: RepaymentRule) => void; updateRule: (rule: RepaymentRule) => void; removeRule: (id: string) => void; defaultStart: string }) {
+export function EarlyList({ items, rules, generated, remove, edit, open, addRule, updateRule, removeRule, defaultStart }: { items: EarlyRepayment[]; rules: RepaymentRule[]; generated: EarlyRepayment[]; remove: (id: string) => void; edit: (item: EarlyRepayment) => void; open: () => void; addRule: (rule: RepaymentRule) => void; updateRule: (rule: RepaymentRule) => void; removeRule: (id: string) => void; defaultStart: string }) {
   const ruleNames = useMemo(() => new Map(rules.map(rule => [rule.id, rule.name])), [rules])
   const activeItems = useMemo(() => items.filter(item => !repaymentDisabled(item)), [items])
   const combined = useMemo(() => [
-    ...items.map(item => ({ item, kind: 'manual' as const, label: 'Разовый платёж' })),
+    ...activeItems.map(item => ({ item, kind: 'manual' as const, label: 'Разовый платёж' })),
     ...generated.map(item => {
       const ruleId = item.id.startsWith('rule-') ? item.id.slice(5, -11) : ''
       return { item, kind: 'rule' as const, label: ruleNames.get(ruleId) ?? 'Регулярный платёж' }
     })
-  ].sort((a, b) => a.item.date.localeCompare(b.item.date) || a.item.id.localeCompare(b.item.id)), [items, generated, ruleNames])
+  ].sort((a, b) => a.item.date.localeCompare(b.item.date) || a.item.id.localeCompare(b.item.id)), [activeItems, generated, ruleNames])
   const manualTotal = activeItems.reduce((sum, item) => sum + item.amount, 0)
   const generatedTotal = generated.reduce((sum, item) => sum + item.amount, 0)
 
@@ -154,7 +146,7 @@ export function EarlyList({ items, rules, generated, remove, edit, toggle, open,
           return <div className={`event${disabledClass(disabled)}`} key={item.id}>
             <div className="date-tile"><b>{format(parseISO(item.date), 'dd')}</b><span>{format(parseISO(item.date), 'MMM yy', { locale: ru })}</span></div>
             <div><b>{money(item.amount)}</b><span>{disabled ? 'Временно отключено' : `${scenarioName(item.strategy)} · ${item.amountMode === 'total' ? 'тело и проценты без комиссий' : 'сумма списания'} · ${sourceName(item.source)}`}</span>{item.comment && <small>{item.comment}</small>}</div>
-            <div className="event-actions"><RepaymentToggleButton item={item} toggle={toggle}/><button className="icon-btn" aria-label={`Редактировать платёж ${shortDate(item.date)}`} onClick={() => edit(item)}><Pencil/></button><button className="icon-btn danger" aria-label={`Удалить платёж ${shortDate(item.date)}`} onClick={() => remove(item.id)}><Trash2/></button></div>
+            <div className="event-actions"><button className="icon-btn" aria-label={`Редактировать платёж ${shortDate(item.date)}`} onClick={() => edit(item)}><Pencil/></button><button className="icon-btn danger" aria-label={`Удалить платёж ${shortDate(item.date)}`} onClick={() => remove(item.id)}><Trash2/></button></div>
           </div>
         })}</div> : <Empty title="Пока нет разовых платежей" action={open}/>}
       </section>
@@ -162,10 +154,7 @@ export function EarlyList({ items, rules, generated, remove, edit, toggle, open,
     </div>
     <section className="panel list-panel early-calendar">
       <div className="panel-head"><div><h3>Календарь досрочных платежей</h3><p>Разовые и регулярные досрочные платежи</p></div><div className="early-summary inline"><div><span>Всего</span><b>{combined.length}</b></div><div><span>Регулярные</span><b>{money(generatedTotal)}</b></div></div></div>
-      {combined.length ? <div className="event-list">{combined.map(({ item, kind, label }) => {
-        const disabled = kind === 'manual' && repaymentDisabled(item)
-        return <div className={`event combined-event${kind === 'rule' ? ' generated-event' : ''}${disabledClass(disabled)}`} key={`${kind}-${item.id}`}><div className="date-tile">{kind === 'rule' ? <ListChecks/> : <><b>{format(parseISO(item.date), 'dd')}</b><span>{format(parseISO(item.date), 'MMM yy', { locale: ru })}</span></>}</div><div><b>{money(item.amount)}</b><span><em className={`event-badge ${kind === 'rule' ? 'rule' : ''}`}>{kind === 'rule' ? 'Регулярный' : 'Разовый'}</em> {disabled ? `Временно отключено · ${label}` : label} · {shortDate(item.date)} · {scenarioName(item.strategy)} · {sourceName(item.source)}</span>{item.comment && <small>{item.comment}</small>}</div>{kind === 'manual' ? <div className="event-actions"><RepaymentToggleButton item={item} toggle={toggle}/><button className="icon-btn" aria-label={`Редактировать платёж ${shortDate(item.date)}`} onClick={() => edit(item)}><Pencil/></button><button className="icon-btn danger" aria-label={`Удалить платёж ${shortDate(item.date)}`} onClick={() => remove(item.id)}><Trash2/></button></div> : <span className="generated-note">авто</span>}</div>
-      })}</div> : <div className="tip"><CircleHelp/> Добавьте разовый или регулярный платёж, чтобы увидеть общий календарь досрочных операций.</div>}
+      {combined.length ? <div className="event-list">{combined.map(({ item, kind, label }) => <div className={`event combined-event ${kind === 'rule' ? 'generated-event' : ''}`} key={`${kind}-${item.id}`}><div className="date-tile">{kind === 'rule' ? <ListChecks/> : <><b>{format(parseISO(item.date), 'dd')}</b><span>{format(parseISO(item.date), 'MMM yy', { locale: ru })}</span></>}</div><div><b>{money(item.amount)}</b><span><em className={`event-badge ${kind === 'rule' ? 'rule' : ''}`}>{kind === 'rule' ? 'Регулярный' : 'Разовый'}</em> {label} · {shortDate(item.date)} · {scenarioName(item.strategy)} · {sourceName(item.source)}</span>{item.comment && <small>{item.comment}</small>}</div>{kind === 'manual' ? <div className="event-actions"><button className="icon-btn" aria-label={`Редактировать платёж ${shortDate(item.date)}`} onClick={() => edit(item)}><Pencil/></button><button className="icon-btn danger" aria-label={`Удалить платёж ${shortDate(item.date)}`} onClick={() => remove(item.id)}><Trash2/></button></div> : <span className="generated-note">авто</span>}</div>)}</div> : <div className="tip"><CircleHelp/> Добавьте разовый или регулярный платёж, чтобы увидеть общий календарь досрочных операций.</div>}
     </section>
   </>
 }

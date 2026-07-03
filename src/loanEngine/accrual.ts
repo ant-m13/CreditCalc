@@ -14,10 +14,9 @@ export function accrueInterestRaw(
   to: string,
   includeTo: boolean,
   periodCalendarDays: number,
-  gracePeriods: GracePeriod[] = [],
-  annualRate = config.annualRate
+  gracePeriods: GracePeriod[] = []
 ) {
-  return accrueInterestSegmentsRaw(config, currentBalance, from, to, includeTo, periodCalendarDays, gracePeriods, 'Начисление процентов', annualRate)
+  return accrueInterestSegmentsRaw(config, currentBalance, from, to, includeTo, periodCalendarDays, gracePeriods)
     .reduce((sum, segment) => sum.add(segment.rawInterest), new Decimal(0))
 }
 
@@ -29,8 +28,7 @@ export function accrueInterestSegmentsRaw(
   includeTo: boolean,
   periodCalendarDays: number,
   gracePeriods: GracePeriod[] = [],
-  reason = 'Начисление процентов',
-  annualRate = config.annualRate
+  reason = 'Начисление процентов'
 ) {
   const excludeStartDate = config.interest.periodStart === 'exclusive'
   const includedDates = () => {
@@ -46,7 +44,7 @@ export function accrueInterestSegmentsRaw(
   const accrueRawSegment = (segmentFrom: string, segmentTo: string, segmentIncludeTo: boolean, segmentExcludeStartDate: boolean) => {
     if (segmentTo < segmentFrom || currentBalance.lte(0)) return new Decimal(0)
     if (config.interest.method === 'daily') {
-      return calculateInterest(currentBalance, annualRate, segmentFrom, segmentTo, {
+      return calculateInterest(currentBalance, config.annualRate, segmentFrom, segmentTo, {
         ...config.interest,
         includePaymentDate: segmentIncludeTo,
         periodStart: segmentExcludeStartDate ? 'exclusive' : 'inclusive'
@@ -54,7 +52,7 @@ export function accrueInterestSegmentsRaw(
     }
     const segmentDays = periodDays(segmentFrom, segmentTo, segmentIncludeTo, segmentExcludeStartDate)
     return currentBalance
-      .mul(annualRate)
+      .mul(config.annualRate)
       .div(100)
       .div(periodsPerYear(config.frequency))
       .mul(segmentDays)
@@ -67,7 +65,6 @@ export function accrueInterestSegmentsRaw(
       to: segmentTo,
       days: segmentDays,
       balance: currentBalance,
-      annualRate,
       rawInterest: shouldAccrue ? accrueRawSegment(segmentFrom, segmentTo, segmentIncludeTo, segmentExcludeStartDate) : new Decimal(0),
       reason: segmentReason
     }
