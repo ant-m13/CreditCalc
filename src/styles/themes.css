@@ -1,5 +1,336 @@
-/* Персонализация интерфейса */
-.app-shell[data-theme="ocean"]{--green:#1976d2;--deep:#0a1d33}.app-shell[data-theme="violet"]{--green:#7357d8;--deep:#1c1635}.app-shell[data-theme="graphite"]{--green:#52646f;--deep:#172126}.app-shell[data-theme="warm"]{--green:#d97706;--deep:#2a1707}.app-shell[data-theme="night"]{--green:#60a5fa;--deep:#08111f;--ink:#e5edf7;--muted:#9aabc0;--line:#263449;background:#08111f;color:#e5edf7}.app-shell[data-theme="ocean"] .sidebar{background:#091c31}.app-shell[data-theme="violet"] .sidebar{background:#19142f}.app-shell[data-theme="graphite"] .sidebar{background:#172126}.app-shell[data-theme="warm"] .sidebar{background:#2a1707}.app-shell[data-theme="night"] .sidebar{background:#050b14;color:#dbe8f6}.app-shell[data-theme="ocean"] .hero-card{background:radial-gradient(circle at 72% 25%,#235481 0,transparent 28%),linear-gradient(125deg,#091c31,#12395c)}.app-shell[data-theme="violet"] .hero-card{background:radial-gradient(circle at 72% 25%,#514289 0,transparent 28%),linear-gradient(125deg,#19142f,#34275d)}.app-shell[data-theme="graphite"] .hero-card{background:radial-gradient(circle at 72% 25%,#40535d 0,transparent 28%),linear-gradient(125deg,#172126,#2b3b43)}.app-shell[data-theme="warm"] .hero-card{background:radial-gradient(circle at 72% 25%,#8a4b11 0,transparent 28%),linear-gradient(125deg,#2a1707,#6b3a0b)}.app-shell[data-theme="night"] .hero-card{background:radial-gradient(circle at 72% 25%,#1d4d7a 0,transparent 28%),linear-gradient(125deg,#050b14,#0f2238)}.app-shell[data-theme]:not([data-theme="emerald"]) .sidebar nav button.active{background:color-mix(in srgb,var(--green) 28%,transparent);box-shadow:inset 3px 0 var(--green)}.app-shell[data-theme]:not([data-theme="emerald"]) .brand-mark{background:linear-gradient(145deg,color-mix(in srgb,var(--green) 75%,white),var(--green))}.app-shell[data-theme]:not([data-theme="emerald"]) .scenario.selected{border-color:var(--green);box-shadow:0 0 0 1px var(--green)}
-.app-shell[data-theme="night"] header,.app-shell[data-theme="night"] .panel,.app-shell[data-theme="night"] .scenario,.app-shell[data-theme="night"] .current-debt,.app-shell[data-theme="night"] .modal,.app-shell[data-theme="night"] .font-controls{background:#0d1726;border-color:#263449;color:#e5edf7}.app-shell[data-theme="night"] .content,.app-shell[data-theme="night"] main{background:#08111f}.app-shell[data-theme="night"] .field input,.app-shell[data-theme="night"] .field select,.app-shell[data-theme="night"] .parameter-code-area,.app-shell[data-theme="night"] .schedule-filters input,.app-shell[data-theme="night"] .schedule-filters select,.app-shell[data-theme="night"] table,.app-shell[data-theme="night"] .event,.app-shell[data-theme="night"] .progress-item,.app-shell[data-theme="night"] .export-grid button,.app-shell[data-theme="night"] .toggle-row,.app-shell[data-theme="night"] .ghost,.app-shell[data-theme="night"] .font-controls div{background:#111e31;border-color:#2a3a50;color:#e5edf7}.app-shell[data-theme="night"] th,.app-shell[data-theme="night"] .month-row,.app-shell[data-theme="night"] .bank-schedule tfoot td{background:#17263a;color:#d8e6f4}.app-shell[data-theme="night"] td{border-color:#223247}.app-shell[data-theme="night"] .tip,.app-shell[data-theme="night"] .insight,.app-shell[data-theme="night"] .parameter-link-confirm,.app-shell[data-theme="night"] .modal-tip,.app-shell[data-theme="night"] .empty>span{background:#101d2f;color:#b8c8d9;border-color:#263449}.app-shell[data-theme="night"] .parameter-link-confirm b{color:#d8e6f4}.app-shell[data-theme="night"] .parameter-link-confirm span{color:#9aabc0}.app-shell[data-theme="night"] .eyebrow,.app-shell[data-theme="night"] .section-heading .eyebrow,.app-shell[data-theme="night"] .modal-head .eyebrow{color:var(--green)}.app-shell[data-theme="night"] .hero-meta span,.app-shell[data-theme="night"] .panel-head p,.app-shell[data-theme="night"] .field>span,.app-shell[data-theme="night"] .changelog-entry ul,.app-shell[data-theme="night"] .export-grid button small{color:#9aabc0}
-.app-shell[data-theme="night"] .next-payment-grid>div{background:#111e31;border-color:#2a3a50;color:#e5edf7}.app-shell[data-theme="night"] .next-payment-grid span,.app-shell[data-theme="night"] .next-payment-grid small{color:#9aabc0}.app-shell[data-theme="night"] .next-payment-grid b,.app-shell[data-theme="night"] .next-payment-panel .panel-head>b{color:#93c5fd}
-.app-shell[data-theme="night"] .field-help summary{background:#132d25;color:#9ee6ce}.app-shell[data-theme="night"] .field-help[open] summary{background:var(--green);color:white}.app-shell[data-theme="night"] .field-help p{background:#101d2f;border-color:#263449;color:#b8c8d9;box-shadow:0 12px 28px #0005}
+/* Theme tokens. Components below use the same selectors for every theme. */
+.app-shell[data-theme]{
+  --green:#0b9873;
+  --deep:#071c18;
+  --ink:#10231f;
+  --muted:#667a73;
+  --line:#d6e5df;
+  --theme-page:#edf4f1;
+  --theme-panel:#f8fbfa;
+  --theme-surface:#f1f7f4;
+  --theme-surface-2:#e7f1ed;
+  --theme-soft:#e5f6ef;
+  --theme-soft-2:#f4faf7;
+  --theme-line:#d6e5df;
+  --theme-line-soft:#e3eee9;
+  --theme-text:#10231f;
+  --theme-muted:#667a73;
+  --theme-accent:var(--green);
+  --theme-accent-text:#087458;
+  --theme-accent-contrast:#fff;
+  --theme-warning-bg:#fff3df;
+  --theme-warning-text:#7c4b12;
+  --theme-warning-line:#e9cea2;
+  --theme-success-bg:#e4f6ef;
+  --theme-success-text:#087458;
+  --theme-success-line:#bee4d7;
+  --theme-sidebar:#071b17;
+  --theme-sidebar-text:#d3e3de;
+  --theme-sidebar-muted:#77948c;
+  --theme-sidebar-hover:#102d27;
+  --theme-sidebar-active:#11372e;
+  --theme-sidebar-line:#1a3932;
+  --theme-sidebar-note:#4fd6b0;
+  --theme-sidebar-note-strong:#d5e5e0;
+  --theme-sidebar-note-muted:#6e9187;
+  --theme-brand-from:#14b98a;
+  --theme-brand-to:#087257;
+  --theme-hero-spot:#164c3e;
+  --theme-hero-from:#071c18;
+  --theme-hero-to:#0d332b;
+  --theme-hero-muted:#66aa98;
+  --theme-hero-track:#1e493f;
+  --theme-hero-progress:#1bd39c;
+  --theme-color-scheme:light;
+}
+
+.app-shell[data-theme="ocean"]{
+  --green:#1976d2;
+  --deep:#0a1d33;
+  --ink:#0d253a;
+  --muted:#5f7688;
+  --line:#cddfec;
+  --theme-page:#edf5fb;
+  --theme-panel:#f7fbfe;
+  --theme-surface:#edf5fc;
+  --theme-surface-2:#e1edf8;
+  --theme-soft:#dfeefa;
+  --theme-soft-2:#f3f8fc;
+  --theme-line:#cddfec;
+  --theme-line-soft:#dceaf3;
+  --theme-text:#0d253a;
+  --theme-muted:#5f7688;
+  --theme-accent-text:#145da6;
+  --theme-warning-bg:#fff2df;
+  --theme-warning-text:#76501b;
+  --theme-warning-line:#e8cea0;
+  --theme-success-bg:#dff2ee;
+  --theme-success-text:#0c6f63;
+  --theme-success-line:#b8dcd5;
+  --theme-sidebar:#091c31;
+  --theme-sidebar-text:#d9e8f5;
+  --theme-sidebar-muted:#7f9bb2;
+  --theme-sidebar-hover:#102f4d;
+  --theme-sidebar-active:#12395c;
+  --theme-sidebar-line:#1b466b;
+  --theme-sidebar-note:#6bb8f2;
+  --theme-sidebar-note-strong:#e2eff9;
+  --theme-sidebar-note-muted:#83a8c3;
+  --theme-brand-from:#69b8ef;
+  --theme-brand-to:#1976d2;
+  --theme-hero-spot:#235481;
+  --theme-hero-from:#091c31;
+  --theme-hero-to:#12395c;
+  --theme-hero-muted:#8fb6d4;
+  --theme-hero-track:#214968;
+  --theme-hero-progress:#64b5f6;
+}
+
+.app-shell[data-theme="violet"]{
+  --green:#7357d8;
+  --deep:#1c1635;
+  --ink:#211c35;
+  --muted:#716987;
+  --line:#d9d0ee;
+  --theme-page:#f3f0fb;
+  --theme-panel:#fbf9ff;
+  --theme-surface:#f0ecfa;
+  --theme-surface-2:#e7e0f6;
+  --theme-soft:#e8e2fb;
+  --theme-soft-2:#f7f4fd;
+  --theme-line:#d9d0ee;
+  --theme-line-soft:#e6def5;
+  --theme-text:#211c35;
+  --theme-muted:#716987;
+  --theme-accent-text:#5a43b3;
+  --theme-warning-bg:#fff1df;
+  --theme-warning-text:#7a4e16;
+  --theme-warning-line:#e9cca0;
+  --theme-success-bg:#e8f3e6;
+  --theme-success-text:#39713e;
+  --theme-success-line:#c9dfc7;
+  --theme-sidebar:#19142f;
+  --theme-sidebar-text:#e6e0fa;
+  --theme-sidebar-muted:#9d91c2;
+  --theme-sidebar-hover:#292047;
+  --theme-sidebar-active:#34275d;
+  --theme-sidebar-line:#40336a;
+  --theme-sidebar-note:#b8a9ff;
+  --theme-sidebar-note-strong:#eeeaff;
+  --theme-sidebar-note-muted:#a79bc9;
+  --theme-brand-from:#ad9dff;
+  --theme-brand-to:#7357d8;
+  --theme-hero-spot:#514289;
+  --theme-hero-from:#19142f;
+  --theme-hero-to:#34275d;
+  --theme-hero-muted:#b0a4dc;
+  --theme-hero-track:#463971;
+  --theme-hero-progress:#b5a4ff;
+}
+
+.app-shell[data-theme="graphite"]{
+  --green:#52646f;
+  --deep:#172126;
+  --ink:#172126;
+  --muted:#637178;
+  --line:#cfd9dd;
+  --theme-page:#eef2f3;
+  --theme-panel:#f7fafb;
+  --theme-surface:#edf2f4;
+  --theme-surface-2:#e1e7ea;
+  --theme-soft:#e2e9ec;
+  --theme-soft-2:#f3f6f7;
+  --theme-line:#cfd9dd;
+  --theme-line-soft:#dee6e9;
+  --theme-text:#172126;
+  --theme-muted:#637178;
+  --theme-accent-text:#40515b;
+  --theme-warning-bg:#f8efdf;
+  --theme-warning-text:#6e5122;
+  --theme-warning-line:#dec9a9;
+  --theme-success-bg:#e3efe8;
+  --theme-success-text:#406950;
+  --theme-success-line:#c4d9ce;
+  --theme-sidebar:#172126;
+  --theme-sidebar-text:#dce5e9;
+  --theme-sidebar-muted:#8b9ba3;
+  --theme-sidebar-hover:#26343b;
+  --theme-sidebar-active:#2b3b43;
+  --theme-sidebar-line:#3a4c55;
+  --theme-sidebar-note:#adbec6;
+  --theme-sidebar-note-strong:#eef3f5;
+  --theme-sidebar-note-muted:#9cabb2;
+  --theme-brand-from:#9aaab3;
+  --theme-brand-to:#52646f;
+  --theme-hero-spot:#40535d;
+  --theme-hero-from:#172126;
+  --theme-hero-to:#2b3b43;
+  --theme-hero-muted:#a2b1b8;
+  --theme-hero-track:#3f5159;
+  --theme-hero-progress:#a6b8c0;
+}
+
+.app-shell[data-theme="warm"]{
+  --green:#d97706;
+  --deep:#2a1707;
+  --ink:#2a1707;
+  --muted:#7b6548;
+  --line:#ead4b5;
+  --theme-page:#fbf3e8;
+  --theme-panel:#fff8ef;
+  --theme-surface:#f8ecdc;
+  --theme-surface-2:#f0dfc7;
+  --theme-soft:#f3e3ca;
+  --theme-soft-2:#fff4e6;
+  --theme-line:#ead4b5;
+  --theme-line-soft:#f0dec4;
+  --theme-text:#2a1707;
+  --theme-muted:#7b6548;
+  --theme-accent-text:#a15a05;
+  --theme-warning-bg:#fff0d7;
+  --theme-warning-text:#72470c;
+  --theme-warning-line:#e6c58e;
+  --theme-success-bg:#e9f0dd;
+  --theme-success-text:#557226;
+  --theme-success-line:#cfdbb4;
+  --theme-sidebar:#2a1707;
+  --theme-sidebar-text:#f1dfc7;
+  --theme-sidebar-muted:#b79770;
+  --theme-sidebar-hover:#4b290d;
+  --theme-sidebar-active:#6b3a0b;
+  --theme-sidebar-line:#704412;
+  --theme-sidebar-note:#f0aa4d;
+  --theme-sidebar-note-strong:#fff1dd;
+  --theme-sidebar-note-muted:#c99b62;
+  --theme-brand-from:#f3b458;
+  --theme-brand-to:#d97706;
+  --theme-hero-spot:#8a4b11;
+  --theme-hero-from:#2a1707;
+  --theme-hero-to:#6b3a0b;
+  --theme-hero-muted:#d4a56a;
+  --theme-hero-track:#754915;
+  --theme-hero-progress:#f6b75a;
+}
+
+.app-shell[data-theme="night"]{
+  --green:#60a5fa;
+  --deep:#08111f;
+  --ink:#e5edf7;
+  --muted:#9aabc0;
+  --line:#263449;
+  --theme-page:#08111f;
+  --theme-panel:#0d1726;
+  --theme-surface:#111e31;
+  --theme-surface-2:#17263a;
+  --theme-soft:#142134;
+  --theme-soft-2:#101d2f;
+  --theme-line:#2a3a50;
+  --theme-line-soft:#223247;
+  --theme-text:#e5edf7;
+  --theme-muted:#9aabc0;
+  --theme-accent-text:#93c5fd;
+  --theme-accent-contrast:#08111f;
+  --theme-warning-bg:#2d2416;
+  --theme-warning-text:#f0c37b;
+  --theme-warning-line:#574024;
+  --theme-success-bg:#123126;
+  --theme-success-text:#8ee4bd;
+  --theme-success-line:#245544;
+  --theme-sidebar:#050b14;
+  --theme-sidebar-text:#dbe8f6;
+  --theme-sidebar-muted:#8ea1b5;
+  --theme-sidebar-hover:#101d2f;
+  --theme-sidebar-active:#10233a;
+  --theme-sidebar-line:#263449;
+  --theme-sidebar-note:#93c5fd;
+  --theme-sidebar-note-strong:#e5edf7;
+  --theme-sidebar-note-muted:#9aabc0;
+  --theme-brand-from:#93c5fd;
+  --theme-brand-to:#60a5fa;
+  --theme-hero-spot:#1d4d7a;
+  --theme-hero-from:#050b14;
+  --theme-hero-to:#0f2238;
+  --theme-hero-muted:#8fb6d8;
+  --theme-hero-track:#203b5d;
+  --theme-hero-progress:#93c5fd;
+  --theme-color-scheme:dark;
+}
+
+.app-shell[data-theme]{
+  background:var(--theme-page);
+  color:var(--theme-text);
+  color-scheme:var(--theme-color-scheme);
+}
+
+.app-shell[data-theme] .sidebar{
+  background:var(--theme-sidebar);
+  color:var(--theme-sidebar-text);
+}
+
+.app-shell[data-theme] .brand-mark{
+  background:linear-gradient(145deg,var(--theme-brand-from),var(--theme-brand-to));
+  box-shadow:0 8px 24px color-mix(in srgb,var(--theme-accent) 28%,transparent);
+}
+
+.app-shell[data-theme] .brand span,
+.app-shell[data-theme] .sidebar nav button{
+  color:var(--theme-sidebar-muted);
+}
+
+.app-shell[data-theme] .sidebar nav button:hover{
+  background:var(--theme-sidebar-hover);
+  color:#fff;
+}
+
+.app-shell[data-theme] .sidebar nav button.active{
+  background:var(--theme-sidebar-active);
+  box-shadow:inset 3px 0 var(--theme-accent);
+  color:#fff;
+}
+
+.app-shell[data-theme] .sidebar nav em{
+  background:var(--theme-accent);
+  color:var(--theme-accent-contrast);
+}
+
+.app-shell[data-theme] .sidebar-note{
+  border-color:var(--theme-sidebar-line);
+  color:var(--theme-sidebar-note);
+}
+
+.app-shell[data-theme] .sidebar-note b{
+  color:var(--theme-sidebar-note-strong);
+}
+
+.app-shell[data-theme] .sidebar-note span{
+  color:var(--theme-sidebar-note-muted);
+}
+
+.app-shell[data-theme] .hero-card{
+  background:radial-gradient(circle at 72% 25%,var(--theme-hero-spot) 0,transparent 28%),linear-gradient(125deg,var(--theme-hero-from),var(--theme-hero-to));
+}
+
+.app-shell[data-theme] .hero-card .eyebrow,
+.app-shell[data-theme] .hero-meta span,
+.app-shell[data-theme] .hero-ring span{
+  color:var(--theme-hero-muted);
+}
+
+.app-shell[data-theme] .hero-ring circle{
+  stroke:var(--theme-hero-track);
+}
+
+.app-shell[data-theme] .hero-ring .progress{
+  stroke:var(--theme-hero-progress);
+}
+
+.app-shell[data-theme] .scenario.selected{
+  border-color:var(--theme-accent);
+  box-shadow:0 0 0 1px var(--theme-accent);
+}
+
+.app-shell[data-theme] .selected .radio{
+  background:var(--theme-accent);
+  border-color:var(--theme-accent);
+  color:var(--theme-accent-contrast);
+}
