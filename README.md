@@ -1,4 +1,10 @@
 # Кредитный калькулятор
+[![Pull request checks](https://github.com/ant-m13/CreditCalc/actions/workflows/pr-checks.yml/badge.svg)](https://github.com/ant-m13/CreditCalc/actions/workflows/pr-checks.yml)
+[![Deploy to GitHub Pages](https://github.com/ant-m13/CreditCalc/actions/workflows/deploy-pages.yml/badge.svg?branch=main)](https://github.com/ant-m13/CreditCalc/actions/workflows/deploy-pages.yml)
+[![Release](https://img.shields.io/github/v/release/ant-m13/CreditCalc?display_name=tag&sort=semver)](https://github.com/ant-m13/CreditCalc/releases)
+[![Version](https://img.shields.io/github/package-json/v/ant-m13/CreditCalc?label=version)](package.json)
+[![License](https://img.shields.io/github/license/ant-m13/CreditCalc)](LICENSE)
+[![Demo](https://img.shields.io/badge/demo-GitHub%20Pages-2ea44f?logo=github)](https://ant-m13.github.io/CreditCalc/)
 
 Браузерное приложение для расчёта кредитного графика, сверки с банковским графиком и планирования досрочных погашений. Приложение работает без backend: расчёты выполняются в браузере, данные сохраняются локально на устройстве.
 
