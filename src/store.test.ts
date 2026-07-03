@@ -77,6 +77,7 @@ describe('миграция локального хранилища', () => {
           firstPaymentDate: '',
           paymentDay: 1,
           termMonths: 999999,
+          rateChangeMode: 'broken',
           rateChanges: [
             { id: 'bad-rate-date', date: '', annualRate: 7 },
             { id: 'bad-rate-value', date: '2030-03-01', annualRate: 200 },
@@ -113,6 +114,7 @@ describe('миграция локального хранилища', () => {
     expect(normalized.config.issueDate).toBe('2030-01-01')
     expect(normalized.config.firstPaymentDate).toBe('2030-02-01')
     expect(normalized.config.termMonths).toBe(1200)
+    expect(normalized.config.rateChangeMode).toBe(defaultConfig.rateChangeMode)
     expect(normalized.config.rateChanges).toEqual([{ id: 'good-rate', date: '2030-04-01', annualRate: 7.5 }])
     expect(normalized.repayments.map((item: any) => item.id)).toEqual(['legacy-total', 'total-nonregular', 'total-regular'])
     expect(normalized.repayments[0]).toMatchObject({ amountMode: 'total', sameDayOrder: 'regularFirst' })
@@ -169,6 +171,18 @@ describe('миграция локального хранилища', () => {
     expect(normalized.repayments[0]).toMatchObject({ id: 'off-once', amount: 1000, enabled: false })
     expect(normalized.repaymentRules).toHaveLength(1)
     expect(normalized.repaymentRules[0]).toMatchObject({ amount: 1000, enabled: false })
+  })
+
+  it('нормализует правило общего ежемесячного платежа', () => {
+    const normalized = normalizePersistedState({
+      repaymentRules: [{
+        ...rule(1),
+        type: 'monthlyTotalPayment',
+        amount: 100000,
+        sameDayOrder: 'earlyFirst'
+      }]
+    }) as any
+    expect(normalized.repaymentRules[0]).toMatchObject({ type: 'monthlyTotalPayment', amount: 100000, sameDayOrder: 'regularFirst' })
   })
 })
 

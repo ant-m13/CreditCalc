@@ -144,8 +144,9 @@ export function generateBaseSchedule(config: LoanConfig, options: Options = {}):
   const iterationLimit = Math.min(MAX_SCHEDULE_ROWS - 1, Math.max(maxPeriods + 240, 360))
   for (let regularIndex = 1; regularIndex <= iterationLimit && (balance.gt(0) || deferredInterest.gt(0)); regularIndex++) {
     const periodCalendarDays = Math.max(1, periodDays(previousPaymentDate, paymentDate, false))
+    const exactRateChanges = config.rateChangeMode === 'exactDate' ? config.rateChanges : []
     const accrueSegments = (from: string, to: string, includeTo: boolean, currentBalance: Decimal, reason = 'Начисление процентов') =>
-      accrueInterestSegmentsRaw(config, currentBalance, from, to, includeTo, periodCalendarDays, gracePeriods, reason, currentAnnualRate)
+      accrueInterestSegmentsRaw(config, currentBalance, from, to, includeTo, periodCalendarDays, gracePeriods, reason, currentAnnualRate, exactRateChanges)
     const sumRawInterest = (segments: ReturnType<typeof accrueSegments>) =>
       segments.reduce((sum, segment) => sum.add(segment.rawInterest), new Decimal(0))
     const roundRawInterest = (segments: ReturnType<typeof accrueSegments>) => money(sumRawInterest(segments), config.rounding)
@@ -380,7 +381,7 @@ export function generateBaseSchedule(config: LoanConfig, options: Options = {}):
     if (interestDue.gt(0)) deferredInterest = deferredInterest.add(interestDue)
 
     if (config.interest.includePaymentDate && config.interest.balanceMoment === 'endOfDay' && balance.gt(0)) {
-      const endDaySegments = accrueInterestSegmentsRaw({ ...config, interest: { ...config.interest, periodStart: 'inclusive' } }, balance, paymentDate, iso(addDays(parseISO(paymentDate), 1)), false, periodCalendarDays, gracePeriods, 'Начисление на конец дня', currentAnnualRate)
+      const endDaySegments = accrueInterestSegmentsRaw({ ...config, interest: { ...config.interest, periodStart: 'inclusive' } }, balance, paymentDate, iso(addDays(parseISO(paymentDate), 1)), false, periodCalendarDays, gracePeriods, 'Начисление на конец дня', currentAnnualRate, exactRateChanges)
       const endDayInterest = roundRawInterest(endDaySegments)
       chargedInterest = chargedInterest.add(endDayInterest)
       auditInterestSegments = [...auditInterestSegments, ...endDaySegments]

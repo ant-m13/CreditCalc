@@ -114,11 +114,12 @@ export function Settings({
     <section className="panel form-panel rate-settings-panel">
       <div className="panel-head"><div><h3>Изменение ставки</h3><p>История ставок для сверки с банковским графиком</p></div></div>
       <div className="rate-change-form">
+        <Field label="Режим применения" help="Со следующего периода ставка меняет весь следующий платёжный период. Точно с даты изменения разрезает процентный период на сегменты с разными ставками."><select value={config.rateChangeMode} onChange={e => update({ rateChangeMode: e.target.value as LoanConfig['rateChangeMode'] })}><option value="nextPeriod">Со следующего периода</option><option value="exactDate">Точно с даты изменения</option></select></Field>
         <Field label="Дата изменения" help="Дата, когда банк изменил ставку. Новая ставка начнет влиять со следующего платёжного периода."><input type="date" value={newRateDate} onChange={e => setNewRateDate(e.target.value)}/></Field>
         <Field label="Новая ставка" help="Годовая ставка, которая будет применяться после ближайшего планового платежа."><div className="with-suffix"><NumberInput value={newRateAnnualRate} min="0" max="100" step="0.1" onCommit={setNewRateAnnualRate}/><i>%</i></div></Field>
         <button className="primary rate-add-button" onClick={addRateChange}><Plus size={16}/>Добавить</button>
       </div>
-      <div className="tip">Новая ставка применяется со следующего платёжного периода.</div>
+      <div className="tip">{config.rateChangeMode === 'exactDate' ? 'В режиме точной даты проценты внутри периода делятся на сегменты по ставкам.' : 'Новая ставка применяется со следующего платёжного периода.'}</div>
       {rateError && <p className="inline-error">{rateError}</p>}
       {rateChanges.length > 0 && <div className="rate-change-list">
         {rateChanges.map(change => <div className="rate-change-row" key={change.id}>

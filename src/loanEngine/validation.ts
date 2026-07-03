@@ -9,6 +9,7 @@ export function validateLoan(config: LoanConfig) {
   const errors: string[] = []
   if (!finite(config.principal) || !(config.principal > 0)) errors.push('Сумма кредита должна быть больше нуля')
   if (!finite(config.annualRate) || config.annualRate < 0 || config.annualRate > 100) errors.push('Ставка должна быть от 0 до 100%')
+  if (config.rateChangeMode !== 'nextPeriod' && config.rateChangeMode !== 'exactDate') errors.push('Режим изменения ставки повреждён')
   if (!finite(config.termMonths) || !(config.termMonths > 0)) errors.push('Срок должен быть больше нуля')
   if (finite(config.termMonths) && !Number.isInteger(config.termMonths)) errors.push('Срок должен быть целым числом месяцев')
   if (finite(config.termMonths) && config.termMonths > MAX_TERM_MONTHS) errors.push(`Срок не должен превышать ${MAX_TERM_MONTHS} месяцев`)

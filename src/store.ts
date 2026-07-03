@@ -114,13 +114,14 @@ const paymentTypes = ['annuity', 'differentiated'] as const
 const frequencies = ['monthly', 'biweekly', 'quarterly'] as const
 const roundingModes = ['kopecks', 'rubles', 'bank'] as const
 const interestMethods = ['annuity', 'daily'] as const
+const rateChangeModes = ['nextPeriod', 'exactDate'] as const
 const dayCountBases = ['365', '366', '360', 'actual365', 'actualActual'] as const
 const periodStarts = ['inclusive', 'exclusive'] as const
 const balanceMoments = ['startOfDay', 'endOfDay'] as const
 const repaymentStrategies = ['reduceTerm', 'reducePayment', 'full', 'custom'] as const
 const repaymentSources = ['own', 'subsidy', 'insurance', 'other'] as const
 const sameDayOrders = ['regularFirst', 'earlyFirst'] as const
-const repaymentRuleTypes = ['monthlyFixed', 'annualBonus', 'paymentPercent'] as const
+const repaymentRuleTypes = ['weeklyFixed', 'monthlyFixed', 'bimonthlyFixed', 'quarterlyFixed', 'semiannualFixed', 'annualFixed', 'annualBonus', 'paymentPercent', 'monthlyTotalPayment'] as const
 const graceTypes = ['full', 'interestOnly', 'reduced', 'custom'] as const
 const scenarioIds = ['base', 'reduceTerm', 'reducePayment', 'combined'] as const
 const termUnits = ['months', 'years'] as const
@@ -191,6 +192,7 @@ const normalizeConfig = (config: Partial<LoanConfig> | undefined): LoanConfig =>
     principal: finiteNumber(source.principal, defaultConfig.principal, 1),
     annualRate: finiteNumber(source.annualRate, defaultConfig.annualRate, 0, 100),
     rateChanges: normalizeRateChanges(source.rateChanges, issueDate),
+    rateChangeMode: oneOf(source.rateChangeMode, rateChangeModes, defaultConfig.rateChangeMode),
     issueDate,
     firstPaymentDate,
     firstPaymentInterestOnly: typeof source.firstPaymentInterestOnly === 'boolean' ? source.firstPaymentInterestOnly : true,
@@ -258,7 +260,7 @@ const normalizeRepaymentRules = (value: unknown): RepaymentRule[] => {
       enabled: typeof item.enabled === 'boolean' ? item.enabled : true,
       strategy: oneOf(item.strategy, repaymentStrategies, 'reduceTerm'),
       source: oneOf(item.source, repaymentSources, 'own'),
-      sameDayOrder: oneOf(item.sameDayOrder, sameDayOrders, 'regularFirst'),
+      sameDayOrder: type === 'monthlyTotalPayment' ? 'regularFirst' : oneOf(item.sameDayOrder, sameDayOrders, 'regularFirst'),
       interestFirst: typeof item.interestFirst === 'boolean' ? item.interestFirst : true,
       skipMonths: Array.isArray(item.skipMonths) ? item.skipMonths.filter(isISOYearMonth) : [],
       ...(typeof item.comment === 'string' ? { comment: item.comment } : {})
@@ -451,7 +453,7 @@ export const useLoanStore = create<LoanState>()(persist((set) => ({
 }), {
   name: 'ipoteka-calculator-v1',
   storage: createJSONStorage(() => safeLocalStorage),
-  version: 7,
+  version: 8,
   migrate: normalizePersistedState,
   merge: (persisted, current) => ({ ...current, ...normalizePersistedState(persisted) })
 }))

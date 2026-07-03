@@ -55,6 +55,7 @@ export function parseLoanBackupObject(raw: unknown): LoanBackupData {
   if (config.firstPaymentDate <= config.issueDate) throw new Error('Первый платёж должен быть после даты выдачи')
   if (!oneOf(config.currency, currencies)) throw new Error('Файл содержит неподдерживаемую валюту')
   if (typeof config.firstPaymentInterestOnly !== 'boolean' || !oneOf(config.paymentType, ['annuity', 'differentiated']) || !oneOf(config.frequency, ['monthly', 'biweekly', 'quarterly']) || !oneOf(config.rounding, ['kopecks', 'rubles', 'bank'])) throw new Error('Файл содержит неизвестный тип расчёта')
+  if (!oneOf(config.rateChangeMode, ['nextPeriod', 'exactDate'])) throw new Error('Файл содержит неизвестный режим изменения ставки')
   if (typeof config.interest.includePaymentDate !== 'boolean' || !oneOf(config.interest.method, ['annuity', 'daily']) || !oneOf(config.interest.dayCountBasis, ['365', '366', '360', 'actual365', 'actualActual']) || !oneOf(config.interest.periodStart, ['inclusive', 'exclusive']) || !oneOf(config.interest.balanceMoment, ['startOfDay', 'endOfDay'])) throw new Error('Файл содержит неизвестное правило начисления процентов')
 
   const rateChangesRaw = source.rateChanges === undefined ? [] : source.rateChanges
@@ -105,14 +106,14 @@ export function parseLoanBackupObject(raw: unknown): LoanBackupData {
   if (!Array.isArray(rulesRaw)) throw new Error('Список правил досрочных платежей повреждён')
   if (rulesRaw.length > MAX_REPAYMENT_RULES) throw new Error(`Слишком много правил досрочных платежей. Максимум: ${MAX_REPAYMENT_RULES}`)
   const repaymentRules = rulesRaw.map((item, index) => {
-    if (!isObject(item) || typeof item.id !== 'string' || typeof item.name !== 'string' || !oneOf(item.type, ['monthlyFixed', 'annualBonus', 'paymentPercent']) || !isISODate(item.startDate) || !isISODate(item.endDate) || !oneOf(item.strategy, ['reduceTerm', 'reducePayment', 'full', 'custom']) || !oneOf(item.source, ['own', 'subsidy', 'insurance', 'other']) || !oneOf(item.sameDayOrder, ['regularFirst', 'earlyFirst']) || typeof item.interestFirst !== 'boolean' || !Array.isArray(item.skipMonths) || !item.skipMonths.every(isISOYearMonth)) throw new Error(`Ошибка в правиле досрочных платежей №${index + 1}`)
+    if (!isObject(item) || typeof item.id !== 'string' || typeof item.name !== 'string' || !oneOf(item.type, ['weeklyFixed', 'monthlyFixed', 'bimonthlyFixed', 'quarterlyFixed', 'semiannualFixed', 'annualFixed', 'annualBonus', 'paymentPercent', 'monthlyTotalPayment']) || !isISODate(item.startDate) || !isISODate(item.endDate) || !oneOf(item.strategy, ['reduceTerm', 'reducePayment', 'full', 'custom']) || !oneOf(item.source, ['own', 'subsidy', 'insurance', 'other']) || !oneOf(item.sameDayOrder, ['regularFirst', 'earlyFirst']) || typeof item.interestFirst !== 'boolean' || !Array.isArray(item.skipMonths) || !item.skipMonths.every(isISOYearMonth)) throw new Error(`Ошибка в правиле досрочных платежей №${index + 1}`)
     if (item.endDate < item.startDate) throw new Error(`Ошибка в правиле досрочных платежей №${index + 1}: окончание раньше начала`)
     if (item.type === 'paymentPercent' ? item.percent === undefined : item.amount === undefined) throw new Error(`Ошибка в правиле досрочных платежей №${index + 1}`)
     if (item.amount !== undefined && !finite(item.amount)) throw new Error(`Ошибка в правиле досрочных платежей №${index + 1}`)
     if (item.percent !== undefined && !finite(item.percent)) throw new Error(`Ошибка в правиле досрочных платежей №${index + 1}`)
     if (item.enabled !== undefined && typeof item.enabled !== 'boolean') throw new Error(`Ошибка в правиле досрочных платежей №${index + 1}`)
     if (item.comment !== undefined && typeof item.comment !== 'string') throw new Error(`Ошибка в правиле досрочных платежей №${index + 1}`)
-    return { ...item, enabled: item.enabled ?? true } as unknown as RepaymentRule
+    return { ...item, enabled: item.enabled ?? true, sameDayOrder: item.type === 'monthlyTotalPayment' ? 'regularFirst' : item.sameDayOrder } as unknown as RepaymentRule
   })
   ensureUniqueIds(repaymentRules, 'Правила досрочных платежей')
 

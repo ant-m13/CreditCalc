@@ -3,7 +3,7 @@ import { calculateAnnuityPayment, calculateDebtAtDate, calculateInterest, compar
 import type { EarlyRepayment, GracePeriod, LoanConfig } from './types'
 
 const config: LoanConfig = {
-  principal: 3_000_000, annualRate: 12, rateChanges: [], issueDate: '2024-01-01', firstPaymentDate: '2024-02-15', firstPaymentInterestOnly: false, termMonths: 120,
+  principal: 3_000_000, annualRate: 12, rateChanges: [], rateChangeMode: 'nextPeriod', issueDate: '2024-01-01', firstPaymentDate: '2024-02-15', firstPaymentInterestOnly: false, termMonths: 120,
   paymentDay: 15, paymentType: 'annuity', frequency: 'monthly', currency: 'RUB', rounding: 'kopecks', closeThreshold: 300,
   oneTimeFee: 0, monthlyFee: 0, earlyRepaymentFeePercent: 0,
   interest: { method: 'annuity', dayCountBasis: 'actualActual', includePaymentDate: false, periodStart: 'inclusive', balanceMoment: 'startOfDay' }
@@ -569,6 +569,27 @@ describe('variable rate history', () => {
     const variableDebt = calculateDebtAtDate(variable, generateBaseSchedule(variable), [], '2024-07-16')
     const fixedDebt = calculateDebtAtDate(fixed, generateBaseSchedule(fixed), [], '2024-07-16')
     expect(variableDebt.interest).toBeLessThan(fixedDebt.interest)
+  })
+
+  it('режет процентный период по точной дате изменения ставки', () => {
+    const variable: LoanConfig = {
+      ...config,
+      principal: 1_000_000,
+      annualRate: 12,
+      rateChanges: [{ id: 'rate-1', date: '2024-01-16', annualRate: 6 }],
+      rateChangeMode: 'exactDate',
+      termMonths: 12,
+      issueDate: '2024-01-01',
+      firstPaymentDate: '2024-02-01',
+      paymentDay: 1,
+      interest: { ...config.interest, method: 'daily', dayCountBasis: 'actual365', includePaymentDate: false, periodStart: 'inclusive' }
+    }
+    const first = generateBaseSchedule(variable).find(row => row.date === '2024-02-01')!
+    expect(first.audit?.interestSegments).toEqual([
+      expect.objectContaining({ from: '2024-01-01', to: '2024-01-15', days: 15, annualRate: 12 }),
+      expect.objectContaining({ from: '2024-01-16', to: '2024-01-31', days: 16, annualRate: 6 })
+    ])
+    expect(first.interest).toBeCloseTo(1_000_000 * 0.12 * 15 / 365 + 1_000_000 * 0.06 * 16 / 365, 2)
   })
 
   it('помечает первую досрочную строку нового периода после изменения ставки', () => {
