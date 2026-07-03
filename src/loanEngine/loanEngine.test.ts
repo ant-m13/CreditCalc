@@ -3,7 +3,7 @@ import { calculateAnnuityPayment, calculateDebtAtDate, calculateInterest, compar
 import type { EarlyRepayment, GracePeriod, LoanConfig } from './types'
 
 const config: LoanConfig = {
-  principal: 3_000_000, annualRate: 12, issueDate: '2024-01-01', firstPaymentDate: '2024-02-15', firstPaymentInterestOnly: false, termMonths: 120,
+  principal: 3_000_000, annualRate: 12, rateChanges: [], issueDate: '2024-01-01', firstPaymentDate: '2024-02-15', firstPaymentInterestOnly: false, termMonths: 120,
   paymentDay: 15, paymentType: 'annuity', frequency: 'monthly', currency: 'RUB', rounding: 'kopecks', closeThreshold: 300,
   oneTimeFee: 0, monthlyFee: 0, earlyRepaymentFeePercent: 0,
   interest: { method: 'annuity', dayCountBasis: 'actualActual', includePaymentDate: false, periodStart: 'inclusive', balanceMoment: 'startOfDay' }
@@ -504,6 +504,96 @@ describe('differentiated payments', () => {
     const after = s.find(row => row.date === '2024-04-15')!
     expect(after.principal).toBeLessThan(before.principal)
     expect(s.length).toBeGreaterThan(10)
+  })
+})
+
+describe('variable rate history', () => {
+  it('пересчитывает аннуитетный платёж со следующего платёжного периода', () => {
+    const variable: LoanConfig = {
+      ...config,
+      principal: 1_000_000,
+      annualRate: 12,
+      rateChanges: [{ id: 'rate-1', date: '2024-06-20', annualRate: 6 }],
+      termMonths: 12,
+      issueDate: '2024-01-01',
+      firstPaymentDate: '2024-02-01',
+      paymentDay: 1,
+      interest: { ...config.interest, method: 'annuity', includePaymentDate: false }
+    }
+    const schedule = generateBaseSchedule(variable)
+    const july = schedule.find(row => row.date === '2024-07-01')!
+    const august = schedule.find(row => row.date === '2024-08-01')!
+    expect(july.audit?.interestSegments[0].annualRate).toBe(12)
+    expect(august.audit?.interestSegments[0].annualRate).toBe(6)
+    expect(august.eventTypes).toContain('rateChange')
+    expect(august.paymentRecalculated).toBe(true)
+    expect(august.payment).toBeLessThan(july.payment)
+  })
+
+  it('для дифференцированного графика меняет только процентную часть', () => {
+    const variable: LoanConfig = {
+      ...config,
+      principal: 1_200_000,
+      annualRate: 12,
+      rateChanges: [{ id: 'rate-1', date: '2024-03-20', annualRate: 6 }],
+      paymentType: 'differentiated',
+      termMonths: 12,
+      issueDate: '2024-01-01',
+      firstPaymentDate: '2024-02-01',
+      paymentDay: 1,
+      interest: { ...config.interest, method: 'annuity', includePaymentDate: false }
+    }
+    const schedule = generateBaseSchedule(variable)
+    const before = schedule.find(row => row.date === '2024-04-01')!
+    const after = schedule.find(row => row.date === '2024-05-01')!
+    expect(after.audit?.interestSegments[0].annualRate).toBe(6)
+    expect(after.eventTypes).toContain('rateChange')
+    expect(after.paymentRecalculated).toBe(false)
+    expect(after.principal).toBe(before.principal)
+    expect(after.interest).toBeLessThan(before.interest)
+  })
+
+  it('считает текущий долг по ставке действующего периода', () => {
+    const variable: LoanConfig = {
+      ...config,
+      principal: 1_000_000,
+      annualRate: 12,
+      rateChanges: [{ id: 'rate-1', date: '2024-06-20', annualRate: 6 }],
+      termMonths: 12,
+      issueDate: '2024-01-01',
+      firstPaymentDate: '2024-02-01',
+      paymentDay: 1,
+      interest: { ...config.interest, method: 'annuity', includePaymentDate: false }
+    }
+    const fixed = { ...variable, rateChanges: [] }
+    const variableDebt = calculateDebtAtDate(variable, generateBaseSchedule(variable), [], '2024-07-16')
+    const fixedDebt = calculateDebtAtDate(fixed, generateBaseSchedule(fixed), [], '2024-07-16')
+    expect(variableDebt.interest).toBeLessThan(fixedDebt.interest)
+  })
+
+  it('помечает первую досрочную строку нового периода после изменения ставки', () => {
+    const variable: LoanConfig = {
+      ...config,
+      principal: 1_000_000,
+      annualRate: 12,
+      rateChanges: [{ id: 'rate-1', date: '2024-06-20', annualRate: 6 }],
+      termMonths: 12,
+      issueDate: '2024-01-01',
+      firstPaymentDate: '2024-02-01',
+      paymentDay: 1,
+      interest: { ...config.interest, method: 'annuity', includePaymentDate: false }
+    }
+    const schedule = generateBaseSchedule(variable, { earlyRepayments: [early({ date: '2024-07-10', amount: 10_000 })] })
+    const earlyRow = schedule.find(row => row.date === '2024-07-10')!
+    expect(earlyRow.audit?.interestSegments[0].annualRate).toBe(6)
+    expect(earlyRow.eventTypes).toContain('rateChange')
+    expect(earlyRow.paymentRecalculated).toBe(true)
+  })
+
+  it('отклоняет некорректную дату или ставку в истории ставок', () => {
+    expect(() => generateBaseSchedule({ ...config, rateChanges: [{ id: 'bad-rate', date: '2024-03-01', annualRate: 101 }] })).toThrow('Изменение ставки')
+    const errors = validateScenario({ ...config, rateChanges: [{ id: 'bad-date', date: '', annualRate: 10 }] }, [], [])
+    expect(errors.some(error => error.includes('Изменение ставки'))).toBe(true)
   })
 })
 

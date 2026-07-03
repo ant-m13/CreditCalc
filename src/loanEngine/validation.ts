@@ -20,6 +20,22 @@ export function validateLoan(config: LoanConfig) {
   if (!isISODate(config.issueDate)) errors.push('Дата выдачи должна быть корректной календарной датой')
   if (!isISODate(config.firstPaymentDate)) errors.push('Дата первого платежа должна быть корректной календарной датой')
   if (isISODate(config.issueDate) && isISODate(config.firstPaymentDate) && config.firstPaymentDate <= config.issueDate) errors.push('Первый платёж должен быть после даты выдачи')
+  if (!Array.isArray(config.rateChanges)) {
+    errors.push('История ставок повреждена')
+  } else {
+    const rateChangeDates = new Set<string>()
+    config.rateChanges.forEach((change, index) => {
+      if (typeof change.id !== 'string' || !change.id.trim()) errors.push(`Изменение ставки №${index + 1}: ID повреждён`)
+      if (!finite(change.annualRate) || change.annualRate < 0 || change.annualRate > 100) errors.push(`Изменение ставки №${index + 1}: ставка должна быть от 0 до 100%`)
+      if (!isISODate(change.date)) {
+        errors.push(`Изменение ставки №${index + 1}: дата должна быть корректной`)
+      } else {
+        if (isISODate(config.issueDate) && change.date <= config.issueDate) errors.push(`Изменение ставки №${index + 1}: дата должна быть после выдачи кредита`)
+        if (rateChangeDates.has(change.date)) errors.push(`Изменение ставки №${index + 1}: дата дублируется`)
+        rateChangeDates.add(change.date)
+      }
+    })
+  }
   return errors
 }
 

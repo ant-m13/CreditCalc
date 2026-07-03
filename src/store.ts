@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { createJSONStorage, persist } from 'zustand/middleware'
 import { addMonths, format, parseISO } from 'date-fns'
-import { isRegularPaymentDate, type EarlyRepayment, type GracePeriod, type LoanConfig } from './loanEngine'
+import { isRegularPaymentDate, sortRateChanges, type EarlyRepayment, type GracePeriod, type LoanConfig, type RateChange } from './loanEngine'
 import { defaultConfig } from './loanDefaults'
 import type { LoanBackupData } from './importExport'
 import type { RepaymentRule } from './repaymentRules'
@@ -148,7 +148,7 @@ const withUniqueIds = <T extends { id: string }>(items: T[], prefix: string): T[
 }
 
 const defaultLoanData = (withSeedRepayment = false): LoanData => ({
-  config: { ...defaultConfig, interest: { ...defaultConfig.interest } },
+  config: { ...defaultConfig, rateChanges: [...defaultConfig.rateChanges], interest: { ...defaultConfig.interest } },
   repayments: withSeedRepayment ? seedRepayments.map(item => ({ ...item })) : [],
   repaymentRules: [],
   gracePeriods: [],
@@ -162,6 +162,24 @@ const defaultLoanData = (withSeedRepayment = false): LoanData => ({
   useCustomAccentColor: false
 })
 
+const normalizeRateChanges = (value: unknown, issueDate: string): RateChange[] => {
+  if (!Array.isArray(value)) return []
+  const seenDates = new Set<string>()
+  const changes = value.flatMap((item): RateChange[] => {
+    if (!isObject(item) || !isISODate(item.date)) return []
+    if (isISODate(issueDate) && item.date <= issueDate) return []
+    const annualRate = typeof item.annualRate === 'number' && Number.isFinite(item.annualRate) && item.annualRate >= 0 && item.annualRate <= 100 ? item.annualRate : undefined
+    if (annualRate === undefined || seenDates.has(item.date)) return []
+    seenDates.add(item.date)
+    return [{
+      id: typeof item.id === 'string' && item.id.trim() ? item.id : createId('rate'),
+      date: item.date,
+      annualRate
+    }]
+  })
+  return withUniqueIds(sortRateChanges(changes), 'rate')
+}
+
 const normalizeConfig = (config: Partial<LoanConfig> | undefined): LoanConfig => {
   const source = config ?? {}
   const interest = (source.interest ?? {}) as Partial<LoanConfig['interest']>
@@ -172,6 +190,7 @@ const normalizeConfig = (config: Partial<LoanConfig> | undefined): LoanConfig =>
     ...source,
     principal: finiteNumber(source.principal, defaultConfig.principal, 1),
     annualRate: finiteNumber(source.annualRate, defaultConfig.annualRate, 0, 100),
+    rateChanges: normalizeRateChanges(source.rateChanges, issueDate),
     issueDate,
     firstPaymentDate,
     firstPaymentInterestOnly: typeof source.firstPaymentInterestOnly === 'boolean' ? source.firstPaymentInterestOnly : true,
@@ -432,7 +451,7 @@ export const useLoanStore = create<LoanState>()(persist((set) => ({
 }), {
   name: 'ipoteka-calculator-v1',
   storage: createJSONStorage(() => safeLocalStorage),
-  version: 6,
+  version: 7,
   migrate: normalizePersistedState,
   merge: (persisted, current) => ({ ...current, ...normalizePersistedState(persisted) })
 }))

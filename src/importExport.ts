@@ -1,5 +1,5 @@
-import type { EarlyRepayment, GracePeriod, LoanConfig } from './loanEngine'
-import { isRegularPaymentDate } from './loanEngine'
+import type { EarlyRepayment, GracePeriod, LoanConfig, RateChange } from './loanEngine'
+import { isRegularPaymentDate, sortRateChanges } from './loanEngine'
 import { defaultConfig } from './loanDefaults'
 import type { RepaymentRule } from './repaymentRules'
 import { MAX_EARLY_REPAYMENTS, MAX_GRACE_PERIODS, MAX_REPAYMENT_RULES, MAX_TERM_MONTHS } from './loanEngine/limits'
@@ -56,6 +56,17 @@ export function parseLoanBackupObject(raw: unknown): LoanBackupData {
   if (!oneOf(config.currency, currencies)) throw new Error('Файл содержит неподдерживаемую валюту')
   if (typeof config.firstPaymentInterestOnly !== 'boolean' || !oneOf(config.paymentType, ['annuity', 'differentiated']) || !oneOf(config.frequency, ['monthly', 'biweekly', 'quarterly']) || !oneOf(config.rounding, ['kopecks', 'rubles', 'bank'])) throw new Error('Файл содержит неизвестный тип расчёта')
   if (typeof config.interest.includePaymentDate !== 'boolean' || !oneOf(config.interest.method, ['annuity', 'daily']) || !oneOf(config.interest.dayCountBasis, ['365', '366', '360', 'actual365', 'actualActual']) || !oneOf(config.interest.periodStart, ['inclusive', 'exclusive']) || !oneOf(config.interest.balanceMoment, ['startOfDay', 'endOfDay'])) throw new Error('Файл содержит неизвестное правило начисления процентов')
+
+  const rateChangesRaw = source.rateChanges === undefined ? [] : source.rateChanges
+  if (!Array.isArray(rateChangesRaw)) throw new Error('История ставок повреждена')
+  const rateChanges = sortRateChanges(rateChangesRaw.map((item, index): RateChange => {
+    if (!isObject(item) || typeof item.id !== 'string' || !isISODate(item.date) || typeof item.annualRate !== 'number' || !Number.isFinite(item.annualRate) || item.annualRate < 0 || item.annualRate > 100) throw new Error(`Ошибка в изменении ставки №${index + 1}`)
+    if (item.date <= config.issueDate) throw new Error(`Ошибка в изменении ставки №${index + 1}: дата должна быть после выдачи кредита`)
+    return { id: item.id, date: item.date, annualRate: item.annualRate }
+  }))
+  ensureUniqueIds(rateChanges, 'Изменения ставки')
+  ensureUniqueIds(rateChanges.map(item => ({ id: item.date })), 'Даты изменения ставки')
+  config.rateChanges = rateChanges
 
   const repaymentsRaw = raw.repayments ?? []
   if (!Array.isArray(repaymentsRaw)) throw new Error('Список досрочных платежей повреждён')
