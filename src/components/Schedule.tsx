@@ -36,10 +36,9 @@ const matchesAmount = (row: PaymentScheduleItem, amount: number) => {
 const operationOrderName = (value: string) => value
   .replaceAll('earlyFirst', 'сначала досрочный платёж')
   .replaceAll('regularFirst', 'после регулярного платежа')
-const rateLabel = (value: number) => `${value.toLocaleString('ru-RU', { maximumFractionDigits: 4 })}%`
 
 function AuditFields({ audit }: { audit: NonNullable<PaymentScheduleItem['audit']> }) {
-  return <dl><div><dt>Период начисления</dt><dd>{shortDate(audit.periodStart)} — {shortDate(audit.periodEnd)}</dd></div><div><dt>Дней</dt><dd>{audit.days}</dd></div><div><dt>База года</dt><dd>{dayCountBasisLabel(audit.dayCountBasis)}</dd></div><div><dt>Остаток для процентов</dt><dd>{money(audit.interestBalance)}</dd></div><div><dt>Проценты до округления</dt><dd>{money(audit.interestBeforeRounding)}</dd></div><div><dt>Округление</dt><dd>{roundingName(audit.rounding)}</dd></div><div><dt>Порядок операций</dt><dd>{operationOrderName(audit.operationOrder)}</dd></div>{audit.interestSegments.map((segment, index) => <div key={`${segment.from}-${segment.to}-${index}`}><dt>{segment.reason}</dt><dd>{shortDate(segment.from)} — {shortDate(segment.to)}, {segment.days} дн., ставка {rateLabel(segment.annualRate)}, {money(segment.rawInterest)}</dd></div>)}</dl>
+  return <dl><div><dt>Период начисления</dt><dd>{shortDate(audit.periodStart)} — {shortDate(audit.periodEnd)}</dd></div><div><dt>Дней</dt><dd>{audit.days}</dd></div><div><dt>База года</dt><dd>{dayCountBasisLabel(audit.dayCountBasis)}</dd></div><div><dt>Остаток для процентов</dt><dd>{money(audit.interestBalance)}</dd></div><div><dt>Проценты до округления</dt><dd>{money(audit.interestBeforeRounding)}</dd></div><div><dt>Округление</dt><dd>{roundingName(audit.rounding)}</dd></div><div><dt>Порядок операций</dt><dd>{operationOrderName(audit.operationOrder)}</dd></div>{audit.interestSegments.map((segment, index) => <div key={`${segment.from}-${segment.to}-${index}`}><dt>{segment.reason}</dt><dd>{shortDate(segment.from)} — {shortDate(segment.to)}, {segment.days} дн., {money(segment.rawInterest)}</dd></div>)}</dl>
 }
 
 function AuditDetails({ row, showFees }: { row: PaymentScheduleItem; showFees: boolean }) {

@@ -72,7 +72,7 @@ describe('App smoke tests', () => {
     expect(screen.getByText('Данные сохранены')).toBeTruthy()
   })
 
-  it('добавляет выключенный досрочный платёж и быстро включает его из календаря', async () => {
+  it('добавляет выключенный досрочный платёж без попадания в календарь операций', async () => {
     const user = userEvent.setup()
     render(<App />)
 
@@ -82,14 +82,8 @@ describe('App smoke tests', () => {
     await user.click(screen.getByRole('button', { name: /^Досрочные/ }))
 
     expect(await screen.findByText('Временно отключено')).toBeTruthy()
+    expect(screen.getByText('Добавьте разовый или регулярный платёж, чтобы увидеть общий календарь досрочных операций.')).toBeTruthy()
     expect(useLoanStore.getState().repayments[0]).toMatchObject({ amount: 100000, enabled: false })
-
-    const enableButtons = await screen.findAllByRole('button', { name: /Включить платёж/i })
-    expect(enableButtons).toHaveLength(2)
-    await user.click(enableButtons[1])
-
-    expect(useLoanStore.getState().repayments[0]).toMatchObject({ amount: 100000, enabled: true })
-    expect(screen.getAllByRole('button', { name: /Выключить платёж/i })).toHaveLength(2)
   })
 
   it('открывает раздел импорта и экспорта', async () => {
