@@ -23,8 +23,14 @@ export const sourceName = (source: EarlyRepayment['source']) =>
   'Прочее'
 
 export const ruleTypeName = (type: RepaymentRule['type']) =>
+  type === 'weeklyFixed' ? 'Раз в неделю фиксированная сумма' :
   type === 'monthlyFixed' ? 'Каждый месяц фиксированная сумма' :
+  type === 'bimonthlyFixed' ? 'Раз в 2 месяца фиксированная сумма' :
+  type === 'quarterlyFixed' ? 'Раз в квартал фиксированная сумма' :
+  type === 'semiannualFixed' ? 'Раз в полгода фиксированная сумма' :
+  type === 'annualFixed' ? 'Раз в год фиксированная сумма' :
   type === 'annualBonus' ? 'Ежегодная премия' :
+  type === 'monthlyTotalPayment' ? 'Общий ежемесячный платёж' :
   'Процент от регулярного платежа'
 
 export const graceTypeName = (type: GracePeriod['type']) =>
@@ -42,6 +48,9 @@ export const roundingName = (value: LoanConfig['rounding']) =>
   value === 'kopecks' ? 'До копеек' :
   value === 'rubles' ? 'До рублей' :
   'Банковское округление'
+
+export const rateChangeModeName = (value: LoanConfig['rateChangeMode']) =>
+  value === 'exactDate' ? 'Точно с даты изменения' : 'Со следующего платёжного периода'
 
 export const balanceMomentName = (value: LoanConfig['interest']['balanceMoment']) =>
   value === 'startOfDay' ? 'На начало дня' : 'На конец дня'

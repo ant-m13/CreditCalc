@@ -4,6 +4,7 @@ export type RepaymentStrategy = 'reduceTerm' | 'reducePayment' | 'full' | 'custo
 export type EarlySource = 'own' | 'subsidy' | 'insurance' | 'other'
 export type DayCountBasis = '365' | '366' | '360' | 'actual365' | 'actualActual'
 export type RoundingMode = 'kopecks' | 'rubles' | 'bank'
+export type RateChangeMode = 'nextPeriod' | 'exactDate'
 export type ScheduleEventType =
   | 'loanIssued'
   | 'earlyReduceTerm'
@@ -49,6 +50,7 @@ export interface LoanConfig {
   principal: number
   annualRate: number
   rateChanges: RateChange[]
+  rateChangeMode: RateChangeMode
   issueDate: string
   firstPaymentDate: string
   firstPaymentInterestOnly: boolean

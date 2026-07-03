@@ -18,7 +18,20 @@ const repaymentDisabled = (item: EarlyRepayment) => item.enabled === false || it
 const repaymentEnabled = (item: EarlyRepayment) => item.enabled !== false
 const ruleHasNoAmount = (rule: RepaymentRule) => rule.type === 'paymentPercent' ? (rule.percent ?? 0) <= 0 : (rule.amount ?? 0) <= 0
 const ruleDisabled = (rule: RepaymentRule) => rule.enabled === false || ruleHasNoAmount(rule)
-const ruleValueLabel = (rule: RepaymentRule) => rule.type === 'paymentPercent' ? `${rule.percent ?? 0}% от регулярного платежа` : money(rule.amount ?? 0)
+const ruleValueLabel = (rule: RepaymentRule) =>
+  rule.type === 'paymentPercent' ? `${rule.percent ?? 0}% от регулярного платежа` :
+  rule.type === 'monthlyTotalPayment' ? `итого ${money(rule.amount ?? 0)}` :
+  money(rule.amount ?? 0)
+const ruleName = (type: RepaymentRule['type']) =>
+  type === 'weeklyFixed' ? 'Еженедельное пополнение' :
+  type === 'monthlyFixed' ? 'Ежемесячное пополнение' :
+  type === 'bimonthlyFixed' ? 'Пополнение раз в 2 месяца' :
+  type === 'quarterlyFixed' ? 'Квартальное пополнение' :
+  type === 'semiannualFixed' ? 'Пополнение раз в полгода' :
+  type === 'annualFixed' ? 'Ежегодное пополнение' :
+  type === 'annualBonus' ? 'Ежегодная премия' :
+  type === 'monthlyTotalPayment' ? 'Общий ежемесячный платёж' :
+  'Процент от платежа'
 const disabledClass = (disabled: boolean) => disabled ? ' disabled-event' : ''
 
 function RepaymentToggleButton({ item, toggle }: { item: EarlyRepayment; toggle: (item: EarlyRepayment) => void }) {
@@ -43,6 +56,7 @@ function RepaymentRulesPanel({ rules, addRule, updateRule, removeRule, defaultSt
   const [strategy, setStrategy] = useState<EarlyRepayment['strategy']>('reduceTerm')
   const [source, setSource] = useState<EarlyRepayment['source']>('own')
   const [sameDayOrder, setSameDayOrder] = useState<EarlyRepayment['sameDayOrder']>('regularFirst')
+  const amountFieldLabel = type === 'paymentPercent' ? 'Процент' : type === 'monthlyTotalPayment' ? 'Общий платёж' : 'Сумма'
 
   const reset = () => {
     setEditingRule(null)
@@ -82,7 +96,7 @@ function RepaymentRulesPanel({ rules, addRule, updateRule, removeRule, defaultSt
     if (!skipMonths.every(isISOYearMonth)) { setError('Месяцы пропуска должны иметь формат ГГГГ-ММ'); return }
     const rule: RepaymentRule = {
       id: editingRule?.id ?? createId('rule'),
-      name: type === 'monthlyFixed' ? 'Ежемесячное пополнение' : type === 'annualBonus' ? 'Ежегодная премия' : 'Процент от платежа',
+      name: ruleName(type),
       type,
       startDate: start,
       endDate: end,
@@ -91,10 +105,10 @@ function RepaymentRulesPanel({ rules, addRule, updateRule, removeRule, defaultSt
       enabled,
       strategy,
       source,
-      sameDayOrder,
+      sameDayOrder: type === 'monthlyTotalPayment' ? 'regularFirst' : sameDayOrder,
       interestFirst: true,
       skipMonths,
-      comment: type === 'paymentPercent' ? `${value}% от регулярного платежа` : undefined
+      comment: type === 'paymentPercent' ? `${value}% от регулярного платежа` : type === 'monthlyTotalPayment' ? `Итого к списанию ${money(value)}` : undefined
     }
     try {
       if (editingRule) updateRule(rule)
@@ -108,13 +122,13 @@ function RepaymentRulesPanel({ rules, addRule, updateRule, removeRule, defaultSt
   return <section className="panel list-panel rule-panel early-card">
     <div className="panel-head"><div><h3>Регулярные досрочные платежи</h3><p>{editingRule ? 'Редактирование регулярного платежа' : 'Повторяющиеся операции до заданной даты'}</p></div><span className="early-counter">{rules.length}</span></div>
     <div className="rule-form form-grid">
-      <Field label="Тип регулярного платежа"><select value={type} onChange={event => setType(event.target.value as RepaymentRule['type'])}><option value="monthlyFixed">Каждый месяц фиксированная сумма</option><option value="annualBonus">Ежегодно вносить премию</option><option value="paymentPercent">Процент от регулярного платежа</option></select></Field>
-      <Field label={type === 'paymentPercent' ? 'Процент' : 'Сумма'}>{type === 'paymentPercent' ? <div className="with-suffix"><input type="number" min="0" value={percent} onChange={event => setPercent(event.target.value)}/><i>%</i></div> : <div className="with-suffix"><input type="number" min="0" value={amount} onChange={event => setAmount(event.target.value)}/><i>{currencySymbol()}</i></div>}</Field>
+      <Field label="Тип регулярного платежа"><select value={type} onChange={event => setType(event.target.value as RepaymentRule['type'])}><option value="weeklyFixed">Раз в неделю фиксированная сумма</option><option value="monthlyFixed">Каждый месяц фиксированная сумма</option><option value="bimonthlyFixed">Раз в 2 месяца фиксированная сумма</option><option value="quarterlyFixed">Раз в квартал фиксированная сумма</option><option value="semiannualFixed">Раз в полгода фиксированная сумма</option><option value="annualFixed">Раз в год фиксированная сумма</option><option value="annualBonus">Ежегодная премия</option><option value="monthlyTotalPayment">Общий ежемесячный платёж</option><option value="paymentPercent">Процент от регулярного платежа</option></select></Field>
+      <Field label={amountFieldLabel}>{type === 'paymentPercent' ? <div className="with-suffix"><input type="number" min="0" value={percent} onChange={event => setPercent(event.target.value)}/><i>%</i></div> : <div className="with-suffix"><input type="number" min="0" value={amount} onChange={event => setAmount(event.target.value)}/><i>{currencySymbol()}</i></div>}</Field>
       <Field label="Начать с"><input type="date" value={start} onChange={event => setStart(event.target.value)}/></Field>
       <Field label="Применять до"><input type="date" value={end} onChange={event => setEnd(event.target.value)}/></Field>
       <Field label="Стратегия"><select value={strategy} onChange={event => setStrategy(event.target.value as EarlyRepayment['strategy'])}><option value="reduceTerm">Уменьшить срок</option><option value="reducePayment">Уменьшить платёж</option><option value="full">Закрыть полностью</option></select></Field>
       <Field label="Источник"><select value={source} onChange={event => setSource(event.target.value as EarlyRepayment['source'])}><option value="own">Собственные средства</option><option value="subsidy">Маткапитал / субсидия</option><option value="insurance">Страховое возмещение</option><option value="other">Прочее</option></select></Field>
-      <Field label="Порядок в дату платежа"><select value={sameDayOrder} onChange={event => setSameDayOrder(event.target.value as EarlyRepayment['sameDayOrder'])}><option value="regularFirst">Сначала регулярный платёж</option><option value="earlyFirst">Сначала досрочный платёж</option></select></Field>
+      <Field label="Порядок в дату платежа"><select value={type === 'monthlyTotalPayment' ? 'regularFirst' : sameDayOrder} disabled={type === 'monthlyTotalPayment'} onChange={event => setSameDayOrder(event.target.value as EarlyRepayment['sameDayOrder'])}><option value="regularFirst">Сначала регулярный платёж</option><option value="earlyFirst">Сначала досрочный платёж</option></select></Field>
       <Field label="Пропустить месяцы"><input value={skip} onChange={event => setSkip(event.target.value)} placeholder="2027-01, 2027-05"/></Field>
       <label className="toggle-row"><div><b>Правило включено</b><span>Выключенное правило сохранится, но не создаст операции</span></div><input type="checkbox" checked={enabled} onChange={event => setEnabled(event.target.checked)}/></label>
     </div>
@@ -127,7 +141,7 @@ function RepaymentRulesPanel({ rules, addRule, updateRule, removeRule, defaultSt
         <div><b>{rule.name}</b><span>{ruleTypeName(rule.type)} · {ruleValueLabel(rule)} · {shortDate(rule.startDate)} — {shortDate(rule.endDate)}</span><small>{disabled ? 'Временно отключено' : `${scenarioName(rule.strategy)} · ${sourceName(rule.source)} · пропусков: ${rule.skipMonths.length}`}</small></div>
         <div className="event-actions"><button className="icon-btn" aria-label={`Редактировать регулярный платёж ${rule.name}`} onClick={() => startEdit(rule)}><Pencil/></button><button className="icon-btn danger" aria-label={`Удалить регулярный платёж ${rule.name}`} onClick={() => removeRule(rule.id)}><Trash2/></button></div>
       </div>
-    })}</div> : <div className="tip"><CircleHelp/> Например: +20 000 ₽ каждый месяц до 2030 года, премия раз в год или 10% от регулярного платежа.</div>}
+    })}</div> : <div className="tip"><CircleHelp/> Например: +20 000 ₽ каждый месяц, общий платёж 60 000 ₽ в дату списания или премия раз в год.</div>}
   </section>
 }
 

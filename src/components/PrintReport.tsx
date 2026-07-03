@@ -2,18 +2,19 @@ import { format } from 'date-fns'
 import { Landmark } from 'lucide-react'
 import type { ComparisonResult, EarlyRepayment, LoanConfig, PaymentScheduleItem, ScenarioResult } from '../loanEngine'
 import { fmtMonths, money, shortDate } from '../formatters'
-import { dayCountBasisLabel, scenarioName } from '../labels'
+import { dayCountBasisLabel, rateChangeModeName, scenarioName } from '../labels'
 import { APP_VERSION } from '../version'
 
 export function PrintReport({ config, repayments, comparison, selected }: { config: LoanConfig; repayments: EarlyRepayment[]; comparison: ComparisonResult; selected: ScenarioResult }) {
   const generated = format(new Date(), 'dd.MM.yyyy HH:mm')
   const showFees = selected.schedule.some(row => Math.abs(row.feePaid ?? row.fee) > 0.004)
   const paymentLabel = config.frequency === 'biweekly' ? 'Платёж раз в 2 недели' : config.frequency === 'quarterly' ? 'Квартальный платёж' : 'Ежемесячный платёж'
+  const rateHistory = config.rateChanges.map(change => `${shortDate(change.date)} — ${change.annualRate}%`).join('; ')
   return <article className="print-report">
     <div className="print-title"><div><span>Кредитный калькулятор</span><h1>Расчёт кредита</h1><p>Сформировано {generated} · сценарий «{selected.name}» · версия {APP_VERSION}</p></div><Landmark/></div>
     <section className="print-summary"><div><span>Сумма кредита</span><b>{money(config.principal)}</b></div><div><span>{paymentLabel}</span><b>{money(selected.monthlyPayment)}</b></div><div><span>Дата закрытия</span><b>{shortDate(selected.closingDate)}</b></div><div><span>Переплата</span><b>{money(selected.overpayment)}</b></div></section>
     <h2>Параметры кредита</h2>
-    <dl className="print-params"><div><dt>Ставка</dt><dd>{config.annualRate}% годовых</dd></div><div><dt>Срок</dt><dd>{fmtMonths(config.termMonths)} ({config.termMonths} мес.)</dd></div><div><dt>Дата выдачи</dt><dd>{shortDate(config.issueDate)}</dd></div><div><dt>Первый платёж</dt><dd>{shortDate(config.firstPaymentDate)}</dd></div><div><dt>Тип платежа</dt><dd>{config.paymentType === 'annuity' ? 'Аннуитетный' : 'Дифференцированный'}</dd></div><div><dt>Начисление</dt><dd>{config.interest.method === 'daily' ? 'По фактическим дням' : 'По периодам'}, {dayCountBasisLabel(config.interest.dayCountBasis)}</dd></div></dl>
+    <dl className="print-params"><div><dt>Ставка</dt><dd>{config.annualRate}% годовых</dd></div>{config.rateChanges.length > 0 && <div><dt>Изменения ставки</dt><dd>{rateChangeModeName(config.rateChangeMode)}; {rateHistory}</dd></div>}<div><dt>Срок</dt><dd>{fmtMonths(config.termMonths)} ({config.termMonths} мес.)</dd></div><div><dt>Дата выдачи</dt><dd>{shortDate(config.issueDate)}</dd></div><div><dt>Первый платёж</dt><dd>{shortDate(config.firstPaymentDate)}</dd></div><div><dt>Тип платежа</dt><dd>{config.paymentType === 'annuity' ? 'Аннуитетный' : 'Дифференцированный'}</dd></div><div><dt>Начисление</dt><dd>{config.interest.method === 'daily' ? 'По фактическим дням' : 'По периодам'}, {dayCountBasisLabel(config.interest.dayCountBasis)}</dd></div></dl>
     <h2>Сравнение сценариев</h2>
     <table className="print-comparison"><thead><tr><th>Сценарий</th><th>Платёж</th><th>Дата закрытия</th><th>Проценты</th><th>Экономия</th></tr></thead><tbody>{comparison.scenarios.map(s => <tr key={s.id} className={s.id === selected.id ? 'chosen' : ''}><td>{s.name}</td><td>{money(s.monthlyPayment)}</td><td>{shortDate(s.closingDate)}</td><td>{money(s.totalInterest)}</td><td>{money(s.interestSavings)}</td></tr>)}</tbody></table>
     <h2>Досрочные платежи</h2>

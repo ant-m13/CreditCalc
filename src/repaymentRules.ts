@@ -1,10 +1,19 @@
-import { addMonths, addYears, format, parseISO } from 'date-fns'
+import { addMonths, addWeeks, addYears, format, parseISO } from 'date-fns'
 import { generateBaseSchedule, type EarlyRepayment, type LoanConfig } from './loanEngine'
 import { MAX_GENERATED_REPAYMENTS } from './loanEngine/limits'
 import { num } from './loanEngine/rounding'
 import { isISODate, isISOYearMonth } from './utils/dateValidation'
 
-export type RepaymentRuleType = 'monthlyFixed' | 'annualBonus' | 'paymentPercent'
+export type RepaymentRuleType =
+  | 'weeklyFixed'
+  | 'monthlyFixed'
+  | 'bimonthlyFixed'
+  | 'quarterlyFixed'
+  | 'semiannualFixed'
+  | 'annualFixed'
+  | 'annualBonus'
+  | 'paymentPercent'
+  | 'monthlyTotalPayment'
 
 export interface RepaymentRule {
   id: string
@@ -33,8 +42,33 @@ const ruleAmount = (rule: RepaymentRule, regularPayment: number, config: LoanCon
   return num(rule.amount ?? 0, config.rounding)
 }
 
+const nextRuleDate = (startDate: Date, type: RepaymentRuleType, guard: number) => {
+  if (type === 'weeklyFixed') return addWeeks(startDate, guard)
+  if (type === 'bimonthlyFixed') return addMonths(startDate, guard * 2)
+  if (type === 'quarterlyFixed') return addMonths(startDate, guard * 3)
+  if (type === 'semiannualFixed') return addMonths(startDate, guard * 6)
+  if (type === 'annualFixed' || type === 'annualBonus') return addYears(startDate, guard)
+  return addMonths(startDate, guard)
+}
+
+const pushRuleRepayment = (result: EarlyRepayment[], rule: RepaymentRule, date: string, amount: number) => {
+  result.push({
+    id: `rule-${rule.id}-${date}`,
+    date,
+    amount,
+    amountMode: rule.type === 'monthlyTotalPayment' ? 'total' : 'extra',
+    strategy: rule.strategy,
+    source: rule.source,
+    sameDayOrder: rule.type === 'monthlyTotalPayment' ? 'regularFirst' : rule.sameDayOrder,
+    interestFirst: rule.interestFirst,
+    comment: rule.comment || rule.name
+  })
+  if (result.length > MAX_GENERATED_REPAYMENTS) throw new Error(`Правила создают слишком много досрочных операций. Максимум: ${MAX_GENERATED_REPAYMENTS}`)
+}
+
 export function expandRepaymentRules(config: LoanConfig, rules: RepaymentRule[]): EarlyRepayment[] {
   const regularPayment = firstRegularPayment(config)
+  const baseSchedule = () => generateBaseSchedule(config)
   const result: EarlyRepayment[] = []
   for (const rule of rules) {
     if (!isISODate(rule.startDate) || !isISODate(rule.endDate)) throw new Error(`Правило «${rule.name}» содержит некорректные даты`)
@@ -42,6 +76,14 @@ export function expandRepaymentRules(config: LoanConfig, rules: RepaymentRule[])
     if (rule.enabled === false) continue
     const amount = ruleAmount(rule, regularPayment, config)
     if (amount <= 0 || rule.startDate > rule.endDate) continue
+    if (rule.type === 'monthlyTotalPayment') {
+      for (const row of baseSchedule()) {
+        if (!row.isRegularPayment || row.date < rule.startDate || row.date > rule.endDate) continue
+        if (rule.skipMonths.includes(row.date.slice(0, 7))) continue
+        pushRuleRepayment(result, rule, row.date, amount)
+      }
+      continue
+    }
     const startDate = parseISO(rule.startDate)
     let guard = 0
     let cursor = startDate
@@ -49,21 +91,10 @@ export function expandRepaymentRules(config: LoanConfig, rules: RepaymentRule[])
       const date = format(cursor, 'yyyy-MM-dd')
       const month = date.slice(0, 7)
       if (!rule.skipMonths.includes(month)) {
-        result.push({
-          id: `rule-${rule.id}-${date}`,
-          date,
-          amount,
-          amountMode: 'extra',
-          strategy: rule.strategy,
-          source: rule.source,
-          sameDayOrder: rule.sameDayOrder,
-          interestFirst: rule.interestFirst,
-          comment: rule.comment || rule.name
-        })
-        if (result.length > MAX_GENERATED_REPAYMENTS) throw new Error(`Правила создают слишком много досрочных операций. Максимум: ${MAX_GENERATED_REPAYMENTS}`)
+        pushRuleRepayment(result, rule, date, amount)
       }
       guard += 1
-      cursor = rule.type === 'annualBonus' ? addYears(startDate, guard) : addMonths(startDate, guard)
+      cursor = nextRuleDate(startDate, rule.type, guard)
       if (guard > 1200) throw new Error('Правило досрочных платежей создаёт слишком много операций')
     }
   }
