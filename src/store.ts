@@ -272,7 +272,7 @@ const normalizeGracePeriods = (value: unknown): GracePeriod[] => {
   if (!Array.isArray(value)) return []
   return withUniqueIds(value.slice(0, MAX_GRACE_PERIODS).flatMap((item): GracePeriod[] => {
     if (!isObject(item) || typeof item.id !== 'string' || !isISODate(item.startDate) || !isISODate(item.endDate) || item.endDate < item.startDate) return []
-    const paymentAmount = item.paymentAmount === undefined ? undefined : finiteNumber(item.paymentAmount, 0, 0)
+    const paymentAmount = item.paymentAmount === undefined ? undefined : optionalFiniteNumber(item.paymentAmount, 0)
     return [{
       id: item.id,
       startDate: item.startDate,

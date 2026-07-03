@@ -619,20 +619,19 @@ describe('variable rate history', () => {
 })
 
 describe('day count bases', () => {
-  // Текущая реализация всегда использует 365 дней в году для всех базисов, кроме actualActual.
-  // Поэтому ожидаем одинаковое значение для всех.
-  const expectedForNonActualActual = 8493.150684931506;
   it.each([
-    ['actual365', expectedForNonActualActual],
-    ['actual360', expectedForNonActualActual],
-    ['thirty360', expectedForNonActualActual],
+    ['360', 1_000_000 * 0.10 * 31 / 360],
+    ['365', 1_000_000 * 0.10 * 31 / 365],
+    ['366', 1_000_000 * 0.10 * 31 / 366],
+    ['actual365', 1_000_000 * 0.10 * 31 / 365],
+    ['actualActual', 1_000_000 * 0.10 * 31 / 366],
   ])('рассчитывает проценты для базы %s', (basis, expected) => {
     const interest = calculateInterest(
       1_000_000,
       10,
       '2024-01-01',
       '2024-02-01',
-      { ...config.interest, dayCountBasis: basis as any }
+      { ...config.interest, dayCountBasis: basis as LoanConfig['interest']['dayCountBasis'] }
     );
     expect(interest.toNumber()).toBeCloseTo(expected, 2);
   });
@@ -732,6 +731,68 @@ describe('edge cases', () => {
     const errors = validateScenario(config, [early({ date: '' })], [{ id:'bad', startDate:'', endDate:'2024-03-01', type:'full', extendTerm:false, accrueInterest:true, capitalizeInterest:false }])
     expect(errors.some(error => error.includes('Досрочный платёж'))).toBe(true)
     expect(errors.some(error => error.includes('Льготный период'))).toBe(true)
+  })
+
+  it('валидатор не падает, если дата первого платежа повреждена при существующей досрочке', () => {
+    const errors = validateScenario({ ...config, firstPaymentDate: '' }, [early({ amountMode: 'total' })], [])
+    expect(errors.some(error => error.includes('Дата первого платежа'))).toBe(true)
+    expect(errors.some(error => error.includes('дату регулярного платежа'))).toBe(true)
+  })
+
+  it('валидатор отклоняет повреждённые enum-поля ядра', () => {
+    const brokenConfig = {
+      ...config,
+      firstPaymentInterestOnly: 'yes',
+      paymentType: 'broken',
+      frequency: 'weekly',
+      rounding: 'ceil',
+      interest: {
+        ...config.interest,
+        method: 'compound',
+        dayCountBasis: 'actual360',
+        includePaymentDate: 'yes',
+        periodStart: 'middle',
+        balanceMoment: 'noon'
+      }
+    } as unknown as LoanConfig
+    const brokenRepayment = {
+      ...early(),
+      amountMode: 'bankRow',
+      strategy: 'wrong',
+      source: 'unknown',
+      sameDayOrder: 'middle',
+      interestFirst: 'yes'
+    } as unknown as EarlyRepayment
+    const brokenGrace = {
+      id: 'bad-grace',
+      startDate: '2024-03-01',
+      endDate: '2024-03-31',
+      type: 'pause',
+      extendTerm: 'yes',
+      accrueInterest: 'yes',
+      capitalizeInterest: 'yes'
+    } as unknown as GracePeriod
+    const errors = validateScenario(brokenConfig, [brokenRepayment], [brokenGrace])
+    expect(errors).toEqual(expect.arrayContaining([
+      'Настройка первого платежа повреждена',
+      'Тип платежа повреждён',
+      'Частота платежей повреждена',
+      'Округление повреждено',
+      'Метод начисления процентов повреждён',
+      'База года повреждена',
+      'Правило включения даты платежа повреждено',
+      'Начало процентного периода повреждено',
+      'Момент остатка для процентов повреждён',
+      'Досрочный платёж №1: режим суммы повреждён',
+      'Досрочный платёж №1: стратегия повреждена',
+      'Досрочный платёж №1: источник повреждён',
+      'Досрочный платёж №1: порядок в дату платежа повреждён',
+      'Досрочный платёж №1: правило погашения процентов повреждено',
+      'Льготный период №1: режим повреждён',
+      'Льготный период №1: правило продления срока повреждено',
+      'Льготный период №1: правило начисления процентов повреждено',
+      'Льготный период №1: правило капитализации процентов повреждено'
+    ]))
   })
 
   it('очень большая сумма (10 млрд) — нет переполнения', () => {
