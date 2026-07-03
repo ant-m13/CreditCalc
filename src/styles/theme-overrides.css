@@ -47,7 +47,8 @@
 .app-shell[data-theme] .changelog-entry,
 .app-shell[data-theme] .onboarding-steps div,
 .app-shell[data-theme] .schedule-card,
-.app-shell[data-theme] .schedule-card dl div{
+.app-shell[data-theme] .schedule-card dl div,
+.app-shell[data-theme] .rate-change-row{
   background:var(--theme-surface);
   border-color:var(--theme-line);
   color:var(--theme-text);
@@ -148,9 +149,18 @@
 .app-shell[data-theme] .saved-schedule tfoot td,
 .app-shell[data-theme] .saved-period-note,
 .app-shell[data-theme] .alert,
-.app-shell[data-theme] .import-status.error{
+.app-shell[data-theme] .import-status.error,
+.app-shell[data-theme] .inline-error{
   background:var(--theme-warning-bg);
   border-color:var(--theme-warning-line);
+  color:var(--theme-warning-text);
+}
+
+.app-shell[data-theme] .inline-error{
+  background:transparent;
+}
+
+.app-shell[data-theme] .rate-change-row .icon-btn{
   color:var(--theme-warning-text);
 }
 
@@ -246,6 +256,15 @@
 .app-shell[data-theme] .audit-toggle:hover,
 .app-shell[data-theme] .danger:hover{
   background:var(--theme-surface-2);
+}
+
+.app-shell[data-theme] .toggle-payment{
+  color:var(--theme-accent-text);
+}
+
+.app-shell[data-theme] .toggle-payment.is-off{
+  background:var(--theme-surface-2);
+  color:var(--theme-muted);
 }
 
 .app-shell[data-theme] .field-help summary{

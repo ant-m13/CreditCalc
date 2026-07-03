@@ -55,8 +55,9 @@ export function calculateDebtAtDate(
   const periodEnd = nextRow?.audit?.regularPeriodEnd ?? nextRow?.audit?.periodEnd ?? nextPaymentDate(lastRow.date, config)
   const periodCalendarDays = nextRow?.audit?.regularPeriodDays ?? Math.max(1, periodDays(periodStart, periodEnd, false))
   const includeTargetDate = config.interest.includePaymentDate && config.interest.balanceMoment === 'startOfDay'
+  const annualRate = nextRow?.audit?.interestSegments[0]?.annualRate ?? config.annualRate
   const accruedInterest = money(
-    accrueInterestRaw(config, new Decimal(principal), accrualStart, targetDate, includeTargetDate, periodCalendarDays, gracePeriods),
+    accrueInterestRaw(config, new Decimal(principal), accrualStart, targetDate, includeTargetDate, periodCalendarDays, gracePeriods, annualRate),
     config.rounding
   )
   const interest = num(new Decimal(deferredInterest).add(accruedInterest), config.rounding)

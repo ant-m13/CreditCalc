@@ -2,20 +2,26 @@
 .icon-btn:disabled{opacity:.35;cursor:not-allowed}
 .danger-action{background:#bd6758}
 .danger-action:hover{background:#a95548}
-.settings-layout{grid-template-columns:1fr 1fr;grid-template-areas:"loan loan" "interest fees" "appearance appearance";align-items:start}
+.settings-layout{grid-template-columns:1fr 1fr;grid-template-areas:"loan loan" "interest fees" "rate rate" "appearance appearance";align-items:start}
 .loan-settings-panel{grid-area:loan;grid-row:auto}
 .interest-settings-panel{grid-area:interest}
 .fees-settings-panel{grid-area:fees}
+.rate-settings-panel{grid-area:rate}
 .appearance-panel{grid-area:appearance;grid-column:auto}
 .settings-layout .panel-head{padding-bottom:14px;border-bottom:1px solid #e4ece9}
 .loan-settings-panel .form-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
 .interest-settings-panel .form-grid,.fees-settings-panel .form-grid{grid-template-columns:1fr}
 .appearance-panel .form-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
+.rate-change-form{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto;gap:14px;align-items:end}
+.rate-add-button{min-height:39px}
+.rate-change-list{display:grid;gap:9px;margin-top:12px}
+.rate-change-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) 38px;gap:12px;align-items:end;border:1px solid #e0e9e6;background:white;border-radius:10px;padding:11px}
+.inline-error{margin:10px 0 0;color:#bd6758;font-size:10px;font-weight:700}
 .theme-toggle{background:#eef6f3;border:1px solid #d8e6e1;color:#21443b;flex:0 0 auto}
 .theme-toggle:hover{background:var(--green);color:white}
 .font-controls{margin-left:0}
-@media(max-width:950px){.settings-layout{grid-template-columns:1fr;grid-template-areas:"loan" "interest" "fees" "appearance"}.loan-settings-panel .form-grid,.interest-settings-panel .form-grid,.fees-settings-panel .form-grid,.appearance-panel .form-grid{grid-template-columns:1fr 1fr}.appearance-panel{grid-column:auto}}
-@media(max-width:620px){.loan-settings-panel .form-grid,.interest-settings-panel .form-grid,.fees-settings-panel .form-grid,.appearance-panel .form-grid{grid-template-columns:1fr}.theme-toggle{width:36px;height:36px}}
+@media(max-width:950px){.settings-layout{grid-template-columns:1fr;grid-template-areas:"loan" "interest" "fees" "rate" "appearance"}.loan-settings-panel .form-grid,.interest-settings-panel .form-grid,.fees-settings-panel .form-grid,.appearance-panel .form-grid{grid-template-columns:1fr 1fr}.appearance-panel{grid-column:auto}}
+@media(max-width:620px){.loan-settings-panel .form-grid,.interest-settings-panel .form-grid,.fees-settings-panel .form-grid,.appearance-panel .form-grid,.rate-change-form,.rate-change-row{grid-template-columns:1fr}.rate-change-row .icon-btn{justify-self:end}.theme-toggle{width:36px;height:36px}}
 
 /* Досрочные платежи: разовые операции, правила и общий календарь */
 .early-layout{display:grid;grid-template-columns:minmax(0,1fr) minmax(380px,1fr);gap:16px;align-items:start}
