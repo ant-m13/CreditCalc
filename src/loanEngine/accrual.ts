@@ -17,9 +17,10 @@ export function accrueInterestRaw(
   periodCalendarDays: number,
   gracePeriods: GracePeriod[] = [],
   annualRate = config.annualRate,
-  rateChanges: RateChange[] = []
+  rateChanges: RateChange[] = [],
+  rateChangesAreSorted = false
 ) {
-  return accrueInterestSegmentsRaw(config, currentBalance, from, to, includeTo, periodCalendarDays, gracePeriods, 'Начисление процентов', annualRate, rateChanges)
+  return accrueInterestSegmentsRaw(config, currentBalance, from, to, includeTo, periodCalendarDays, gracePeriods, 'Начисление процентов', annualRate, rateChanges, rateChangesAreSorted)
     .reduce((sum, segment) => sum.add(segment.rawInterest), new Decimal(0))
 }
 
@@ -33,7 +34,8 @@ export function accrueInterestSegmentsRaw(
   gracePeriods: GracePeriod[] = [],
   reason = 'Начисление процентов',
   annualRate = config.annualRate,
-  rateChanges: RateChange[] = []
+  rateChanges: RateChange[] = [],
+  rateChangesAreSorted = false
 ) {
   const excludeStartDate = config.interest.periodStart === 'exclusive'
   const includedDates = () => {
@@ -46,7 +48,7 @@ export function accrueInterestSegmentsRaw(
     }
     return dates
   }
-  const sortedRateChanges = sortRateChanges(rateChanges)
+  const sortedRateChanges = rateChangesAreSorted ? rateChanges : sortRateChanges(rateChanges)
   const accrueRawSegment = (segmentFrom: string, segmentTo: string, segmentIncludeTo: boolean, segmentExcludeStartDate: boolean, segmentAnnualRate: number) => {
     if (segmentTo < segmentFrom || currentBalance.lte(0)) return new Decimal(0)
     if (config.interest.method === 'daily') {
@@ -79,7 +81,9 @@ export function accrueInterestSegmentsRaw(
 
   const dates = includedDates()
   const days = dates.length
-  const noAccrualGracePeriods = gracePeriods.filter(period => period.accrueInterest === false)
+  const noAccrualGracePeriods = gracePeriods
+    .filter(period => period.accrueInterest === false)
+    .sort((a, b) => a.startDate.localeCompare(b.startDate) || a.endDate.localeCompare(b.endDate))
   if (days === 0) return []
 
   let segmentStart: string | null = null
@@ -89,6 +93,7 @@ export function accrueInterestSegmentsRaw(
   let segmentAnnualRate = annualRate
   let segmentEnd = dates[0]
   let rateIndex = 0
+  let graceIndex = 0
   let currentAnnualRate = annualRate
   const segments: ReturnType<typeof segment>[] = []
   const closeSegment = () => {
@@ -102,7 +107,9 @@ export function accrueInterestSegmentsRaw(
       currentAnnualRate = sortedRateChanges[rateIndex].annualRate
       rateIndex += 1
     }
-    const shouldAccrue = !noAccrualGracePeriods.some(period => period.startDate <= currentDate && currentDate <= period.endDate)
+    while (graceIndex < noAccrualGracePeriods.length && noAccrualGracePeriods[graceIndex].endDate < currentDate) graceIndex += 1
+    const noAccrualGrace = noAccrualGracePeriods[graceIndex]
+    const shouldAccrue = !(noAccrualGrace && noAccrualGrace.startDate <= currentDate && currentDate <= noAccrualGrace.endDate)
     const currentReason = shouldAccrue ? reason : 'Беспроцентная льгота'
     const currentYear = shouldAccrue && config.interest.dayCountBasis === 'actualActual' ? currentDate.slice(0, 4) : ''
     if (!segmentStart || segmentAccrues !== shouldAccrue || segmentReason !== currentReason || segmentYear !== currentYear || segmentAnnualRate !== currentAnnualRate) {

@@ -38,6 +38,24 @@ const ensureUniqueIds = (items: { id: string }[], label: string) => {
   }
 }
 
+const ensureUniqueSameDaySequences = (repayments: EarlyRepayment[]) => {
+  const seen = new Set<string>()
+  repayments.forEach(item => {
+    const key = `${item.date}:${item.sameDaySequence}`
+    if (seen.has(key)) throw new Error(`Досрочные платежи содержат дублирующийся порядок в дату ${item.date}: ${item.sameDaySequence}`)
+    seen.add(key)
+  })
+}
+
+const ensureUniqueRuleSequences = (rules: RepaymentRule[]) => {
+  const seen = new Set<number>()
+  rules.forEach((item, index) => {
+    const sequence = item.ruleSequence ?? index
+    if (seen.has(sequence)) throw new Error(`Правила досрочных платежей содержат дублирующийся порядок: ${sequence}`)
+    seen.add(sequence)
+  })
+}
+
 export function parseLoanBackup(text: string): LoanBackupData {
   let raw: unknown
   try { raw = JSON.parse(text) } catch { throw new Error('Файл не является корректным JSON') }
@@ -77,6 +95,8 @@ export function parseLoanBackupObject(raw: unknown): LoanBackupData {
     if (!isObject(item) || typeof item.id !== 'string' || !isISODate(item.date) || !finite(item.amount) || !oneOf(item.strategy, ['reduceTerm', 'reducePayment', 'full', 'custom']) || !oneOf(item.source, ['own', 'subsidy', 'insurance', 'other']) || !oneOf(item.sameDayOrder, ['regularFirst', 'earlyFirst']) || typeof item.interestFirst !== 'boolean') throw new Error(`Ошибка в досрочном платеже №${index + 1}`)
     if (item.amountMode !== undefined && !oneOf(item.amountMode, ['extra', 'total'])) throw new Error(`Ошибка в досрочном платеже №${index + 1}`)
     if (item.enabled !== undefined && typeof item.enabled !== 'boolean') throw new Error(`Ошибка в досрочном платеже №${index + 1}`)
+    if (item.operationSource !== undefined && !oneOf(item.operationSource, ['manual', 'rule'])) throw new Error(`Ошибка в досрочном платеже №${index + 1}: источник операции повреждён`)
+    if (item.sourceRuleId !== undefined && typeof item.sourceRuleId !== 'string') throw new Error(`Ошибка в досрочном платеже №${index + 1}: ID правила повреждён`)
     const sameDaySequence = typeof item.sameDaySequence === 'number' && Number.isInteger(item.sameDaySequence) && item.sameDaySequence >= 0 ? item.sameDaySequence : undefined
     if (item.sameDaySequence !== undefined && sameDaySequence === undefined) throw new Error(`Ошибка в досрочном платеже №${index + 1}`)
     const isRegularDate = isRegularPaymentDate(item.date, config)
@@ -88,6 +108,7 @@ export function parseLoanBackupObject(raw: unknown): LoanBackupData {
     return { ...item, enabled, amountMode, sameDaySequence: sameDaySequence ?? index, sameDayOrder: amountMode === 'total' ? 'regularFirst' : item.sameDayOrder } as unknown as EarlyRepayment
   })
   ensureUniqueIds(repayments, 'Досрочные платежи')
+  ensureUniqueSameDaySequences(repayments)
   ensureUniqueIds(repayments.filter(item => item.enabled !== false && item.amount > 0 && item.amountMode === 'total').map(item => ({ id: item.date })), 'Операции с общей суммой по телу и процентам без комиссий')
 
   const graceRaw = raw.gracePeriods ?? []
@@ -116,9 +137,12 @@ export function parseLoanBackupObject(raw: unknown): LoanBackupData {
     if (item.percent !== undefined && !finite(item.percent)) throw new Error(`Ошибка в правиле досрочных платежей №${index + 1}`)
     if (item.enabled !== undefined && typeof item.enabled !== 'boolean') throw new Error(`Ошибка в правиле досрочных платежей №${index + 1}`)
     if (item.comment !== undefined && typeof item.comment !== 'string') throw new Error(`Ошибка в правиле досрочных платежей №${index + 1}`)
-    return { ...item, enabled: item.enabled ?? true, sameDayOrder: item.type === 'monthlyTotalPayment' ? 'regularFirst' : item.sameDayOrder } as unknown as RepaymentRule
+    const ruleSequence = typeof item.ruleSequence === 'number' && Number.isInteger(item.ruleSequence) && item.ruleSequence >= 0 ? item.ruleSequence : undefined
+    if (item.ruleSequence !== undefined && ruleSequence === undefined) throw new Error(`Ошибка в правиле досрочных платежей №${index + 1}: порядок повреждён`)
+    return { ...item, ...(ruleSequence !== undefined ? { ruleSequence } : {}), enabled: item.enabled ?? true, sameDayOrder: item.type === 'monthlyTotalPayment' ? 'regularFirst' : item.sameDayOrder } as unknown as RepaymentRule
   })
   ensureUniqueIds(repaymentRules, 'Правила досрочных платежей')
+  ensureUniqueRuleSequences(repaymentRules)
 
   const settings = isObject(raw.settings) ? raw.settings : raw
   const name = typeof raw.name === 'string' ? raw.name : undefined

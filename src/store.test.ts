@@ -162,6 +162,22 @@ describe('миграция локального хранилища', () => {
     expect(new Set(normalized.loans[0].repayments.map((item: any) => item.id)).size).toBe(2)
   })
 
+  it('перенумеровывает повторяющийся порядок операций и правил при миграции', () => {
+    const normalized = normalizePersistedState({
+      repayments: [
+        { id: 'same-day-1', date: defaultConfig.firstPaymentDate, amount: 1000, amountMode: 'extra', sameDaySequence: 0, ...repaymentBase },
+        { id: 'same-day-2', date: defaultConfig.firstPaymentDate, amount: 2000, amountMode: 'extra', sameDaySequence: 0, ...repaymentBase }
+      ],
+      repaymentRules: [
+        { ...rule(1), id: 'rule-seq-1', ruleSequence: 0 },
+        { ...rule(2), id: 'rule-seq-2', ruleSequence: 0 }
+      ]
+    }) as any
+
+    expect(normalized.repayments.map((item: any) => item.sameDaySequence)).toEqual([0, 1])
+    expect(normalized.repaymentRules.map((item: any) => item.ruleSequence)).toEqual([0, 1])
+  })
+
   it('сохраняет явно отключенные досрочные платежи и правила при миграции', () => {
     const normalized = normalizePersistedState({
       repayments: [{ id: 'off-once', date: defaultConfig.firstPaymentDate, amount: 1000, enabled: false, amountMode: 'extra', ...repaymentBase }],

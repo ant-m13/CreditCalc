@@ -11,6 +11,7 @@ export type ScheduleEventType =
   | 'earlyReducePayment'
   | 'earlyFull'
   | 'earlyFullInsufficient'
+  | 'earlyIgnored'
   | 'earlyCombined'
   | 'firstInterestOnly'
   | 'graceFull'
@@ -74,6 +75,8 @@ export interface EarlyRepayment {
   enabled?: boolean
   amountMode?: 'extra' | 'total'
   sameDaySequence?: number
+  operationSource?: 'manual' | 'rule'
+  sourceRuleId?: string
   strategy: RepaymentStrategy
   source: EarlySource
   sameDayOrder: 'regularFirst' | 'earlyFirst'

@@ -3,6 +3,7 @@ import { addDays, parseISO } from 'date-fns'
 import { accrueInterestRaw } from './accrual'
 import { periodDays } from './calculateInterest'
 import { iso, nextPaymentDate } from './dates'
+import { createRateTimeline } from './rateChanges'
 import { money, num } from './rounding'
 import type { GracePeriod, LoanConfig, PaymentScheduleItem } from './types'
 
@@ -56,9 +57,10 @@ export function calculateDebtAtDate(
   const periodCalendarDays = nextRow?.audit?.regularPeriodDays ?? Math.max(1, periodDays(periodStart, periodEnd, false))
   const includeTargetDate = config.interest.includePaymentDate && config.interest.balanceMoment === 'startOfDay'
   const annualRate = nextRow?.audit?.interestSegments[0]?.annualRate ?? config.annualRate
-  const exactRateChanges = config.rateChangeMode === 'exactDate' ? config.rateChanges : []
+  const rateTimeline = createRateTimeline(config)
+  const exactRateChanges = config.rateChangeMode === 'exactDate' ? rateTimeline.sortedChanges : []
   const accruedInterest = money(
-    accrueInterestRaw(config, new Decimal(principal), accrualStart, targetDate, includeTargetDate, periodCalendarDays, gracePeriods, annualRate, exactRateChanges),
+    accrueInterestRaw(config, new Decimal(principal), accrualStart, targetDate, includeTargetDate, periodCalendarDays, gracePeriods, annualRate, exactRateChanges, true),
     config.rounding
   )
   const interest = num(new Decimal(deferredInterest).add(accruedInterest), config.rounding)

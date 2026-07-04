@@ -18,6 +18,7 @@ export type RepaymentRuleType =
 export interface RepaymentRule {
   id: string
   name: string
+  ruleSequence?: number
   type: RepaymentRuleType
   startDate: string
   endDate: string
@@ -51,7 +52,19 @@ const nextRuleDate = (startDate: Date, type: RepaymentRuleType, guard: number) =
   return addMonths(startDate, guard)
 }
 
-const pushRuleRepayment = (result: EarlyRepayment[], rule: RepaymentRule, date: string, amount: number) => {
+const ruleSequence = (rule: RepaymentRule, fallback: number) =>
+  Number.isFinite(rule.ruleSequence) ? rule.ruleSequence! : fallback
+
+export const sortRepaymentRulesByApplicationOrder = (rules: RepaymentRule[]) =>
+  rules
+    .map((rule, index) => ({ rule, index }))
+    .sort((a, b) =>
+      ruleSequence(a.rule, a.index) - ruleSequence(b.rule, b.index) ||
+      a.index - b.index
+    )
+    .map(({ rule }) => rule)
+
+const pushRuleRepayment = (result: EarlyRepayment[], rule: RepaymentRule, date: string, amount: number, sequence: number) => {
   result.push({
     id: `rule-${rule.id}-${date}`,
     date,
@@ -60,7 +73,9 @@ const pushRuleRepayment = (result: EarlyRepayment[], rule: RepaymentRule, date: 
     strategy: rule.strategy,
     source: rule.source,
     sameDayOrder: rule.type === 'monthlyTotalPayment' ? 'regularFirst' : rule.sameDayOrder,
-    sameDaySequence: result.length,
+    sameDaySequence: sequence,
+    operationSource: 'rule',
+    sourceRuleId: rule.id,
     interestFirst: rule.interestFirst,
     comment: rule.comment || rule.name
   })
@@ -75,7 +90,8 @@ export function expandRepaymentRules(config: LoanConfig, rules: RepaymentRule[],
     return regularPayment
   }
   const result: EarlyRepayment[] = []
-  for (const rule of rules) {
+  for (const [index, rule] of sortRepaymentRulesByApplicationOrder(rules).entries()) {
+    const sequence = ruleSequence(rule, index)
     if (!isISODate(rule.startDate) || !isISODate(rule.endDate)) throw new Error(`Правило «${rule.name}» содержит некорректные даты`)
     if (!rule.skipMonths.every(isISOYearMonth)) throw new Error(`Правило «${rule.name}» содержит некорректный месяц пропуска`)
     if (rule.enabled === false) continue
@@ -85,7 +101,7 @@ export function expandRepaymentRules(config: LoanConfig, rules: RepaymentRule[],
       for (const date of scheduledPaymentDates(config, gracePeriods)) {
         if (date < rule.startDate || date > rule.endDate) continue
         if (rule.skipMonths.includes(date.slice(0, 7))) continue
-        pushRuleRepayment(result, rule, date, amount)
+        pushRuleRepayment(result, rule, date, amount, sequence)
       }
       continue
     }
@@ -96,7 +112,7 @@ export function expandRepaymentRules(config: LoanConfig, rules: RepaymentRule[],
       const date = format(cursor, 'yyyy-MM-dd')
       const month = date.slice(0, 7)
       if (!rule.skipMonths.includes(month)) {
-        pushRuleRepayment(result, rule, date, amount)
+        pushRuleRepayment(result, rule, date, amount, sequence)
       }
       guard += 1
       cursor = nextRuleDate(startDate, rule.type, guard)
