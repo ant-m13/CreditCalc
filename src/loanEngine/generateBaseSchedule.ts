@@ -6,7 +6,7 @@ import { periodDays } from './calculateInterest'
 import { extendedPaymentPeriods, iso, nextPaymentDate, totalPaymentPeriods } from './dates'
 import { activeGrace } from './gracePeriod'
 import { MAX_EARLY_REPAYMENTS, MAX_GRACE_PERIODS, MAX_SCHEDULE_ROWS } from './limits'
-import { rateForDate, rateForNextPeriod } from './rateChanges'
+import { createRateTimeline } from './rateChanges'
 import { money, num } from './rounding'
 import { sortRepaymentsByApplicationOrder } from './repaymentOrder'
 import type { EarlyRepayment, GracePeriod, LoanConfig, PaymentScheduleItem, RepaymentStrategy, ScheduleEventType } from './types'
@@ -30,6 +30,7 @@ export function generateBaseSchedule(config: LoanConfig, options: Options = {}):
   if (validationErrors.length > 0) throw new Error(validationErrors.join(' · '))
   const configuredPeriods = totalPaymentPeriods(config)
   const maxPeriods = configuredPeriods + extendedPaymentPeriods(config, gracePeriods)
+  const rateTimeline = createRateTimeline(config)
   let effectiveFinalRegularIndex = maxPeriods
   let balance = money(config.principal, config.rounding)
   let principalPerPeriod = money(new Decimal(balance).div(Math.max(1, configuredPeriods)), config.rounding)
@@ -105,7 +106,7 @@ export function generateBaseSchedule(config: LoanConfig, options: Options = {}):
   const remainingPeriodsBeforeCurrentPayment = (regularIndex: number) => Math.max(1, effectiveFinalRegularIndex - regularIndex + 1)
   const remainingPeriodsAfterCurrentPayment = (regularIndex: number) => Math.max(0, effectiveFinalRegularIndex - regularIndex)
   const effectiveAnnualRate = (date: string) =>
-    config.rateChangeMode === 'exactDate' ? rateForDate(config, date, currentAnnualRate) : currentAnnualRate
+    config.rateChangeMode === 'exactDate' ? rateTimeline.rateAt(date, currentAnnualRate) : currentAnnualRate
   const estimateRemainingPeriods = (fallback: number, annualRate = currentAnnualRate) => {
     const fallbackPeriods = Math.max(1, Math.ceil(fallback))
     if (balance.lte(0)) return 0
@@ -134,9 +135,9 @@ export function generateBaseSchedule(config: LoanConfig, options: Options = {}):
   const iterationLimit = Math.min(MAX_SCHEDULE_ROWS - 1, Math.max(maxPeriods + 240, 360))
   for (let regularIndex = 1; regularIndex <= iterationLimit && (balance.gt(0) || deferredInterest.gt(0)); regularIndex++) {
     const periodCalendarDays = Math.max(1, periodDays(previousPaymentDate, paymentDate, false))
-    const exactRateChanges = config.rateChangeMode === 'exactDate' ? config.rateChanges : []
+    const exactRateChanges = config.rateChangeMode === 'exactDate' ? rateTimeline.sortedChanges : []
     const accrueSegments = (from: string, to: string, includeTo: boolean, currentBalance: Decimal, reason = 'Начисление процентов') =>
-      accrueInterestSegmentsRaw(config, currentBalance, from, to, includeTo, periodCalendarDays, gracePeriods, reason, currentAnnualRate, exactRateChanges)
+      accrueInterestSegmentsRaw(config, currentBalance, from, to, includeTo, periodCalendarDays, gracePeriods, reason, currentAnnualRate, exactRateChanges, true)
     const sumRawInterest = (segments: ReturnType<typeof accrueSegments>) =>
       segments.reduce((sum, segment) => sum.add(segment.rawInterest), new Decimal(0))
     const roundRawInterest = (segments: ReturnType<typeof accrueSegments>) => money(sumRawInterest(segments), config.rounding)
@@ -170,6 +171,18 @@ export function generateBaseSchedule(config: LoanConfig, options: Options = {}):
     const applyEarly = (early: EarlyRepayment, interestDue: Decimal, remainingPeriods: number, amountOverride?: Decimal.Value, afterCurrentPayment = false) => {
       const strategy = options.forcedStrategy ?? early.strategy
       const earlyAmount = Decimal.max(0, amountOverride ?? early.amount)
+      if (balance.lte(0) && interestDue.lte(0)) {
+        return {
+          paidInterest: new Decimal(0),
+          paidPrincipal: new Decimal(0),
+          interestLeft: new Decimal(0),
+          fee: new Decimal(0),
+          event: { label: 'Операция пропущена · долг уже закрыт', type: 'earlyIgnored' as const },
+          paymentRecalculated: false,
+          fullyClosedByEarlyRepayment: false,
+          comment: early.comment ? `${early.comment} · пропущено: долг уже закрыт` : 'Пропущено: долг уже закрыт'
+        }
+      }
       const annualRateAtEvent = effectiveAnnualRate(early.date)
       const fee = money(earlyAmount.mul(config.earlyRepaymentFeePercent).div(100), config.rounding)
       let available = Decimal.max(0, earlyAmount.minus(fee))
@@ -376,7 +389,7 @@ export function generateBaseSchedule(config: LoanConfig, options: Options = {}):
     if (interestDue.gt(0)) deferredInterest = deferredInterest.add(interestDue)
 
     if (config.interest.includePaymentDate && config.interest.balanceMoment === 'endOfDay' && balance.gt(0)) {
-      const endDaySegments = accrueInterestSegmentsRaw({ ...config, interest: { ...config.interest, periodStart: 'inclusive' } }, balance, paymentDate, iso(addDays(parseISO(paymentDate), 1)), false, periodCalendarDays, gracePeriods, 'Начисление на конец дня', currentAnnualRate, exactRateChanges)
+      const endDaySegments = accrueInterestSegmentsRaw({ ...config, interest: { ...config.interest, periodStart: 'inclusive' } }, balance, paymentDate, iso(addDays(parseISO(paymentDate), 1)), false, periodCalendarDays, gracePeriods, 'Начисление на конец дня', currentAnnualRate, exactRateChanges, true)
       const endDayInterest = roundRawInterest(endDaySegments)
       chargedInterest = chargedInterest.add(endDayInterest)
       auditInterestSegments = [...auditInterestSegments, ...endDaySegments]
@@ -410,7 +423,7 @@ export function generateBaseSchedule(config: LoanConfig, options: Options = {}):
       eventTypes, paymentRecalculated, fullyClosedByEarlyRepayment, isRegularPayment, isGracePayment,
       audit: audit(rowStart, paymentDate, includeFinalDay, opening, sameDay.length ? `${earlyFirst.length ? 'сначала досрочные платежи; ' : ''}регулярный платёж; ${regularFirst.length ? 'затем досрочные платежи' : 'досрочных платежей в дату платежа нет'}` : 'Регулярный платёж', auditInterestSegments)
     })
-    const nextAnnualRate = rateForNextPeriod(config, paymentDate, currentAnnualRate)
+    const nextAnnualRate = rateTimeline.rateAt(paymentDate, currentAnnualRate)
     if (nextAnnualRate !== currentAnnualRate) {
       currentAnnualRate = nextAnnualRate
       if (balance.gt(0)) {

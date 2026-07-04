@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { calculateAnnuityPayment, calculateDebtAtDate, calculateInterest, compareScenarios, generateBaseSchedule, nextPaymentDate, sortRepaymentsByApplicationOrder, validateScenario } from '.'
+import { calculateAnnuityPayment, calculateDebtAtDate, calculateInterest, compareScenarios, createRateTimeline, extendedPaymentPeriods, generateBaseSchedule, nextPaymentDate, scheduledPaymentDates, sortRepaymentsByApplicationOrder, validateScenario } from '.'
 import { MAX_RATE_CHANGES } from './limits'
 import type { EarlyRepayment, GracePeriod, LoanConfig } from './types'
 
@@ -55,6 +55,29 @@ describe('loan engine', () => {
     expect(s.at(-1)!.date > grace.endDate).toBe(true)
     expect(s.filter(row => row.isRegularPayment)).toHaveLength(3)
   })
+  it('строит длинный календарь льготы линейным проходом', () => {
+    const onePeriod = { ...config, principal: 10_000, annualRate: 0, termMonths: 1, issueDate: '2024-01-01', firstPaymentDate: '2024-02-01', paymentDay: 1 }
+    let graceEnd = onePeriod.firstPaymentDate
+    for (let index = 1; index < 5000; index += 1) graceEnd = nextPaymentDate(graceEnd, onePeriod)
+    const grace: GracePeriod = { id: 'g-5000', startDate: onePeriod.firstPaymentDate, endDate: graceEnd, type: 'full', extendTerm: true, accrueInterest: false, capitalizeInterest: false }
+    const dates = scheduledPaymentDates(onePeriod, [grace])
+
+    expect(dates).toHaveLength(5001)
+    expect(extendedPaymentPeriods(onePeriod, [grace])).toBe(5000)
+    expect(dates.at(-1)! > grace.endDate).toBe(true)
+  })
+
+  it('строит календарь продления для нескольких intervals и разных частот', () => {
+    const monthly = { ...config, principal: 100_000, annualRate: 0, termMonths: 3, issueDate: '2024-01-01', firstPaymentDate: '2024-02-01', paymentDay: 1 }
+    const first: GracePeriod = { id: 'g1', startDate: '2024-02-01', endDate: '2024-02-01', type: 'full', extendTerm: true, accrueInterest: false, capitalizeInterest: false }
+    const second: GracePeriod = { id: 'g2', startDate: '2024-04-01', endDate: '2024-04-01', type: 'full', extendTerm: true, accrueInterest: false, capitalizeInterest: false }
+    const biweekly = { ...monthly, termMonths: 1, frequency: 'biweekly' as const, firstPaymentDate: '2024-01-15', paymentDay: 15 }
+    const quarterly = { ...monthly, termMonths: 6, frequency: 'quarterly' as const, firstPaymentDate: '2024-01-15', paymentDay: 15 }
+
+    expect(scheduledPaymentDates(monthly, [second, first])).toEqual(['2024-02-01', '2024-03-01', '2024-04-01', '2024-05-01', '2024-06-01'])
+    expect(scheduledPaymentDates(biweekly, [{ ...first, startDate: '2024-01-15', endDate: '2024-01-15' }])).toEqual(['2024-01-15', '2024-01-29', '2024-02-12'])
+    expect(scheduledPaymentDates(quarterly, [{ ...first, startDate: '2024-01-15', endDate: '2024-01-15' }])).toEqual(['2024-01-15', '2024-04-15', '2024-07-15'])
+  })
   it('капитализирует непогашенные проценты при уменьшенном льготном платеже', () => {
     const short = { ...config, principal: 120_000, annualRate: 12, termMonths: 12, issueDate: '2024-01-01', firstPaymentDate: '2024-02-01', paymentDay: 1 }
     const grace: GracePeriod = { id: 'g-reduced-cap', startDate: '2024-02-01', endDate: '2024-02-01', type: 'reduced', paymentAmount: 0, extendTerm: true, accrueInterest: true, capitalizeInterest: true }
@@ -94,6 +117,38 @@ describe('loan engine', () => {
   })
   it('работает с нулевой ставкой', () => { const s=generateBaseSchedule({...config,annualRate:0}); const first=s.find(x=>x.date==='2024-02-15')!; expect(first.interest).toBe(0); expect(first.payment).toBe(25000) })
   it('выполняет полное досрочное погашение', () => { const s=generateBaseSchedule(config,{earlyRepayments:[early({date:'2024-03-15',amount:4_000_000,strategy:'full'})]}); expect(s.length).toBe(3); expect(s.at(-1)?.closingBalance).toBe(0) })
+  it('не начисляет комиссию за последующую same-day операцию после полного закрытия', () => {
+    const closingConfig: LoanConfig = { ...config, principal: 100_000, annualRate: 0, termMonths: 12, issueDate: '2024-01-01', firstPaymentDate: '2024-02-01', paymentDay: 1, earlyRepaymentFeePercent: 10 }
+    const schedule = generateBaseSchedule(closingConfig, {
+      earlyRepayments: [
+        early({ id: 'full-close', date: '2024-01-15', amount: 111_111.12, strategy: 'full', sameDaySequence: 0 }),
+        early({ id: 'ignored-extra', date: '2024-01-15', amount: 50_000, strategy: 'reduceTerm', sameDaySequence: 1, comment: 'Лишняя операция' })
+      ]
+    })
+    const row = schedule.find(item => item.date === '2024-01-15')!
+
+    expect(row.closingBalance).toBe(0)
+    expect(row.earlyPayment).toBe(100000)
+    expect(row.feePaid).toBe(11111.11)
+    expect(row.cashFlowTotal).toBe(111111.11)
+    expect(row.eventTypes).toContain('earlyIgnored')
+    expect(row.comment).toContain('долг уже закрыт')
+  })
+
+  it('не начисляет комиссию за total operation после закрывающего регулярного платежа', () => {
+    const closingConfig: LoanConfig = { ...config, principal: 100_000, annualRate: 0, termMonths: 1, issueDate: '2024-01-01', firstPaymentDate: '2024-02-01', paymentDay: 1, firstPaymentInterestOnly: false, earlyRepaymentFeePercent: 10 }
+    const schedule = generateBaseSchedule(closingConfig, {
+      earlyRepayments: [early({ id: 'ignored-total', date: '2024-02-01', amount: 150_000, amountMode: 'total', strategy: 'reduceTerm', sameDaySequence: 0, sameDayOrder: 'regularFirst' })]
+    })
+    const row = schedule.find(item => item.date === '2024-02-01')!
+
+    expect(row.closingBalance).toBe(0)
+    expect(row.payment).toBe(100000)
+    expect(row.earlyPayment).toBe(0)
+    expect(row.feePaid).toBe(0)
+    expect(row.cashFlowTotal).toBe(100000)
+    expect(row.eventTypes).toContain('earlyIgnored')
+  })
   it('не закрывает кредит, если основной долг погашен, но остались отложенные проценты', () => {
     const c = { ...config, principal: 1_000_000, termMonths: 12, firstPaymentDate: '2024-02-01', paymentDay: 1 }
     const s = generateBaseSchedule(c, {
@@ -416,8 +471,9 @@ describe('loan engine', () => {
       early({id:'after-full',date:'2024-03-15',amount:1000,strategy:'reduceTerm'})
     ])
     const combined=result.scenarios.find(s=>s.id==='combined')!
-    expect(combined.schedule.at(-1)?.eventTypes).toEqual(expect.arrayContaining(['earlyFull','earlyReduceTerm']))
+    expect(combined.schedule.at(-1)?.eventTypes).toEqual(expect.arrayContaining(['earlyFull','earlyIgnored']))
     expect(combined.schedule.at(-1)?.fullyClosedByEarlyRepayment).toBe(true)
+    expect(combined.schedule.at(-1)?.earlyPayment).toBeLessThan(4_001_000)
     expect(combined.monthlyPayment).toBe(0)
   })
 
@@ -550,6 +606,21 @@ describe('differentiated payments', () => {
 })
 
 describe('variable rate history', () => {
+  it('строит timeline ставок один раз и отдаёт ставку на границах дат', () => {
+    const timeline = createRateTimeline({
+      annualRate: 12,
+      rateChanges: [
+        { id: 'late', date: '2024-06-01', annualRate: 7 },
+        { id: 'early', date: '2024-03-01', annualRate: 9 }
+      ]
+    })
+
+    expect(timeline.sortedChanges.map(change => change.id)).toEqual(['early', 'late'])
+    expect(timeline.rateAt('2024-02-29')).toBe(12)
+    expect(timeline.rateAt('2024-03-01')).toBe(9)
+    expect(timeline.rateAt('2024-07-01')).toBe(7)
+  })
+
   it('пересчитывает аннуитетный платёж со следующего платёжного периода', () => {
     const variable: LoanConfig = {
       ...config,

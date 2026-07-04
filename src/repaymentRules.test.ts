@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { defaultConfig } from './loanDefaults'
 import { expandRepaymentRules, type RepaymentRule } from './repaymentRules'
-import type { GracePeriod } from './loanEngine'
+import { compareScenarios, sortRepaymentsByApplicationOrder, type EarlyRepayment, type GracePeriod } from './loanEngine'
 
 const rule = (patch: Partial<RepaymentRule>): RepaymentRule => ({
   id: 'rule-1',
@@ -27,6 +27,47 @@ describe('правила досрочных платежей', () => {
     const items = expandRepaymentRules(defaultConfig, [rule({ skipMonths: ['2026-03'] })])
     expect(items.map(item => item.date)).toEqual(['2026-01-26', '2026-02-26', '2026-04-26'])
     expect(items[0]).toMatchObject({ amount: 10000, strategy: 'reduceTerm', amountMode: 'extra' })
+  })
+
+  it('не меняет финансовый результат generated rules при изменении технических ID', () => {
+    const firstRules = [
+      rule({ id: 'z-rule', ruleSequence: 0, startDate: '2026-08-15', endDate: '2026-08-15', amount: 100000, strategy: 'reduceTerm' }),
+      rule({ id: 'a-rule', ruleSequence: 1, startDate: '2026-08-15', endDate: '2026-08-15', amount: 100000, strategy: 'reducePayment' })
+    ]
+    const renamedRules = [
+      { ...firstRules[0], id: 'a-renamed' },
+      { ...firstRules[1], id: 'z-renamed' }
+    ]
+    const first = compareScenarios(defaultConfig, expandRepaymentRules(defaultConfig, firstRules)).scenarios.find(scenario => scenario.id === 'combined')!
+    const second = compareScenarios(defaultConfig, expandRepaymentRules(defaultConfig, renamedRules)).scenarios.find(scenario => scenario.id === 'combined')!
+
+    expect(second.monthlyPayment).toBe(first.monthlyPayment)
+    expect(second.closingDate).toBe(first.closingDate)
+    expect(second.totalInterest).toBe(first.totalInterest)
+  })
+
+  it('сохраняет порядок generated rules при перестановке JSON-массива', () => {
+    const termFirst = rule({ id: 'term-first', ruleSequence: 0, startDate: '2026-08-15', endDate: '2026-08-15', strategy: 'reduceTerm' })
+    const paymentSecond = rule({ id: 'payment-second', ruleSequence: 1, startDate: '2026-08-15', endDate: '2026-08-15', strategy: 'reducePayment' })
+
+    expect(expandRepaymentRules(defaultConfig, [paymentSecond, termFirst]).map(item => item.strategy)).toEqual(['reduceTerm', 'reducePayment'])
+  })
+
+  it('разрешает collision ручной и generated sequence явным source priority', () => {
+    const manual: EarlyRepayment = {
+      id: 'manual',
+      date: '2026-08-15',
+      amount: 10000,
+      amountMode: 'extra',
+      sameDaySequence: 0,
+      strategy: 'reduceTerm',
+      source: 'own',
+      sameDayOrder: 'regularFirst',
+      interestFirst: true
+    }
+    const generated = expandRepaymentRules(defaultConfig, [rule({ id: 'generated', ruleSequence: 0, startDate: manual.date, endDate: manual.date })])[0]
+
+    expect(sortRepaymentsByApplicationOrder([generated, manual]).map(item => item.id)).toEqual(['manual', generated.id])
   })
 
   it('создаёт ежегодные премии', () => {

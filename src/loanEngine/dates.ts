@@ -29,33 +29,37 @@ export const totalPaymentPeriods = (config: LoanConfig) =>
       ? Math.max(1, Math.round(config.termMonths / 3))
       : config.termMonths
 
-export const extendedPaymentPeriods = (config: LoanConfig, gracePeriods: GracePeriod[]) => {
-  const extending = gracePeriods.filter(period => period.extendTerm)
-  if (extending.length === 0) return 0
-  const configuredPeriods = totalPaymentPeriods(config)
-  let finalPeriods = configuredPeriods
-  for (let pass = 0; pass < MAX_SCHEDULE_ROWS; pass += 1) {
-    let deferredPeriods = 0
-    let cursor = config.firstPaymentDate
-    for (let index = 0; index < finalPeriods; index += 1) {
-      if (extending.some(period => period.startDate <= cursor && cursor <= period.endDate)) deferredPeriods += 1
-      cursor = nextPaymentDate(cursor, config)
-    }
-    const nextFinalPeriods = configuredPeriods + deferredPeriods
-    if (nextFinalPeriods === finalPeriods) return deferredPeriods
-    finalPeriods = nextFinalPeriods
-    if (finalPeriods >= MAX_SCHEDULE_ROWS) break
-  }
-  return Math.max(0, finalPeriods - configuredPeriods)
-}
+const extendingIntervals = (gracePeriods: GracePeriod[]) =>
+  gracePeriods
+    .filter(period => period.extendTerm)
+    .sort((a, b) => a.startDate.localeCompare(b.startDate) || a.endDate.localeCompare(b.endDate))
 
-export const scheduledPaymentDates = (config: LoanConfig, gracePeriods: GracePeriod[] = []) => {
-  const periods = totalPaymentPeriods(config) + extendedPaymentPeriods(config, gracePeriods)
+const buildPaymentCalendar = (config: LoanConfig, gracePeriods: GracePeriod[] = []) => {
+  const configuredPeriods = totalPaymentPeriods(config)
+  const intervals = extendingIntervals(gracePeriods)
   const dates: string[] = []
+  let remainingContractualPayments = configuredPeriods
   let cursor = config.firstPaymentDate
-  for (let index = 0; index < periods; index += 1) {
+  let intervalIndex = 0
+  const isExtendingGraceDate = (date: string) => {
+    while (intervalIndex < intervals.length && intervals[intervalIndex].endDate < date) intervalIndex += 1
+    const interval = intervals[intervalIndex]
+    return Boolean(interval && interval.startDate <= date && date <= interval.endDate)
+  }
+
+  while (remainingContractualPayments > 0) {
+    if (dates.length >= MAX_SCHEDULE_ROWS) {
+      throw new Error(`Календарь платежей не помещается в допустимое количество строк (${MAX_SCHEDULE_ROWS})`)
+    }
     dates.push(cursor)
+    if (!isExtendingGraceDate(cursor)) remainingContractualPayments -= 1
     cursor = nextPaymentDate(cursor, config)
   }
-  return dates
+  return { dates, extendedPeriods: dates.length - configuredPeriods }
 }
+
+export const extendedPaymentPeriods = (config: LoanConfig, gracePeriods: GracePeriod[]) =>
+  buildPaymentCalendar(config, gracePeriods).extendedPeriods
+
+export const scheduledPaymentDates = (config: LoanConfig, gracePeriods: GracePeriod[] = []) =>
+  buildPaymentCalendar(config, gracePeriods).dates

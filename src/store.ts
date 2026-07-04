@@ -4,7 +4,7 @@ import { addMonths, format, parseISO } from 'date-fns'
 import { generateBaseSchedule, isRegularPaymentDate, nextSameDaySequence, sortRateChanges, sortRepaymentsByApplicationOrder, validateScenario, type EarlyRepayment, type GracePeriod, type LoanConfig, type RateChange } from './loanEngine'
 import { createDefaultConfig, defaultConfig } from './loanDefaults'
 import type { LoanBackupData } from './importExport'
-import { expandRepaymentRules, type RepaymentRule } from './repaymentRules'
+import { expandRepaymentRules, sortRepaymentRulesByApplicationOrder, type RepaymentRule } from './repaymentRules'
 import { createId } from './utils/createId'
 import { isISODate, isISOYearMonth } from './utils/dateValidation'
 import { MAX_EARLY_REPAYMENTS, MAX_GRACE_PERIODS, MAX_RATE_CHANGES, MAX_REPAYMENT_RULES, MAX_TERM_MONTHS } from './loanEngine/limits'
@@ -119,7 +119,7 @@ const sortRepayments = (repayments: EarlyRepayment[]) =>
   sortRepaymentsByApplicationOrder(repayments)
 
 const sortRules = (rules: RepaymentRule[]) =>
-  [...rules].sort((a, b) => a.startDate.localeCompare(b.startDate) || a.id.localeCompare(b.id))
+  sortRepaymentRulesByApplicationOrder(rules)
 
 const defaultAccentColor = '#0b9873'
 const themeNames: readonly ThemeName[] = ['emerald', 'ocean', 'violet', 'graphite', 'warm', 'night']
@@ -234,19 +234,31 @@ const normalizeConfig = (config: Partial<LoanConfig> | undefined): LoanConfig =>
 
 const normalizeRepayments = (value: unknown, config: LoanConfig): EarlyRepayment[] => {
   if (!Array.isArray(value)) return []
+  const usedSequences = new Map<string, Set<number>>()
+  const nextSequence = (date: string, candidate: number) => {
+    const used = usedSequences.get(date) ?? new Set<number>()
+    let sequence = candidate
+    while (used.has(sequence)) sequence += 1
+    used.add(sequence)
+    usedSequences.set(date, used)
+    return sequence
+  }
   return withUniqueIds(sortRepayments(value.slice(0, MAX_EARLY_REPAYMENTS).flatMap((item, index): EarlyRepayment[] => {
     if (!isObject(item) || typeof item.id !== 'string' || !isISODate(item.date)) return []
     const amount = optionalFiniteNumber(item.amount, 0)
     if (amount === undefined) return []
     const requestedAmountMode = item.amountMode === undefined ? 'total' : oneOf(item.amountMode, ['extra', 'total'] as const, 'extra')
     const amountMode = requestedAmountMode === 'total' && isRegularPaymentDate(item.date, config) ? 'total' : 'extra'
+    const sequenceCandidate = typeof item.sameDaySequence === 'number' && Number.isInteger(item.sameDaySequence) && item.sameDaySequence >= 0 ? item.sameDaySequence : index
     return [{
       id: item.id,
       date: item.date,
       amount,
       enabled: typeof item.enabled === 'boolean' ? item.enabled : true,
       amountMode,
-      sameDaySequence: typeof item.sameDaySequence === 'number' && Number.isInteger(item.sameDaySequence) && item.sameDaySequence >= 0 ? item.sameDaySequence : index,
+      sameDaySequence: nextSequence(item.date, sequenceCandidate),
+      operationSource: item.operationSource === 'rule' ? 'rule' : 'manual',
+      ...(typeof item.sourceRuleId === 'string' && item.sourceRuleId.trim() ? { sourceRuleId: item.sourceRuleId } : {}),
       strategy: oneOf(item.strategy, repaymentStrategies, 'reduceTerm'),
       source: oneOf(item.source, repaymentSources, 'own'),
       sameDayOrder: amountMode === 'total' ? 'regularFirst' : oneOf(item.sameDayOrder, sameDayOrders, 'regularFirst'),
@@ -258,7 +270,14 @@ const normalizeRepayments = (value: unknown, config: LoanConfig): EarlyRepayment
 
 const normalizeRepaymentRules = (value: unknown): RepaymentRule[] => {
   if (!Array.isArray(value)) return []
-  return withUniqueIds(sortRules(value.slice(0, MAX_REPAYMENT_RULES).flatMap((item): RepaymentRule[] => {
+  const usedSequences = new Set<number>()
+  const nextRuleSequence = (candidate: number) => {
+    let sequence = candidate
+    while (usedSequences.has(sequence)) sequence += 1
+    usedSequences.add(sequence)
+    return sequence
+  }
+  return withUniqueIds(sortRules(value.slice(0, MAX_REPAYMENT_RULES).flatMap((item, index): RepaymentRule[] => {
     if (!isObject(item) || typeof item.id !== 'string' || typeof item.name !== 'string' || !isISODate(item.startDate) || !isISODate(item.endDate) || item.endDate < item.startDate) return []
     const type = oneOf(item.type, repaymentRuleTypes, 'monthlyFixed')
     const amount = optionalFiniteNumber(item.amount, 0)
@@ -267,6 +286,7 @@ const normalizeRepaymentRules = (value: unknown): RepaymentRule[] => {
     return [{
       id: item.id,
       name: item.name.trim() || 'Регулярный платёж',
+      ruleSequence: nextRuleSequence(typeof item.ruleSequence === 'number' && Number.isInteger(item.ruleSequence) && item.ruleSequence >= 0 ? item.ruleSequence : index),
       type,
       startDate: item.startDate,
       endDate: item.endDate,
@@ -371,9 +391,20 @@ const assertRepaymentPlanValid = (config: LoanConfig, repayments: EarlyRepayment
 
 const withRepaymentSequence = (repayments: EarlyRepayment[], repayment: EarlyRepayment) => ({
   ...repayment,
+  operationSource: repayment.operationSource ?? 'manual',
   sameDaySequence: typeof repayment.sameDaySequence === 'number' && Number.isInteger(repayment.sameDaySequence) && repayment.sameDaySequence >= 0
     ? repayment.sameDaySequence
     : nextSameDaySequence(repayments, repayment.date)
+})
+
+const nextRuleSequence = (rules: RepaymentRule[]) =>
+  rules.reduce((max, rule, index) => Math.max(max, Number.isFinite(rule.ruleSequence) ? rule.ruleSequence! : index), -1) + 1
+
+const withRuleSequence = (rules: RepaymentRule[], rule: RepaymentRule) => ({
+  ...rule,
+  ruleSequence: typeof rule.ruleSequence === 'number' && Number.isInteger(rule.ruleSequence) && rule.ruleSequence >= 0
+    ? rule.ruleSequence
+    : nextRuleSequence(rules)
 })
 
 export const loanToBackupData = (loan: LoanProfile): LoanBackupData => ({
@@ -454,12 +485,12 @@ export const useLoanStore = create<LoanState>()(persist((set) => ({
   removeRepayment: (id) => set(s => syncActive(s, { repayments: s.repayments.filter(r => r.id !== id) })),
   addRepaymentRule: (rule) => set(s => {
     if (s.repaymentRules.length >= MAX_REPAYMENT_RULES) throw new Error(`Можно добавить не более ${MAX_REPAYMENT_RULES} правил досрочных платежей`)
-    const repaymentRules = sortRules([...s.repaymentRules, rule])
+    const repaymentRules = sortRules([...s.repaymentRules, withRuleSequence(s.repaymentRules, rule)])
     assertRepaymentPlanValid(s.config, s.repayments, repaymentRules, s.gracePeriods)
     return syncActive(s, { repaymentRules })
   }),
   updateRepaymentRule: (rule) => set(s => {
-    const repaymentRules = sortRules(s.repaymentRules.map(item => item.id === rule.id ? rule : item))
+    const repaymentRules = sortRules(s.repaymentRules.map(item => item.id === rule.id ? { ...rule, ruleSequence: rule.ruleSequence ?? item.ruleSequence } : item))
     assertRepaymentPlanValid(s.config, s.repayments, repaymentRules, s.gracePeriods)
     return syncActive(s, { repaymentRules })
   }),

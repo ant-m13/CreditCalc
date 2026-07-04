@@ -26,6 +26,8 @@ const EarlyList = lazy(() => import('./components/EarlyList').then(module => ({ 
 const Schedule = lazy(() => import('./components/Schedule').then(module => ({ default: module.Schedule })))
 const ExportPanel = lazy(() => import('./components/ExportPanel').then(module => ({ default: module.ExportPanel })))
 
+const STALE_EXPORT_MESSAGE = 'Дождитесь окончания пересчёта, чтобы экспортировать актуальный график'
+
 function App() {
   const store = useLoanStore()
   const [section, setSection] = useState('overview')
@@ -144,6 +146,21 @@ function App() {
     store.updateRepayment({ ...repayment, enabled: nextEnabled })
   }
   const toggleNightTheme = () => store.setTheme(store.theme === 'night' ? lastLightTheme : 'night')
+  const guardCalculatedExport = useCallback((action: () => void) => {
+    if (isStale) {
+      setImportStatus({ kind: 'error', text: STALE_EXPORT_MESSAGE })
+      return
+    }
+    action()
+  }, [isStale, setImportStatus])
+  const printCalculated = useCallback(() => guardCalculatedExport(print), [guardCalculatedExport, print])
+  const downloadExport = useCallback((kind: 'csv' | 'json' | 'xls') => {
+    if (kind === 'json') {
+      download(kind)
+      return
+    }
+    guardCalculatedExport(() => download(kind))
+  }, [download, guardCalculatedExport])
 
   const accentStyle = store.useCustomAccentColor ? ({ '--green': store.customAccentColor } as CSSProperties) : undefined
 
@@ -154,7 +171,7 @@ function App() {
       <div className="sidebar-note"><ShieldCheck size={20}/><div><b>Расчёт локально</b><span>Ваши данные не покидают устройство</span></div></div>
     </aside>
     <main>
-      <header><button className="icon-btn menu-btn" aria-label="Открыть меню" onClick={() => setMobileNav(true)}><Menu/></button><div className="header-title"><p>Финансовый план · v{APP_VERSION}</p><h1>{section === 'overview' ? 'Ваш кредит' : nav.find(x => x[0] === section)?.[2]}</h1></div><LoanSwitcher loans={store.loans} activeLoanId={store.activeLoanId} switchLoan={store.switchLoan} createLoan={store.createLoan} renameLoan={store.renameLoan} removeLoan={store.removeLoan}/><button className="icon-btn theme-toggle" onClick={toggleNightTheme} title={store.theme === 'night' ? 'Вернуть светлую тему' : 'Включить ночной режим'} aria-label={store.theme === 'night' ? 'Вернуть светлую тему' : 'Включить ночной режим'}>{store.theme === 'night' ? <Sun/> : <Moon/>}</button><FontControls fontSize={store.appFontSize} setFontSize={store.setAppFontSize}/><div className="header-actions"><span className={storageStatus.kind === 'saved' ? 'status-dot' : 'status-dot warning'}><i/> {storageStatus.kind === 'failed' ? 'Сохранение не удалось' : storageStatus.kind === 'nearQuota' ? 'Мало места' : 'Данные сохранены'}</span><button className="ghost print-action" onClick={print}><Printer size={16}/> Печать</button><button className="primary add-payment-action" onClick={() => openEarly()}><Plus size={17}/> Досрочный платёж</button></div></header>
+      <header><button className="icon-btn menu-btn" aria-label="Открыть меню" onClick={() => setMobileNav(true)}><Menu/></button><div className="header-title"><p>Финансовый план · v{APP_VERSION}</p><h1>{section === 'overview' ? 'Ваш кредит' : nav.find(x => x[0] === section)?.[2]}</h1></div><LoanSwitcher loans={store.loans} activeLoanId={store.activeLoanId} switchLoan={store.switchLoan} createLoan={store.createLoan} renameLoan={store.renameLoan} removeLoan={store.removeLoan}/><button className="icon-btn theme-toggle" onClick={toggleNightTheme} title={store.theme === 'night' ? 'Вернуть светлую тему' : 'Включить ночной режим'} aria-label={store.theme === 'night' ? 'Вернуть светлую тему' : 'Включить ночной режим'}>{store.theme === 'night' ? <Sun/> : <Moon/>}</button><FontControls fontSize={store.appFontSize} setFontSize={store.setAppFontSize}/><div className="header-actions"><span className={storageStatus.kind === 'saved' ? 'status-dot' : 'status-dot warning'}><i/> {storageStatus.kind === 'failed' ? 'Сохранение не удалось' : storageStatus.kind === 'nearQuota' ? 'Мало места' : 'Данные сохранены'}</span><button className="ghost print-action" onClick={printCalculated} disabled={isStale} title={isStale ? STALE_EXPORT_MESSAGE : undefined}><Printer size={16}/> Печать</button><button className="primary add-payment-action" onClick={() => openEarly()}><Plus size={17}/> Досрочный платёж</button></div></header>
       <div className="content">
         {storageWarning && <div className="alert">{storageWarning}</div>}
         {isStale && <div className="alert">Пересчитываем график. На экране пока показан предыдущий согласованный расчёт.</div>}
@@ -167,7 +184,7 @@ function App() {
           {section === 'grace' && <GraceList items={store.gracePeriods} remove={store.removeGrace} open={() => setShowGrace(true)}/>}
           {section === 'schedule' && selected && base && <Schedule schedule={selected.schedule} baseSchedule={base.schedule} repayments={allRepayments} rows={rows} setRows={setRows} more={() => setRows(r => r + 24)}/>}
           {section === 'schedule' && (!selected || !base) && <section className="panel list-panel"><div className="panel-head"><div><h3>График недоступен</h3><p>Сначала исправьте ошибки в параметрах расчёта.</p></div></div></section>}
-          {section === 'export' && <ExportPanel download={download} print={print} createImported={createLoanFromData} replaceImported={replaceActiveWithData} copyShareLink={copyShareLink} createParameterCode={createParameterCode} decodeParameterCode={decodeParameterCode} looksLikeParameterLink={looksLikeParameterLink} status={importStatus}/>}
+          {section === 'export' && <ExportPanel download={downloadExport} print={printCalculated} calculatedExportsDisabled={isStale} createImported={createLoanFromData} replaceImported={replaceActiveWithData} copyShareLink={copyShareLink} createParameterCode={createParameterCode} decodeParameterCode={decodeParameterCode} looksLikeParameterLink={looksLikeParameterLink} status={importStatus}/>}
           {section === 'changes' && <Changelog/>}
         </Suspense>
       </div>
