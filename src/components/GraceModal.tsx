@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { X } from 'lucide-react'
 import type { GracePeriod } from '../loanEngine'
 import { currencySymbol } from '../formatters'
+import { useModalDialog } from '../hooks/useModalDialog'
 import { createId } from '../utils/createId'
 import { isISODate } from '../utils/dateValidation'
 import { Field } from './ui'
@@ -12,6 +13,7 @@ interface GraceModalProps {
 }
 
 export function GraceModal({ close, add }: GraceModalProps) {
+  const { dialogRef, titleId } = useModalDialog(close)
   const [start, setStart] = useState('2027-03-01')
   const [end, setEnd] = useState('2027-05-31')
   const [type, setType] = useState<GracePeriod['type']>('interestOnly')
@@ -45,9 +47,9 @@ export function GraceModal({ close, add }: GraceModalProps) {
   }
 
   return <div className="modal-backdrop">
-    <div className="modal">
+    <div className="modal" ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby={titleId} tabIndex={-1}>
       <div className="modal-head">
-        <div><span className="eyebrow">Условия договора</span><h2>Льготный период</h2></div>
+        <div><span className="eyebrow">Условия договора</span><h2 id={titleId}>Льготный период</h2></div>
         <button className="icon-btn" aria-label="Закрыть окно льготного периода" onClick={close}><X/></button>
       </div>
       <div className="modal-body">

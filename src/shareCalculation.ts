@@ -107,8 +107,9 @@ export function parseLoanSnapshot(value: unknown): LoanBackupData {
 
 export async function encodeSharedCalculation(snapshot: SharedCalculationV1) {
   const json = serializeLoanSnapshot(snapshot)
-  if (json.length > MAX_JSON_PAYLOAD_LENGTH) throw new Error('Расчёт слишком большой для ссылки. Сохраните его в JSON-файл')
-  const compressed = await gzip(new TextEncoder().encode(json))
+  const jsonBytes = new TextEncoder().encode(json)
+  if (jsonBytes.byteLength > MAX_JSON_PAYLOAD_LENGTH) throw new Error('Расчёт слишком большой для ссылки. Сохраните его в JSON-файл')
+  const compressed = await gzip(jsonBytes)
   const encoded = `${SHARE_PREFIX}${bytesToBase64Url(compressed)}`
   if (encoded.length > MAX_ENCODED_PAYLOAD_LENGTH) throw new Error('Расчёт слишком большой для ссылки. Сохраните его в JSON-файл')
   return encoded
@@ -121,8 +122,8 @@ export async function decodeSharedCalculation(payload: string) {
   let raw: unknown
   try {
     const bytes = await gunzip(base64UrlToBytes(encoded))
+    if (bytes.byteLength > MAX_JSON_PAYLOAD_LENGTH) throw new Error('Расчёт слишком большой для ссылки. Сохраните его в JSON-файл')
     const json = new TextDecoder().decode(bytes)
-    if (json.length > MAX_JSON_PAYLOAD_LENGTH) throw new Error('Расчёт слишком большой для ссылки. Сохраните его в JSON-файл')
     raw = JSON.parse(json)
   } catch (error) {
     if (error instanceof Error && error.message.includes('слишком большой')) throw error

@@ -2,6 +2,7 @@ import changelogMarkdown from '../CHANGELOG.md?raw'
 
 export const APP_VERSION = __APP_VERSION__
 export const BUILD_DATE = __BUILD_DATE__
+export const COMMIT_SHA = __COMMIT_SHA__
 
 export interface ChangelogEntry {
   date: string
@@ -14,6 +15,8 @@ export const formatBuildDate = (value = BUILD_DATE) => {
   const date = new Date(value)
   return Number.isNaN(date.getTime()) ? '—' : date.toLocaleString('ru-RU', { dateStyle: 'short', timeStyle: 'short' })
 }
+
+export const shortCommitSha = (value = COMMIT_SHA) => value && value !== 'dev' ? value.slice(0, 7) : 'dev'
 
 export function parseChangelog(markdown: string): ChangelogEntry[] {
   const lines = markdown.split(/\r?\n/)

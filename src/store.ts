@@ -7,10 +7,11 @@ import type { LoanBackupData } from './importExport'
 import type { RepaymentRule } from './repaymentRules'
 import { createId } from './utils/createId'
 import { isISODate, isISOYearMonth } from './utils/dateValidation'
-import { MAX_EARLY_REPAYMENTS, MAX_GRACE_PERIODS, MAX_REPAYMENT_RULES, MAX_TERM_MONTHS } from './loanEngine/limits'
+import { MAX_EARLY_REPAYMENTS, MAX_GRACE_PERIODS, MAX_RATE_CHANGES, MAX_REPAYMENT_RULES, MAX_TERM_MONTHS } from './loanEngine/limits'
 export { defaultConfig } from './loanDefaults'
 
 export const STORAGE_ERROR_EVENT = 'credit-calculator-storage-error'
+export const MAX_PERSISTED_STATE_BYTES = 4_000_000
 
 const notifyStorageError = (error: unknown) => {
   if (typeof window === 'undefined') return
@@ -31,6 +32,9 @@ const safeLocalStorage = {
   setItem: (name: string, value: string) => {
     if (typeof window === 'undefined') return
     try {
+      if (new TextEncoder().encode(value).byteLength > MAX_PERSISTED_STATE_BYTES) {
+        notifyStorageError(new Error('Сохранённые данные приближаются к лимиту браузера. Экспортируйте расчёт в JSON'))
+      }
       window.localStorage.setItem(name, value)
     } catch (error) {
       notifyStorageError(error)
@@ -166,7 +170,7 @@ const defaultLoanData = (withSeedRepayment = false): LoanData => ({
 const normalizeRateChanges = (value: unknown, issueDate: string): RateChange[] => {
   if (!Array.isArray(value)) return []
   const seenDates = new Set<string>()
-  const changes = value.flatMap((item): RateChange[] => {
+  const changes = value.slice(0, MAX_RATE_CHANGES).flatMap((item): RateChange[] => {
     if (!isObject(item) || !isISODate(item.date)) return []
     if (isISODate(issueDate) && item.date <= issueDate) return []
     const annualRate = typeof item.annualRate === 'number' && Number.isFinite(item.annualRate) && item.annualRate >= 0 && item.annualRate <= 100 ? item.annualRate : undefined
@@ -286,6 +290,13 @@ const normalizeGracePeriods = (value: unknown): GracePeriod[] => {
   }).sort((a, b) => a.startDate.localeCompare(b.startDate) || a.id.localeCompare(b.id)), 'grace')
 }
 
+const assertGracePeriodsDoNotOverlap = (gracePeriods: GracePeriod[]) => {
+  const sortedGrace = [...gracePeriods].sort((a, b) => a.startDate.localeCompare(b.startDate) || a.id.localeCompare(b.id))
+  sortedGrace.forEach((period, index) => {
+    if (index > 0 && period.startDate <= sortedGrace[index - 1].endDate) throw new Error('Льготные периоды не должны пересекаться')
+  })
+}
+
 const normalizeLoanData = (data: Partial<LoanImportData | LoanData>): LoanData => {
   const config = normalizeConfig(data.config)
   return {
@@ -330,6 +341,7 @@ const assertCanAddLoan = (count: number) => {
   if (count >= MAX_LOANS) throw new Error(`Можно сохранить не более ${MAX_LOANS} кредитов`)
 }
 const assertImportWithinLimits = (data: Partial<LoanImportData | LoanData>) => {
+  if (countArray(data.config?.rateChanges) > MAX_RATE_CHANGES) throw new Error(`Слишком много изменений ставки. Максимум: ${MAX_RATE_CHANGES}`)
   if (countArray(data.repayments) > MAX_EARLY_REPAYMENTS) throw new Error(`Слишком много досрочных платежей. Максимум: ${MAX_EARLY_REPAYMENTS}`)
   if (countArray(data.repaymentRules) > MAX_REPAYMENT_RULES) throw new Error(`Слишком много правил досрочных платежей. Максимум: ${MAX_REPAYMENT_RULES}`)
   if (countArray(data.gracePeriods) > MAX_GRACE_PERIODS) throw new Error(`Слишком много льготных периодов. Максимум: ${MAX_GRACE_PERIODS}`)
@@ -408,7 +420,9 @@ export const useLoanStore = create<LoanState>()(persist((set) => ({
   removeRepaymentRule: (id) => set(s => syncActive(s, { repaymentRules: s.repaymentRules.filter(rule => rule.id !== id) })),
   addGrace: (grace) => set(s => {
     if (s.gracePeriods.length >= MAX_GRACE_PERIODS) throw new Error(`Можно добавить не более ${MAX_GRACE_PERIODS} льготных периодов`)
-    return syncActive(s, { gracePeriods: [...s.gracePeriods, grace] })
+    const gracePeriods = [...s.gracePeriods, grace]
+    assertGracePeriodsDoNotOverlap(gracePeriods)
+    return syncActive(s, { gracePeriods })
   }),
   removeGrace: (id) => set(s => syncActive(s, { gracePeriods: s.gracePeriods.filter(g => g.id !== id) })),
   selectScenario: (selectedScenario) => set(s => syncActive(s, { selectedScenario })),
@@ -453,7 +467,7 @@ export const useLoanStore = create<LoanState>()(persist((set) => ({
 }), {
   name: 'ipoteka-calculator-v1',
   storage: createJSONStorage(() => safeLocalStorage),
-  version: 8,
+  version: 9,
   migrate: normalizePersistedState,
   merge: (persisted, current) => ({ ...current, ...normalizePersistedState(persisted) })
 }))

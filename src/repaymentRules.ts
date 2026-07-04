@@ -104,7 +104,7 @@ export function expandRepaymentRules(config: LoanConfig, rules: RepaymentRule[])
       }
       guard += 1
       cursor = nextRuleDate(startDate, rule.type, guard)
-      if (guard > 1200) throw new Error('Правило досрочных платежей создаёт слишком много операций')
+      if (guard > MAX_GENERATED_REPAYMENTS) throw new Error(`Правило досрочных платежей создаёт слишком много операций. Максимум: ${MAX_GENERATED_REPAYMENTS}`)
     }
   }
   return result.sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id))

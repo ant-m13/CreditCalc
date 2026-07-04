@@ -9,14 +9,15 @@ export const configureFormatters = (decimals: 0 | 2, currency: string) => {
   currentCurrency = currency
 }
 
-export const money = (value: number, compact = false) => new Intl.NumberFormat('ru-RU', {
+export const formatMoney = (value: number, currency = currentCurrency, decimals: 0 | 2 = currentMoneyDecimals, compact = false) => new Intl.NumberFormat('ru-RU', {
   style: 'currency',
-  currency: currentCurrency,
-  minimumFractionDigits: compact ? 0 : currentMoneyDecimals,
-  maximumFractionDigits: compact ? 0 : currentMoneyDecimals,
+  currency,
+  minimumFractionDigits: compact ? 0 : decimals,
+  maximumFractionDigits: compact ? 0 : decimals,
   notation: compact ? 'compact' : 'standard'
 }).format(value)
 
+export const money = (value: number, compact = false) => formatMoney(value, currentCurrency, currentMoneyDecimals, compact)
 export const currencySymbol = () => new Intl.NumberFormat('ru-RU', { style: 'currency', currency: currentCurrency }).formatToParts(0).find(part => part.type === 'currency')?.value ?? currentCurrency
 export const shortDate = (value: string) => format(parseISO(value), 'dd MMM yyyy', { locale: ru })
 export const plural = (n: number, one: string, few: string, many: string) => n % 10 === 1 && n % 100 !== 11 ? one : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 10 || n % 100 >= 20) ? few : many

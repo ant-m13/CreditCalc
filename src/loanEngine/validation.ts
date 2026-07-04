@@ -1,5 +1,5 @@
 import type { EarlyRepayment, GracePeriod, LoanConfig } from './types'
-import { MAX_EARLY_REPAYMENTS, MAX_GRACE_PERIODS, MAX_TERM_MONTHS } from './limits'
+import { MAX_EARLY_REPAYMENTS, MAX_GRACE_PERIODS, MAX_RATE_CHANGES, MAX_TERM_MONTHS } from './limits'
 import { isRegularPaymentDate } from './dates'
 import { isISODate } from '../utils/dateValidation'
 
@@ -50,6 +50,7 @@ export function validateLoan(config: LoanConfig) {
   if (!Array.isArray(config.rateChanges)) {
     errors.push('История ставок повреждена')
   } else {
+    if (config.rateChanges.length > MAX_RATE_CHANGES) errors.push(`Количество изменений ставки не должно превышать ${MAX_RATE_CHANGES}`)
     const rateChangeDates = new Set<string>()
     config.rateChanges.forEach((change, index) => {
       if (typeof change.id !== 'string' || !change.id.trim()) errors.push(`Изменение ставки №${index + 1}: ID повреждён`)

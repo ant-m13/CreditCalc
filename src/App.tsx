@@ -1,10 +1,7 @@
-import { lazy, Suspense, useDeferredValue, useEffect, useMemo, useState, type CSSProperties } from 'react'
-import { addMonths, format, parseISO } from 'date-fns'
-import { ru } from 'date-fns/locale'
+import { lazy, Suspense, useCallback, useState, type CSSProperties } from 'react'
 import { ArrowDownToLine, CalendarDays, CircleHelp, History, Landmark, Menu, Moon, Plus, Printer, ReceiptText, Settings2, ShieldCheck, Sun, Trash2, TrendingDown, X } from 'lucide-react'
-import { compareScenarios, isRegularPaymentDate, validateScenario, type EarlyRepayment, type GracePeriod, type PaymentScheduleItem } from './loanEngine'
-import type { LoanBackupData } from './importExport'
-import { loanToBackupData, STORAGE_ERROR_EVENT, useLoanStore, type LoanProfile } from './store'
+import { isRegularPaymentDate, type EarlyRepayment, type GracePeriod } from './loanEngine'
+import { useLoanStore } from './store'
 import { FontControls } from './components/FontControls'
 import { LoanSwitcher } from './components/LoanSwitcher'
 import { SharedCalculationModal } from './components/SharedCalculationModal'
@@ -14,24 +11,19 @@ import { OnboardingModal } from './components/OnboardingModal'
 import { EarlyModal } from './components/EarlyModal'
 import { GraceModal } from './components/GraceModal'
 import { configureFormatters, shortDate } from './formatters'
-import { buildShareUrl, createLoanSnapshot, decodeSharedCalculation, encodeSharedCalculation, looksLikeSharedCalculationUrl, normalizeSharedCalculationPayload, readSharedCalculationFromLocation } from './shareCalculation'
-import { expandRepaymentRules } from './repaymentRules'
 import { APP_VERSION } from './version'
 import { graceTypeName } from './labels'
-import { isISODate } from './utils/dateValidation'
+import { useLoanCalculation } from './hooks/useLoanCalculation'
+import { useLoanExport } from './hooks/useLoanExport'
+import { useLoanImport } from './hooks/useLoanImport'
+import { useSharedCalculation } from './hooks/useSharedCalculation'
+import { useStorageStatus } from './hooks/useStorageStatus'
 
 const Overview = lazy(() => import('./components/Overview').then(module => ({ default: module.Overview })))
 const Settings = lazy(() => import('./components/Settings').then(module => ({ default: module.Settings })))
 const EarlyList = lazy(() => import('./components/EarlyList').then(module => ({ default: module.EarlyList })))
 const Schedule = lazy(() => import('./components/Schedule').then(module => ({ default: module.Schedule })))
 const ExportPanel = lazy(() => import('./components/ExportPanel').then(module => ({ default: module.ExportPanel })))
-const buildLoanCalculation = (loan: LoanProfile) => {
-  const generated = expandRepaymentRules(loan.config, loan.repaymentRules)
-  const repayments = [...loan.repayments, ...generated].sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id))
-  const comparison = compareScenarios(loan.config, repayments, loan.gracePeriods)
-  const selected = comparison.scenarios.find(s => s.id === loan.selectedScenario) ?? comparison.scenarios[1]
-  return { generated, repayments, comparison, selected }
-}
 
 function App() {
   const store = useLoanStore()
@@ -42,224 +34,63 @@ function App() {
   const [showGrace, setShowGrace] = useState(false)
   const [mobileNav, setMobileNav] = useState(false)
   const [rows, setRows] = useState(18)
-  const [importStatus, setImportStatus] = useState<{ kind: 'success' | 'error'; text: string } | null>(null)
-  const [sharedCalculation, setSharedCalculation] = useState<LoanBackupData | null>(null)
-  const [showWhatsNew, setShowWhatsNew] = useState(false)
-  const [showOnboarding, setShowOnboarding] = useState(false)
-  const [lastLightTheme, setLastLightTheme] = useState<'emerald' | 'ocean' | 'violet' | 'graphite' | 'warm'>('emerald')
-  const [storageWarning, setStorageWarning] = useState(false)
-
-  const calculationConfig = useDeferredValue(store.config)
-  const calculationRepayments = useDeferredValue(store.repayments)
-  const calculationRepaymentRules = useDeferredValue(store.repaymentRules)
-  const calculationGracePeriods = useDeferredValue(store.gracePeriods)
-  const validationErrors = useMemo(() => validateScenario(calculationConfig, calculationRepayments, calculationGracePeriods), [calculationConfig, calculationRepayments, calculationGracePeriods])
-  const generatedResult = useMemo(() => {
-    if (validationErrors.length > 0) return { items: [] as EarlyRepayment[], error: null as string | null }
-    try {
-      return { items: expandRepaymentRules(calculationConfig, calculationRepaymentRules), error: null as string | null }
-    } catch (error) {
-      return { items: [] as EarlyRepayment[], error: error instanceof Error ? error.message : 'Не удалось создать операции по правилам досрочных платежей' }
-    }
-  }, [calculationConfig, calculationRepaymentRules, validationErrors])
-  const generatedRepayments = generatedResult.items
-  const activeManualRepayments = useMemo(() => calculationRepayments.filter(item => item.enabled !== false && item.amount > 0), [calculationRepayments])
-  const allRepayments = useMemo(() => [...activeManualRepayments, ...generatedRepayments].sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id)), [activeManualRepayments, generatedRepayments])
-  const preliminaryErrors = useMemo(() => generatedResult.error ? [...validationErrors, generatedResult.error] : validationErrors, [validationErrors, generatedResult.error])
-  const comparisonResult = useMemo(() => {
-    if (preliminaryErrors.length > 0) return { comparison: null, error: null as string | null }
-    try {
-      return { comparison: compareScenarios(calculationConfig, allRepayments, calculationGracePeriods), error: null }
-    } catch (error) {
-      return { comparison: null, error: error instanceof Error ? error.message : 'Не удалось построить график платежей' }
-    }
-  }, [calculationConfig, allRepayments, calculationGracePeriods, preliminaryErrors])
-  const errors = useMemo(() => comparisonResult.error ? [...preliminaryErrors, comparisonResult.error] : preliminaryErrors, [preliminaryErrors, comparisonResult.error])
-  const comparison = comparisonResult.comparison
-  const selected = comparison?.scenarios.find(s => s.id === store.selectedScenario) ?? comparison?.scenarios[1] ?? null
-  const base = comparison?.scenarios[0] ?? null
-  const overviewChartData = useMemo(() => {
-    if (!base || !selected) return []
-    const baseStep = Math.max(1, Math.floor(base.schedule.length / 48))
-    const dates = new Set(base.schedule.filter((_, i) => i % baseStep === 0).map(row => row.date))
-    if (base.schedule.at(-1)) dates.add(base.schedule.at(-1)!.date)
-    if (selected.schedule.at(-1)) dates.add(selected.schedule.at(-1)!.date)
-    const balanceAt = (schedule: PaymentScheduleItem[], date: string) => {
-      let balance = schedule[0]?.closingBalance ?? 0
-      for (const row of schedule) {
-        if (row.date > date) break
-        balance = row.closingBalance
-      }
-      return balance
-    }
-    const selectedClosingDate = selected.schedule.at(-1)?.date ?? ''
-    return [...dates].sort().map(date => ({ date: format(parseISO(date), 'MMM yy', { locale: ru }), base: balanceAt(base.schedule, date), balance: date <= selectedClosingDate ? balanceAt(selected.schedule, date) : null }))
-  }, [selected, base])
-
-  const activeLoan = () => store.loans.find(item => item.id === store.activeLoanId) ?? store.loans[0]
-
-  const download = (kind: 'csv' | 'json' | 'xls') => {
-    const loan = activeLoan()
-    const escapeHtml = (value: unknown) => String(value).replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]!))
-    let body: string, type: string, ext: string = kind
-    if (kind === 'json') { body = JSON.stringify({ ...createLoanSnapshot(loanToBackupData(loan)), exportedAt: new Date().toISOString() }, null, 2); type = 'application/json' }
-    else {
-      let schedule: PaymentScheduleItem[]
-      try {
-        schedule = buildLoanCalculation(loan).selected.schedule
-      } catch (error) {
-        setImportStatus({ kind: 'error', text: error instanceof Error ? error.message : 'Не удалось построить график для экспорта' })
-        return
-      }
-      const showFees = schedule.some(r => Math.abs(r.feePaid ?? r.fee) > 0.004)
-      const head = showFees ? ['№ п/п','Дата','По кредиту','По процентам','Комиссия','Итого','Остаток задолженности'] : ['№ п/п','Дата','По кредиту','По процентам','Итого','Остаток задолженности']
-      const table = [head, ...schedule.map(r => showFees ? [r.number,r.date,r.principalPaid ?? r.principal,r.interestPaid ?? r.interest,r.feePaid ?? r.fee,r.cashFlowTotal ?? r.payment + r.earlyPayment + r.fee,r.closingBalance] : [r.number,r.date,r.principalPaid ?? r.principal,r.interestPaid ?? r.interest,r.cashFlowTotal ?? r.payment + r.earlyPayment + r.fee,r.closingBalance])]
-      body = kind === 'csv' ? '\ufeff' + table.map(r => r.join(';')).join('\n') : `<!doctype html><html lang="ru"><head><meta charset="utf-8"><title>${escapeHtml(loan.name)}</title></head><body><table>${table.map(r => `<tr>${r.map(c => `<td>${escapeHtml(c)}</td>`).join('')}</tr>`).join('')}</table></body></html>`
-      type = kind === 'csv' ? 'text/csv;charset=utf-8' : 'text/html;charset=utf-8'; ext = kind === 'csv' ? 'csv' : 'html'
-    }
-    const safeName = loan.name.toLowerCase().replace(/[^a-zа-яё0-9]+/gi, '-').replace(/^-|-$/g, '') || 'credit'
-    const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([body], { type })); a.download = `credit-${safeName}.${ext}`; a.click(); URL.revokeObjectURL(a.href)
-  }
-
-  const copyText = async (text: string) => {
-    try {
-      await navigator.clipboard.writeText(text)
-    } catch {
-      const textarea = document.createElement('textarea')
-      textarea.value = text
-      textarea.setAttribute('readonly', '')
-      textarea.style.position = 'fixed'
-      textarea.style.left = '-9999px'
-      document.body.appendChild(textarea)
-      textarea.select()
-      const copied = document.execCommand('copy')
-      textarea.remove()
-      if (!copied) throw new Error('Не удалось скопировать ссылку')
-    }
-  }
-
-  const copyShareLink = async () => {
-    try {
-      const loan = activeLoan()
-      const snapshot = createLoanSnapshot(loanToBackupData(loan))
-      const url = await buildShareUrl(snapshot, window.location.href)
-      await copyText(url)
-      setImportStatus({ kind: 'success', text: `Ссылка на кредит «${loan.name}» скопирована` })
-    } catch (error) {
-      setImportStatus({ kind: 'error', text: error instanceof Error ? error.message : 'Не удалось сформировать ссылку на расчёт' })
-    }
-  }
-
-  useEffect(() => {
-    const payload = readSharedCalculationFromLocation(window.location)
-    if (!payload) return
-    let cancelled = false
-    decodeSharedCalculation(payload).then(data => {
-      if (!cancelled) setSharedCalculation(data)
-    }).catch(error => {
-      if (!cancelled) setImportStatus({ kind: 'error', text: error instanceof Error ? error.message : 'Ссылка повреждена. Проверьте ссылку или используйте JSON-файл' })
-    })
-    return () => { cancelled = true }
-  }, [])
-
-  useEffect(() => {
-    const safeGet = (key: string) => {
-      try {
-        return localStorage.getItem(key)
-      } catch {
-        setStorageWarning(true)
-        return null
-      }
-    }
-    const onboardingDone = safeGet('credit-calculator-onboarding-done') === 'yes'
-    if (!onboardingDone) { setShowOnboarding(true); return }
-    const seenVersion = safeGet('credit-calculator-seen-version')
-    if (seenVersion !== APP_VERSION) setShowWhatsNew(true)
-  }, [])
-
-  useEffect(() => {
-    const showWarning = () => setStorageWarning(true)
-    window.addEventListener(STORAGE_ERROR_EVENT, showWarning)
-    return () => window.removeEventListener(STORAGE_ERROR_EVENT, showWarning)
-  }, [])
-
-  useEffect(() => {
-    if (store.theme !== 'night') setLastLightTheme(store.theme)
-  }, [store.theme])
-
-  const closeWhatsNew = () => {
-    try { localStorage.setItem('credit-calculator-seen-version', APP_VERSION) } catch { setStorageWarning(true) }
-    setShowWhatsNew(false)
-  }
-  const finishOnboarding = () => {
-    try {
-      localStorage.setItem('credit-calculator-onboarding-done', 'yes')
-      localStorage.setItem('credit-calculator-seen-version', APP_VERSION)
-    } catch {
-      setStorageWarning(true)
-    }
-    setShowOnboarding(false)
-  }
-
-  const clearSharedHash = () => {
-    const url = new URL(window.location.href)
-    url.hash = ''
-    window.history.replaceState(null, '', `${url.pathname}${url.search}`)
-  }
-
-  const createLoanFromData = (data: LoanBackupData, source = 'данных') => {
-    try {
-      store.addLoanFromData(data)
-      setRows(18)
-      setImportStatus({ kind: 'success', text: `Создан новый кредит из ${source}` })
-      return true
-    } catch (error) {
-      setImportStatus({ kind: 'error', text: error instanceof Error ? error.message : 'Не удалось создать кредит' })
-      return false
-    }
-  }
-
-  const createParameterCode = async () => {
-    const loan = activeLoan()
-    return encodeSharedCalculation(createLoanSnapshot(loanToBackupData(loan)))
-  }
-
-  const decodeParameterCode = (code: string) =>
-    decodeSharedCalculation(normalizeSharedCalculationPayload(code))
-
-  const replaceActiveWithData = (data: LoanBackupData, source = 'данных') => {
-    try {
-      store.replaceData(data)
-      setRows(18)
-      setImportStatus({ kind: 'success', text: `Текущий кредит заменён данными из ${source}` })
-      return true
-    } catch (error) {
-      setImportStatus({ kind: 'error', text: error instanceof Error ? error.message : 'Не удалось заменить текущий кредит' })
-      return false
-    }
-  }
-
-  const createLoanFromSharedCalculation = () => {
-    if (!sharedCalculation) return
-    if (createLoanFromData(sharedCalculation, 'ссылки')) {
-      setSharedCalculation(null)
-      clearSharedHash()
-    }
-  }
-
-  const replaceActiveWithSharedCalculation = () => {
-    if (!sharedCalculation) return
-    if (replaceActiveWithData(sharedCalculation, 'ссылки')) {
-      setSharedCalculation(null)
-      clearSharedHash()
-    }
-  }
-
-  const declineSharedCalculation = () => {
-    setSharedCalculation(null)
-    setImportStatus({ kind: 'error', text: 'Загрузка из ссылки отменена. Локальные данные сохранены' })
-    clearSharedHash()
-  }
+  const resetRows = useCallback(() => setRows(18), [])
+  const {
+    generatedRepayments,
+    allRepayments,
+    errors,
+    comparison,
+    selected,
+    base,
+    overviewChartData,
+    defaultEarlyDate
+  } = useLoanCalculation({
+    config: store.config,
+    repayments: store.repayments,
+    repaymentRules: store.repaymentRules,
+    gracePeriods: store.gracePeriods,
+    selectedScenario: store.selectedScenario
+  })
+  const {
+    importStatus,
+    setImportStatus,
+    createLoanFromData,
+    replaceActiveWithData
+  } = useLoanImport({
+    addLoanFromData: store.addLoanFromData,
+    replaceData: store.replaceData,
+    resetRows
+  })
+  const {
+    download,
+    print,
+    copyShareLink,
+    createParameterCode,
+    decodeParameterCode,
+    looksLikeParameterLink
+  } = useLoanExport({
+    loans: store.loans,
+    activeLoanId: store.activeLoanId,
+    setImportStatus
+  })
+  const {
+    sharedCalculation,
+    createLoanFromSharedCalculation,
+    replaceActiveWithSharedCalculation,
+    declineSharedCalculation
+  } = useSharedCalculation({
+    createLoanFromData,
+    replaceActiveWithData,
+    setImportStatus
+  })
+  const {
+    showWhatsNew,
+    showOnboarding,
+    lastLightTheme,
+    storageWarning,
+    closeWhatsNew,
+    finishOnboarding
+  } = useStorageStatus(store.theme)
 
   const nav = [
     ['overview', Landmark, 'Обзор'], ['settings', Settings2, 'Параметры'], ['early', TrendingDown, 'Досрочные'],
@@ -267,9 +98,24 @@ function App() {
   ] as const
   const openEarly = (repayment: EarlyRepayment | null = null) => { setEditingEarly(repayment); setShowEarly(true) }
   const closeEarly = () => { setShowEarly(false); setEditingEarly(null) }
-  const toggleEarlyRepayment = (repayment: EarlyRepayment) => store.updateRepayment({ ...repayment, enabled: repayment.enabled === false })
+  const toggleEarlyRepayment = (repayment: EarlyRepayment) => {
+    const currentlyEnabled = repayment.enabled !== false && repayment.amount > 0
+    const nextEnabled = !currentlyEnabled
+    if (nextEnabled) {
+      if (repayment.amount <= 0) {
+        setImportStatus({ kind: 'error', text: 'Укажите сумму досрочного платежа перед включением' })
+        openEarly(repayment)
+        return
+      }
+      if (repayment.amountMode === 'total' && !isRegularPaymentDate(repayment.date, store.config)) {
+        setImportStatus({ kind: 'error', text: 'Общую сумму можно включить только в дату регулярного платежа' })
+        openEarly(repayment)
+        return
+      }
+    }
+    store.updateRepayment({ ...repayment, enabled: nextEnabled })
+  }
   const toggleNightTheme = () => store.setTheme(store.theme === 'night' ? lastLightTheme : 'night')
-  const defaultEarlyDate = useMemo(() => isISODate(store.config.firstPaymentDate) ? format(addMonths(parseISO(store.config.firstPaymentDate), 1), 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd'), [store.config.firstPaymentDate])
 
   const accentStyle = store.useCustomAccentColor ? ({ '--green': store.customAccentColor } as CSSProperties) : undefined
 
@@ -280,7 +126,7 @@ function App() {
       <div className="sidebar-note"><ShieldCheck size={20}/><div><b>Расчёт локально</b><span>Ваши данные не покидают устройство</span></div></div>
     </aside>
     <main>
-      <header><button className="icon-btn menu-btn" aria-label="Открыть меню" onClick={() => setMobileNav(true)}><Menu/></button><div className="header-title"><p>Финансовый план · v{APP_VERSION}</p><h1>{section === 'overview' ? 'Ваш кредит' : nav.find(x => x[0] === section)?.[2]}</h1></div><LoanSwitcher loans={store.loans} activeLoanId={store.activeLoanId} switchLoan={store.switchLoan} createLoan={store.createLoan} renameLoan={store.renameLoan} removeLoan={store.removeLoan}/><button className="icon-btn theme-toggle" onClick={toggleNightTheme} title={store.theme === 'night' ? 'Вернуть светлую тему' : 'Включить ночной режим'} aria-label={store.theme === 'night' ? 'Вернуть светлую тему' : 'Включить ночной режим'}>{store.theme === 'night' ? <Sun/> : <Moon/>}</button><FontControls fontSize={store.appFontSize} setFontSize={store.setAppFontSize}/><div className="header-actions"><span className={storageWarning ? 'status-dot warning' : 'status-dot'}><i/> {storageWarning ? 'Сохранение недоступно' : 'Данные сохранены'}</span><button className="ghost print-action" onClick={() => window.print()}><Printer size={16}/> Печать</button><button className="primary add-payment-action" onClick={() => openEarly()}><Plus size={17}/> Досрочный платёж</button></div></header>
+      <header><button className="icon-btn menu-btn" aria-label="Открыть меню" onClick={() => setMobileNav(true)}><Menu/></button><div className="header-title"><p>Финансовый план · v{APP_VERSION}</p><h1>{section === 'overview' ? 'Ваш кредит' : nav.find(x => x[0] === section)?.[2]}</h1></div><LoanSwitcher loans={store.loans} activeLoanId={store.activeLoanId} switchLoan={store.switchLoan} createLoan={store.createLoan} renameLoan={store.renameLoan} removeLoan={store.removeLoan}/><button className="icon-btn theme-toggle" onClick={toggleNightTheme} title={store.theme === 'night' ? 'Вернуть светлую тему' : 'Включить ночной режим'} aria-label={store.theme === 'night' ? 'Вернуть светлую тему' : 'Включить ночной режим'}>{store.theme === 'night' ? <Sun/> : <Moon/>}</button><FontControls fontSize={store.appFontSize} setFontSize={store.setAppFontSize}/><div className="header-actions"><span className={storageWarning ? 'status-dot warning' : 'status-dot'}><i/> {storageWarning ? 'Сохранение недоступно' : 'Данные сохранены'}</span><button className="ghost print-action" onClick={print}><Printer size={16}/> Печать</button><button className="primary add-payment-action" onClick={() => openEarly()}><Plus size={17}/> Досрочный платёж</button></div></header>
       <div className="content">
         {storageWarning && <div className="alert">Браузер не дал сохранить данные локально. Экспортируйте расчёт в JSON, чтобы не потерять изменения.</div>}
         {errors.length > 0 && <div className="alert">{errors.join(' · ')}</div>}
@@ -292,7 +138,7 @@ function App() {
           {section === 'grace' && <GraceList items={store.gracePeriods} remove={store.removeGrace} open={() => setShowGrace(true)}/>}
           {section === 'schedule' && selected && base && <Schedule schedule={selected.schedule} baseSchedule={base.schedule} repayments={allRepayments} rows={rows} setRows={setRows} more={() => setRows(r => r + 24)}/>}
           {section === 'schedule' && (!selected || !base) && <section className="panel list-panel"><div className="panel-head"><div><h3>График недоступен</h3><p>Сначала исправьте ошибки в параметрах расчёта.</p></div></div></section>}
-          {section === 'export' && <ExportPanel download={download} createImported={createLoanFromData} replaceImported={replaceActiveWithData} copyShareLink={copyShareLink} createParameterCode={createParameterCode} decodeParameterCode={decodeParameterCode} looksLikeParameterLink={looksLikeSharedCalculationUrl} status={importStatus}/>}
+          {section === 'export' && <ExportPanel download={download} print={print} createImported={createLoanFromData} replaceImported={replaceActiveWithData} copyShareLink={copyShareLink} createParameterCode={createParameterCode} decodeParameterCode={decodeParameterCode} looksLikeParameterLink={looksLikeParameterLink} status={importStatus}/>}
           {section === 'changes' && <Changelog/>}
         </Suspense>
       </div>

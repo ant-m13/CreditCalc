@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { MAX_EARLY_REPAYMENTS, MAX_REPAYMENT_RULES } from './loanEngine/limits'
+import { MAX_EARLY_REPAYMENTS, MAX_RATE_CHANGES, MAX_REPAYMENT_RULES } from './loanEngine/limits'
 import { defaultConfig, MAX_LOANS, normalizePersistedState, useLoanStore, type LoanProfile } from './store'
 import type { EarlyRepayment } from './loanEngine'
 import type { RepaymentRule } from './repaymentRules'
@@ -223,5 +223,29 @@ describe('лимиты store до мутации', () => {
       theme: 'emerald'
     })).toThrow('правил')
     expect(useLoanStore.getState().loans).toHaveLength(1)
+  })
+
+  it('не импортирует кредит с количеством изменений ставки сверх лимита', () => {
+    setStoreLoan(loanProfile())
+    const rateChanges = Array.from({ length: MAX_RATE_CHANGES + 1 }, (_, index) => ({ id: `rate-${index}`, date: `2030-${String(Math.floor(index / 28) % 12 + 1).padStart(2, '0')}-${String(index % 28 + 1).padStart(2, '0')}`, annualRate: 7 }))
+    expect(() => useLoanStore.getState().addLoanFromData({
+      config: { ...defaultConfig, rateChanges },
+      repayments: [],
+      repaymentRules: [],
+      gracePeriods: [],
+      selectedScenario: 'combined',
+      termUnit: 'months',
+      displayDecimals: 2,
+      theme: 'emerald'
+    })).toThrow(String(MAX_RATE_CHANGES))
+    expect(useLoanStore.getState().loans).toHaveLength(1)
+  })
+
+  it('не добавляет пересекающиеся льготные периоды', () => {
+    const first = { id: 'g1', startDate: '2026-05-01', endDate: '2026-05-31', type: 'full', extendTerm: true, accrueInterest: true, capitalizeInterest: false } as const
+    const second = { id: 'g2', startDate: '2026-05-15', endDate: '2026-06-15', type: 'interestOnly', extendTerm: true, accrueInterest: true, capitalizeInterest: false } as const
+    setStoreLoan(loanProfile({ gracePeriods: [first] }))
+    expect(() => useLoanStore.getState().addGrace(second)).toThrow('не должны пересекаться')
+    expect(useLoanStore.getState().gracePeriods).toHaveLength(1)
   })
 })

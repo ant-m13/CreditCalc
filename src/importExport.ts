@@ -2,7 +2,7 @@ import type { EarlyRepayment, GracePeriod, LoanConfig, RateChange } from './loan
 import { isRegularPaymentDate, sortRateChanges } from './loanEngine'
 import { defaultConfig } from './loanDefaults'
 import type { RepaymentRule } from './repaymentRules'
-import { MAX_EARLY_REPAYMENTS, MAX_GRACE_PERIODS, MAX_REPAYMENT_RULES, MAX_TERM_MONTHS } from './loanEngine/limits'
+import { MAX_EARLY_REPAYMENTS, MAX_GRACE_PERIODS, MAX_RATE_CHANGES, MAX_REPAYMENT_RULES, MAX_TERM_MONTHS } from './loanEngine/limits'
 import { isISODate, isISOYearMonth } from './utils/dateValidation'
 
 export interface LoanBackupData {
@@ -60,6 +60,7 @@ export function parseLoanBackupObject(raw: unknown): LoanBackupData {
 
   const rateChangesRaw = source.rateChanges === undefined ? [] : source.rateChanges
   if (!Array.isArray(rateChangesRaw)) throw new Error('История ставок повреждена')
+  if (rateChangesRaw.length > MAX_RATE_CHANGES) throw new Error(`Слишком много изменений ставки. Максимум: ${MAX_RATE_CHANGES}`)
   const rateChanges = sortRateChanges(rateChangesRaw.map((item, index): RateChange => {
     if (!isObject(item) || typeof item.id !== 'string' || !isISODate(item.date) || typeof item.annualRate !== 'number' || !Number.isFinite(item.annualRate) || item.annualRate < 0 || item.annualRate > 100) throw new Error(`Ошибка в изменении ставки №${index + 1}`)
     if (item.date <= config.issueDate) throw new Error(`Ошибка в изменении ставки №${index + 1}: дата должна быть после выдачи кредита`)
