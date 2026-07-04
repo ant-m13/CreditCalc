@@ -1,6 +1,6 @@
 import { lazy, Suspense, useCallback, useState, type CSSProperties } from 'react'
 import { ArrowDownToLine, CalendarDays, CircleHelp, History, Landmark, Menu, Moon, Plus, Printer, ReceiptText, Settings2, ShieldCheck, Sun, Trash2, TrendingDown, X } from 'lucide-react'
-import { isRegularPaymentDate, type EarlyRepayment, type GracePeriod } from './loanEngine'
+import { compareScenarios, isRegularPaymentDate, validateScenario, type EarlyRepayment, type GracePeriod } from './loanEngine'
 import { useLoanStore } from './store'
 import { FontControls } from './components/FontControls'
 import { LoanSwitcher } from './components/LoanSwitcher'
@@ -18,6 +18,7 @@ import { useLoanExport } from './hooks/useLoanExport'
 import { useLoanImport } from './hooks/useLoanImport'
 import { useSharedCalculation } from './hooks/useSharedCalculation'
 import { useStorageStatus } from './hooks/useStorageStatus'
+import { expandRepaymentRules } from './repaymentRules'
 
 const Overview = lazy(() => import('./components/Overview').then(module => ({ default: module.Overview })))
 const Settings = lazy(() => import('./components/Settings').then(module => ({ default: module.Settings })))
@@ -27,10 +28,10 @@ const ExportPanel = lazy(() => import('./components/ExportPanel').then(module =>
 
 function App() {
   const store = useLoanStore()
-  configureFormatters(store.displayDecimals, store.config.currency)
   const [section, setSection] = useState('overview')
   const [showEarly, setShowEarly] = useState(false)
   const [editingEarly, setEditingEarly] = useState<EarlyRepayment | null>(null)
+  const [earlyError, setEarlyError] = useState('')
   const [showGrace, setShowGrace] = useState(false)
   const [mobileNav, setMobileNav] = useState(false)
   const [rows, setRows] = useState(18)
@@ -43,14 +44,19 @@ function App() {
     selected,
     base,
     overviewChartData,
-    defaultEarlyDate
+    defaultEarlyDate,
+    calculationSnapshot,
+    isStale
   } = useLoanCalculation({
     config: store.config,
     repayments: store.repayments,
     repaymentRules: store.repaymentRules,
     gracePeriods: store.gracePeriods,
-    selectedScenario: store.selectedScenario
+    selectedScenario: store.selectedScenario,
+    displayDecimals: store.displayDecimals,
+    loanId: store.activeLoanId
   })
+  configureFormatters(calculationSnapshot.displayDecimals, calculationSnapshot.config.currency)
   const {
     importStatus,
     setImportStatus,
@@ -88,6 +94,7 @@ function App() {
     showOnboarding,
     lastLightTheme,
     storageWarning,
+    storageStatus,
     closeWhatsNew,
     finishOnboarding
   } = useStorageStatus(store.theme)
@@ -96,20 +103,37 @@ function App() {
     ['overview', Landmark, 'Обзор'], ['settings', Settings2, 'Параметры'], ['early', TrendingDown, 'Досрочные'],
     ['grace', CalendarDays, 'Льготные периоды'], ['schedule', ReceiptText, 'График платежей'], ['export', ArrowDownToLine, 'Импорт/экспорт'], ['changes', History, 'Что изменилось']
   ] as const
-  const openEarly = (repayment: EarlyRepayment | null = null) => { setEditingEarly(repayment); setShowEarly(true) }
-  const closeEarly = () => { setShowEarly(false); setEditingEarly(null) }
+  const openEarly = (repayment: EarlyRepayment | null = null, error = '') => { setEditingEarly(repayment); setEarlyError(error); setShowEarly(true) }
+  const closeEarly = () => { setShowEarly(false); setEditingEarly(null); setEarlyError('') }
   const toggleEarlyRepayment = (repayment: EarlyRepayment) => {
     const currentlyEnabled = repayment.enabled !== false && repayment.amount > 0
     const nextEnabled = !currentlyEnabled
     if (nextEnabled) {
       if (repayment.amount <= 0) {
-        setImportStatus({ kind: 'error', text: 'Укажите сумму досрочного платежа перед включением' })
-        openEarly(repayment)
+        const message = 'Укажите сумму досрочного платежа перед включением'
+        setImportStatus({ kind: 'error', text: message })
+        openEarly(repayment, message)
         return
       }
       if (repayment.amountMode === 'total' && !isRegularPaymentDate(repayment.date, store.config)) {
-        setImportStatus({ kind: 'error', text: 'Общую сумму можно включить только в дату регулярного платежа' })
-        openEarly(repayment)
+        const message = 'Общую сумму можно включить только в дату регулярного платежа'
+        setImportStatus({ kind: 'error', text: message })
+        openEarly(repayment, message)
+        return
+      }
+    }
+    if (nextEnabled) {
+      try {
+        const candidateManual = store.repayments.map(item => item.id === repayment.id ? { ...repayment, enabled: true } : item)
+        const generated = expandRepaymentRules(store.config, store.repaymentRules, store.gracePeriods)
+        const candidateRepayments = [...candidateManual.filter(item => item.enabled !== false && item.amount > 0), ...generated]
+        const validationErrors = validateScenario(store.config, candidateRepayments, store.gracePeriods)
+        if (validationErrors.length) throw new Error(validationErrors.join(' · '))
+        compareScenarios(store.config, candidateRepayments, store.gracePeriods)
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Платёж нельзя включить без исправления параметров'
+        setImportStatus({ kind: 'error', text: message })
+        openEarly(repayment, message)
         return
       }
     }
@@ -126,12 +150,13 @@ function App() {
       <div className="sidebar-note"><ShieldCheck size={20}/><div><b>Расчёт локально</b><span>Ваши данные не покидают устройство</span></div></div>
     </aside>
     <main>
-      <header><button className="icon-btn menu-btn" aria-label="Открыть меню" onClick={() => setMobileNav(true)}><Menu/></button><div className="header-title"><p>Финансовый план · v{APP_VERSION}</p><h1>{section === 'overview' ? 'Ваш кредит' : nav.find(x => x[0] === section)?.[2]}</h1></div><LoanSwitcher loans={store.loans} activeLoanId={store.activeLoanId} switchLoan={store.switchLoan} createLoan={store.createLoan} renameLoan={store.renameLoan} removeLoan={store.removeLoan}/><button className="icon-btn theme-toggle" onClick={toggleNightTheme} title={store.theme === 'night' ? 'Вернуть светлую тему' : 'Включить ночной режим'} aria-label={store.theme === 'night' ? 'Вернуть светлую тему' : 'Включить ночной режим'}>{store.theme === 'night' ? <Sun/> : <Moon/>}</button><FontControls fontSize={store.appFontSize} setFontSize={store.setAppFontSize}/><div className="header-actions"><span className={storageWarning ? 'status-dot warning' : 'status-dot'}><i/> {storageWarning ? 'Сохранение недоступно' : 'Данные сохранены'}</span><button className="ghost print-action" onClick={print}><Printer size={16}/> Печать</button><button className="primary add-payment-action" onClick={() => openEarly()}><Plus size={17}/> Досрочный платёж</button></div></header>
+      <header><button className="icon-btn menu-btn" aria-label="Открыть меню" onClick={() => setMobileNav(true)}><Menu/></button><div className="header-title"><p>Финансовый план · v{APP_VERSION}</p><h1>{section === 'overview' ? 'Ваш кредит' : nav.find(x => x[0] === section)?.[2]}</h1></div><LoanSwitcher loans={store.loans} activeLoanId={store.activeLoanId} switchLoan={store.switchLoan} createLoan={store.createLoan} renameLoan={store.renameLoan} removeLoan={store.removeLoan}/><button className="icon-btn theme-toggle" onClick={toggleNightTheme} title={store.theme === 'night' ? 'Вернуть светлую тему' : 'Включить ночной режим'} aria-label={store.theme === 'night' ? 'Вернуть светлую тему' : 'Включить ночной режим'}>{store.theme === 'night' ? <Sun/> : <Moon/>}</button><FontControls fontSize={store.appFontSize} setFontSize={store.setAppFontSize}/><div className="header-actions"><span className={storageStatus.kind === 'saved' ? 'status-dot' : 'status-dot warning'}><i/> {storageStatus.kind === 'failed' ? 'Сохранение не удалось' : storageStatus.kind === 'nearQuota' ? 'Мало места' : 'Данные сохранены'}</span><button className="ghost print-action" onClick={print}><Printer size={16}/> Печать</button><button className="primary add-payment-action" onClick={() => openEarly()}><Plus size={17}/> Досрочный платёж</button></div></header>
       <div className="content">
-        {storageWarning && <div className="alert">Браузер не дал сохранить данные локально. Экспортируйте расчёт в JSON, чтобы не потерять изменения.</div>}
+        {storageWarning && <div className="alert">{storageWarning}</div>}
+        {isStale && <div className="alert">Пересчитываем график. На экране пока показан предыдущий согласованный расчёт.</div>}
         {errors.length > 0 && <div className="alert">{errors.join(' · ')}</div>}
         <Suspense fallback={<SectionLoading/>}>
-          {section === 'overview' && comparison && selected && <Overview config={store.config} repayments={allRepayments} gracePeriods={store.gracePeriods} comparison={comparison} selected={selected} chartData={overviewChartData} onSelect={store.selectScenario} onOpen={() => openEarly()}/>}
+          {section === 'overview' && comparison && selected && <Overview config={calculationSnapshot.config} repayments={allRepayments} gracePeriods={calculationSnapshot.gracePeriods} comparison={comparison} selected={selected} chartData={overviewChartData} onSelect={store.selectScenario} onOpen={() => openEarly()}/>}
           {section === 'overview' && (!comparison || !selected) && <section className="panel list-panel"><div className="panel-head"><div><h3>Расчёт временно остановлен</h3><p>Исправьте параметры кредита или правила досрочных платежей, чтобы построить график.</p></div></div></section>}
           {section === 'settings' && <Settings config={store.config} update={store.updateConfig} updateInterest={store.updateInterest} termUnit={store.termUnit} setTermUnit={store.setTermUnit} displayDecimals={store.displayDecimals} setDisplayDecimals={store.setDisplayDecimals} appFontSize={store.appFontSize} setAppFontSize={store.setAppFontSize} theme={store.theme} setTheme={store.setTheme} customAccentColor={store.customAccentColor} useCustomAccentColor={store.useCustomAccentColor} setCustomAccentColor={store.setCustomAccentColor} setUseCustomAccentColor={store.setUseCustomAccentColor} resetCustomAccentColor={store.resetCustomAccentColor}/>}
           {section === 'early' && <EarlyList items={store.repayments} rules={store.repaymentRules} generated={generatedRepayments} remove={store.removeRepayment} edit={openEarly} toggle={toggleEarlyRepayment} open={() => openEarly()} addRule={store.addRepaymentRule} updateRule={store.updateRepaymentRule} removeRule={store.removeRepaymentRule} defaultStart={store.config.firstPaymentDate}/>}
@@ -143,12 +168,12 @@ function App() {
         </Suspense>
       </div>
     </main>
-    {comparison && selected && <PrintReport config={store.config} repayments={allRepayments} comparison={comparison} selected={selected}/>}
-    {showOnboarding && <OnboardingModal close={finishOnboarding} showExample={() => { store.loadExampleLoan(); finishOnboarding(); setSection('overview') }} startSettings={() => { finishOnboarding(); setSection('settings') }}/>}
-    {showWhatsNew && <WhatsNewModal close={closeWhatsNew} openChanges={() => { closeWhatsNew(); setSection('changes') }}/>}
-    {sharedCalculation && <SharedCalculationModal data={sharedCalculation} createNew={createLoanFromSharedCalculation} replaceCurrent={replaceActiveWithSharedCalculation} decline={declineSharedCalculation}/>}
-    {showEarly && <EarlyModal close={closeEarly} save={editingEarly ? store.updateRepayment : store.addRepayment} initial={editingEarly} defaultDate={defaultEarlyDate} isRegularPaymentDate={(date) => isRegularPaymentDate(date, store.config)}/>}
-    {showGrace && <GraceModal close={() => setShowGrace(false)} add={store.addGrace}/>} 
+    {comparison && selected && <PrintReport config={calculationSnapshot.config} repayments={allRepayments} comparison={comparison} selected={selected}/>}
+    {showOnboarding ? <OnboardingModal close={finishOnboarding} showExample={() => { store.loadExampleLoan(); finishOnboarding(); setSection('overview') }} startSettings={() => { finishOnboarding(); setSection('settings') }}/> :
+      showWhatsNew ? <WhatsNewModal close={closeWhatsNew} openChanges={() => { closeWhatsNew(); setSection('changes') }}/> :
+        sharedCalculation ? <SharedCalculationModal data={sharedCalculation} createNew={createLoanFromSharedCalculation} replaceCurrent={replaceActiveWithSharedCalculation} decline={declineSharedCalculation}/> :
+          showEarly ? <EarlyModal close={closeEarly} save={editingEarly ? store.updateRepayment : store.addRepayment} initial={editingEarly} initialError={earlyError} defaultDate={defaultEarlyDate} isRegularPaymentDate={(date) => isRegularPaymentDate(date, store.config)}/> :
+            showGrace ? <GraceModal close={() => setShowGrace(false)} add={store.addGrace}/> : null}
   </div>
 }
 

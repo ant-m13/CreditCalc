@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Sparkles, X } from 'lucide-react'
 import type { EarlyRepayment } from '../loanEngine'
 import { currencySymbol } from '../formatters'
@@ -11,11 +11,12 @@ interface EarlyModalProps {
   close: () => void
   save: (repayment: EarlyRepayment) => void
   initial: EarlyRepayment | null
+  initialError?: string
   defaultDate: string
   isRegularPaymentDate: (date: string) => boolean
 }
 
-export function EarlyModal({ close, save, initial, defaultDate, isRegularPaymentDate }: EarlyModalProps) {
+export function EarlyModal({ close, save, initial, initialError = '', defaultDate, isRegularPaymentDate }: EarlyModalProps) {
   const { dialogRef, titleId } = useModalDialog(close)
   const [date, setDate] = useState(initial?.date ?? defaultDate)
   const [amount, setAmount] = useState(initial ? String(initial.amount) : '100000')
@@ -26,7 +27,11 @@ export function EarlyModal({ close, save, initial, defaultDate, isRegularPayment
   const [amountMode, setAmountMode] = useState<NonNullable<EarlyRepayment['amountMode']>>(initial?.amountMode ?? 'extra')
   const [sameDayOrder, setSameDayOrder] = useState<EarlyRepayment['sameDayOrder']>(initial?.sameDayOrder ?? 'regularFirst')
   const [interestFirst, setInterestFirst] = useState(initial?.interestFirst ?? true)
-  const [error, setError] = useState('')
+  const [error, setError] = useState(initialError)
+
+  useEffect(() => {
+    setError(initialError)
+  }, [initialError])
 
   const submit = () => {
     const parsed = Number(amount)
@@ -71,7 +76,7 @@ export function EarlyModal({ close, save, initial, defaultDate, isRegularPayment
           <label className="toggle-row"><div><b>Сначала погасить проценты</b><span>Остаток направить в основной долг</span></div><input type="checkbox" checked={interestFirst} onChange={event => setInterestFirst(event.target.checked)}/></label>
         </div>
         <Field label="Комментарий"><input value={comment} onChange={event => setComment(event.target.value)} placeholder="Например, премия за год"/></Field>
-        {error && <div className="alert modal-alert">{error}</div>}
+        {error && <div className="alert modal-alert" role="alert">{error}</div>}
         <div className="modal-tip"><Sparkles/> Если задана комиссия за досрочное погашение, она удерживается из суммы списания. Для банковского примера 26.01.2026 укажите сумму 8 704,99 ₽.</div>
       </div>
       <div className="modal-actions"><button className="ghost" onClick={close}>Отмена</button><button className="primary" onClick={submit}>{initial ? 'Сохранить изменения' : 'Добавить и пересчитать'}</button></div>

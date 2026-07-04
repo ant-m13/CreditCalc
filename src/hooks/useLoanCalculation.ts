@@ -1,7 +1,7 @@
 import { useDeferredValue, useMemo } from 'react'
 import { addMonths, format, parseISO } from 'date-fns'
 import { ru } from 'date-fns/locale'
-import { compareScenarios, validateScenario, type EarlyRepayment, type GracePeriod, type LoanConfig, type PaymentScheduleItem } from '../loanEngine'
+import { compareScenarios, sortRepaymentsByApplicationOrder, validateScenario, type EarlyRepayment, type GracePeriod, type LoanConfig, type PaymentScheduleItem } from '../loanEngine'
 import { expandRepaymentRules, type RepaymentRule } from '../repaymentRules'
 import type { LoanProfile } from '../store'
 import { isISODate } from '../utils/dateValidation'
@@ -12,21 +12,29 @@ export interface LoanCalculationInput {
   repaymentRules: RepaymentRule[]
   gracePeriods: GracePeriod[]
   selectedScenario: string
+  displayDecimals: 0 | 2
+  loanId?: string
 }
 
 export const buildLoanCalculation = (loan: LoanProfile) => {
-  const generated = expandRepaymentRules(loan.config, loan.repaymentRules)
-  const repayments = [...loan.repayments, ...generated].sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id))
+  const generated = expandRepaymentRules(loan.config, loan.repaymentRules, loan.gracePeriods)
+  const repayments = sortRepaymentsByApplicationOrder([...loan.repayments, ...generated])
   const comparison = compareScenarios(loan.config, repayments, loan.gracePeriods)
   const selected = comparison.scenarios.find(s => s.id === loan.selectedScenario) ?? comparison.scenarios[1]
   return { generated, repayments, comparison, selected }
 }
 
-export function useLoanCalculation({ config, repayments, repaymentRules, gracePeriods, selectedScenario }: LoanCalculationInput) {
-  const calculationConfig = useDeferredValue(config)
-  const calculationRepayments = useDeferredValue(repayments)
-  const calculationRepaymentRules = useDeferredValue(repaymentRules)
-  const calculationGracePeriods = useDeferredValue(gracePeriods)
+export function useLoanCalculation({ config, repayments, repaymentRules, gracePeriods, selectedScenario, displayDecimals, loanId }: LoanCalculationInput) {
+  const liveSnapshot = useMemo(
+    () => ({ config, repayments, repaymentRules, gracePeriods, selectedScenario, displayDecimals, loanId }),
+    [config, repayments, repaymentRules, gracePeriods, selectedScenario, displayDecimals, loanId]
+  )
+  const calculationSnapshot = useDeferredValue(liveSnapshot)
+  const isStale = calculationSnapshot !== liveSnapshot
+  const calculationConfig = calculationSnapshot.config
+  const calculationRepayments = calculationSnapshot.repayments
+  const calculationRepaymentRules = calculationSnapshot.repaymentRules
+  const calculationGracePeriods = calculationSnapshot.gracePeriods
 
   const validationErrors = useMemo(
     () => validateScenario(calculationConfig, calculationRepayments, calculationGracePeriods),
@@ -36,11 +44,11 @@ export function useLoanCalculation({ config, repayments, repaymentRules, gracePe
   const generatedResult = useMemo(() => {
     if (validationErrors.length > 0) return { items: [] as EarlyRepayment[], error: null as string | null }
     try {
-      return { items: expandRepaymentRules(calculationConfig, calculationRepaymentRules), error: null as string | null }
+      return { items: expandRepaymentRules(calculationConfig, calculationRepaymentRules, calculationGracePeriods), error: null as string | null }
     } catch (error) {
       return { items: [] as EarlyRepayment[], error: error instanceof Error ? error.message : 'Не удалось создать операции по правилам досрочных платежей' }
     }
-  }, [calculationConfig, calculationRepaymentRules, validationErrors])
+  }, [calculationConfig, calculationRepaymentRules, calculationGracePeriods, validationErrors])
 
   const generatedRepayments = generatedResult.items
 
@@ -50,7 +58,7 @@ export function useLoanCalculation({ config, repayments, repaymentRules, gracePe
   )
 
   const allRepayments = useMemo(
-    () => [...activeManualRepayments, ...generatedRepayments].sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id)),
+    () => sortRepaymentsByApplicationOrder([...activeManualRepayments, ...generatedRepayments]),
     [activeManualRepayments, generatedRepayments]
   )
 
@@ -74,7 +82,7 @@ export function useLoanCalculation({ config, repayments, repaymentRules, gracePe
   )
 
   const comparison = comparisonResult.comparison
-  const selected = comparison?.scenarios.find(s => s.id === selectedScenario) ?? comparison?.scenarios[1] ?? null
+  const selected = comparison?.scenarios.find(s => s.id === calculationSnapshot.selectedScenario) ?? comparison?.scenarios[1] ?? null
   const base = comparison?.scenarios[0] ?? null
 
   const overviewChartData = useMemo(() => {
@@ -114,6 +122,8 @@ export function useLoanCalculation({ config, repayments, repaymentRules, gracePe
     selected,
     base,
     overviewChartData,
-    defaultEarlyDate
+    defaultEarlyDate,
+    calculationSnapshot,
+    isStale
   }
 }

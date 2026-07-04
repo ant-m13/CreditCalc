@@ -26,9 +26,9 @@ const config: LoanConfig = {
 }
 
 const repayments: EarlyRepayment[] = [
-  { id: 'r1', date: '2025-11-28', amount: 35480, enabled: true, amountMode: 'extra', strategy: 'reduceTerm', source: 'own', sameDayOrder: 'regularFirst', interestFirst: true, comment: 'Первый платёж 🏠 & #%+"' },
-  { id: 'r2', date: '2026-01-26', amount: 8704.99, enabled: true, amountMode: 'extra', strategy: 'reducePayment', source: 'subsidy', sameDayOrder: 'earlyFirst', interestFirst: false, comment: 'Маткапитал' },
-  { id: 'r3', date: '2026-03-27', amount: 12342.6, enabled: true, amountMode: 'extra', strategy: 'full', source: 'insurance', sameDayOrder: 'regularFirst', interestFirst: true, comment: 'Страховка' }
+  { id: 'r1', date: '2025-11-28', amount: 35480, enabled: true, amountMode: 'extra', sameDaySequence: 0, strategy: 'reduceTerm', source: 'own', sameDayOrder: 'regularFirst', interestFirst: true, comment: 'Первый платёж 🏠 & #%+"' },
+  { id: 'r2', date: '2026-01-26', amount: 8704.99, enabled: true, amountMode: 'extra', sameDaySequence: 1, strategy: 'reducePayment', source: 'subsidy', sameDayOrder: 'earlyFirst', interestFirst: false, comment: 'Маткапитал' },
+  { id: 'r3', date: '2026-03-27', amount: 12342.6, enabled: true, amountMode: 'extra', sameDaySequence: 2, strategy: 'full', source: 'insurance', sameDayOrder: 'regularFirst', interestFirst: true, comment: 'Страховка' }
 ]
 
 const gracePeriods: GracePeriod[] = [

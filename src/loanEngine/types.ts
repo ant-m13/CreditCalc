@@ -73,6 +73,7 @@ export interface EarlyRepayment {
   amount: number
   enabled?: boolean
   amountMode?: 'extra' | 'total'
+  sameDaySequence?: number
   strategy: RepaymentStrategy
   source: EarlySource
   sameDayOrder: 'regularFirst' | 'earlyFirst'

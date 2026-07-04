@@ -1,22 +1,30 @@
 import { create } from 'zustand'
 import { createJSONStorage, persist } from 'zustand/middleware'
 import { addMonths, format, parseISO } from 'date-fns'
-import { isRegularPaymentDate, sortRateChanges, type EarlyRepayment, type GracePeriod, type LoanConfig, type RateChange } from './loanEngine'
-import { defaultConfig } from './loanDefaults'
+import { generateBaseSchedule, isRegularPaymentDate, nextSameDaySequence, sortRateChanges, sortRepaymentsByApplicationOrder, validateScenario, type EarlyRepayment, type GracePeriod, type LoanConfig, type RateChange } from './loanEngine'
+import { createDefaultConfig, defaultConfig } from './loanDefaults'
 import type { LoanBackupData } from './importExport'
-import type { RepaymentRule } from './repaymentRules'
+import { expandRepaymentRules, type RepaymentRule } from './repaymentRules'
 import { createId } from './utils/createId'
 import { isISODate, isISOYearMonth } from './utils/dateValidation'
 import { MAX_EARLY_REPAYMENTS, MAX_GRACE_PERIODS, MAX_RATE_CHANGES, MAX_REPAYMENT_RULES, MAX_TERM_MONTHS } from './loanEngine/limits'
 export { defaultConfig } from './loanDefaults'
 
 export const STORAGE_ERROR_EVENT = 'credit-calculator-storage-error'
+export const STORAGE_STATUS_EVENT = 'credit-calculator-storage-status'
 export const MAX_PERSISTED_STATE_BYTES = 4_000_000
 
-const notifyStorageError = (error: unknown) => {
+export type StorageStatusKind = 'saved' | 'nearQuota' | 'failed'
+
+const notifyStorageStatus = (kind: StorageStatusKind, message: string) => {
   if (typeof window === 'undefined') return
+  window.dispatchEvent(new CustomEvent(STORAGE_STATUS_EVENT, { detail: { kind, message } }))
+}
+
+const notifyStorageError = (error: unknown) => {
   const message = error instanceof Error ? error.message : 'Локальное хранилище недоступно'
-  window.dispatchEvent(new CustomEvent(STORAGE_ERROR_EVENT, { detail: { message } }))
+  notifyStorageStatus('failed', message)
+  if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent(STORAGE_ERROR_EVENT, { detail: { message } }))
 }
 
 const safeLocalStorage = {
@@ -32,10 +40,12 @@ const safeLocalStorage = {
   setItem: (name: string, value: string) => {
     if (typeof window === 'undefined') return
     try {
-      if (new TextEncoder().encode(value).byteLength > MAX_PERSISTED_STATE_BYTES) {
-        notifyStorageError(new Error('Сохранённые данные приближаются к лимиту браузера. Экспортируйте расчёт в JSON'))
-      }
+      const isNearQuota = new TextEncoder().encode(value).byteLength > MAX_PERSISTED_STATE_BYTES
       window.localStorage.setItem(name, value)
+      notifyStorageStatus(
+        isNearQuota ? 'nearQuota' : 'saved',
+        isNearQuota ? 'Сохранённые данные приближаются к лимиту браузера. Экспортируйте расчёт в JSON' : 'Данные сохранены'
+      )
     } catch (error) {
       notifyStorageError(error)
     }
@@ -106,7 +116,7 @@ interface LoanState extends LoanData {
 const seedRepayments: EarlyRepayment[] = [{ id: 'seed-1', date: '2027-01-15', amount: 350000, amountMode: 'extra', strategy: 'reduceTerm', source: 'own', sameDayOrder: 'regularFirst', interestFirst: true, comment: 'Годовой бонус' }]
 
 const sortRepayments = (repayments: EarlyRepayment[]) =>
-  [...repayments].sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id))
+  sortRepaymentsByApplicationOrder(repayments)
 
 const sortRules = (rules: RepaymentRule[]) =>
   [...rules].sort((a, b) => a.startDate.localeCompare(b.startDate) || a.id.localeCompare(b.id))
@@ -153,7 +163,7 @@ const withUniqueIds = <T extends { id: string }>(items: T[], prefix: string): T[
 }
 
 const defaultLoanData = (withSeedRepayment = false): LoanData => ({
-  config: { ...defaultConfig, rateChanges: [...defaultConfig.rateChanges], interest: { ...defaultConfig.interest } },
+  config: createDefaultConfig(),
   repayments: withSeedRepayment ? seedRepayments.map(item => ({ ...item })) : [],
   repaymentRules: [],
   gracePeriods: [],
@@ -170,7 +180,7 @@ const defaultLoanData = (withSeedRepayment = false): LoanData => ({
 const normalizeRateChanges = (value: unknown, issueDate: string): RateChange[] => {
   if (!Array.isArray(value)) return []
   const seenDates = new Set<string>()
-  const changes = value.slice(0, MAX_RATE_CHANGES).flatMap((item): RateChange[] => {
+  const changes = value.flatMap((item): RateChange[] => {
     if (!isObject(item) || !isISODate(item.date)) return []
     if (isISODate(issueDate) && item.date <= issueDate) return []
     const annualRate = typeof item.annualRate === 'number' && Number.isFinite(item.annualRate) && item.annualRate >= 0 && item.annualRate <= 100 ? item.annualRate : undefined
@@ -182,7 +192,7 @@ const normalizeRateChanges = (value: unknown, issueDate: string): RateChange[] =
       annualRate
     }]
   })
-  return withUniqueIds(sortRateChanges(changes), 'rate')
+  return withUniqueIds(sortRateChanges(changes).slice(0, MAX_RATE_CHANGES), 'rate')
 }
 
 const normalizeConfig = (config: Partial<LoanConfig> | undefined): LoanConfig => {
@@ -224,7 +234,7 @@ const normalizeConfig = (config: Partial<LoanConfig> | undefined): LoanConfig =>
 
 const normalizeRepayments = (value: unknown, config: LoanConfig): EarlyRepayment[] => {
   if (!Array.isArray(value)) return []
-  return withUniqueIds(sortRepayments(value.slice(0, MAX_EARLY_REPAYMENTS).flatMap((item): EarlyRepayment[] => {
+  return withUniqueIds(sortRepayments(value.slice(0, MAX_EARLY_REPAYMENTS).flatMap((item, index): EarlyRepayment[] => {
     if (!isObject(item) || typeof item.id !== 'string' || !isISODate(item.date)) return []
     const amount = optionalFiniteNumber(item.amount, 0)
     if (amount === undefined) return []
@@ -236,6 +246,7 @@ const normalizeRepayments = (value: unknown, config: LoanConfig): EarlyRepayment
       amount,
       enabled: typeof item.enabled === 'boolean' ? item.enabled : true,
       amountMode,
+      sameDaySequence: typeof item.sameDaySequence === 'number' && Number.isInteger(item.sameDaySequence) && item.sameDaySequence >= 0 ? item.sameDaySequence : index,
       strategy: oneOf(item.strategy, repaymentStrategies, 'reduceTerm'),
       source: oneOf(item.source, repaymentSources, 'own'),
       sameDayOrder: amountMode === 'total' ? 'regularFirst' : oneOf(item.sameDayOrder, sameDayOrders, 'regularFirst'),
@@ -347,6 +358,24 @@ const assertImportWithinLimits = (data: Partial<LoanImportData | LoanData>) => {
   if (countArray(data.gracePeriods) > MAX_GRACE_PERIODS) throw new Error(`Слишком много льготных периодов. Максимум: ${MAX_GRACE_PERIODS}`)
 }
 
+const activeRepayments = (repayments: EarlyRepayment[]) =>
+  repayments.filter(item => item.enabled !== false && item.amount > 0)
+
+const assertRepaymentPlanValid = (config: LoanConfig, repayments: EarlyRepayment[], rules: RepaymentRule[], gracePeriods: GracePeriod[]) => {
+  const generated = expandRepaymentRules(config, rules, gracePeriods)
+  const candidateRepayments = sortRepayments([...activeRepayments(repayments), ...generated])
+  const validationErrors = validateScenario(config, candidateRepayments, gracePeriods)
+  if (validationErrors.length > 0) throw new Error(validationErrors.join(' · '))
+  generateBaseSchedule(config, { earlyRepayments: candidateRepayments, gracePeriods })
+}
+
+const withRepaymentSequence = (repayments: EarlyRepayment[], repayment: EarlyRepayment) => ({
+  ...repayment,
+  sameDaySequence: typeof repayment.sameDaySequence === 'number' && Number.isInteger(repayment.sameDaySequence) && repayment.sameDaySequence >= 0
+    ? repayment.sameDaySequence
+    : nextSameDaySequence(repayments, repayment.date)
+})
+
 export const loanToBackupData = (loan: LoanProfile): LoanBackupData => ({
   name: loan.name,
   config: loan.config,
@@ -408,15 +437,32 @@ export const useLoanStore = create<LoanState>()(persist((set) => ({
   updateInterest: (patch) => set(s => syncActive(s, { config: { ...s.config, interest: { ...s.config.interest, ...patch } } })),
   addRepayment: (repayment) => set(s => {
     if (s.repayments.length >= MAX_EARLY_REPAYMENTS) throw new Error(`Можно добавить не более ${MAX_EARLY_REPAYMENTS} разовых платежей`)
-    return syncActive(s, { repayments: sortRepayments([...s.repayments, repayment]) })
+    const repayments = sortRepayments([...s.repayments, withRepaymentSequence(s.repayments, repayment)])
+    assertRepaymentPlanValid(s.config, repayments, s.repaymentRules, s.gracePeriods)
+    return syncActive(s, { repayments })
   }),
-  updateRepayment: (repayment) => set(s => syncActive(s, { repayments: sortRepayments(s.repayments.map(item => item.id === repayment.id ? repayment : item)) })),
+  updateRepayment: (repayment) => set(s => {
+    const repayments = sortRepayments(s.repayments.map(item => item.id === repayment.id
+      ? withRepaymentSequence(s.repayments.filter(current => current.id !== repayment.id), {
+        ...repayment,
+        sameDaySequence: repayment.date === item.date ? repayment.sameDaySequence ?? item.sameDaySequence : undefined
+      })
+      : item))
+    assertRepaymentPlanValid(s.config, repayments, s.repaymentRules, s.gracePeriods)
+    return syncActive(s, { repayments })
+  }),
   removeRepayment: (id) => set(s => syncActive(s, { repayments: s.repayments.filter(r => r.id !== id) })),
   addRepaymentRule: (rule) => set(s => {
     if (s.repaymentRules.length >= MAX_REPAYMENT_RULES) throw new Error(`Можно добавить не более ${MAX_REPAYMENT_RULES} правил досрочных платежей`)
-    return syncActive(s, { repaymentRules: sortRules([...s.repaymentRules, rule]) })
+    const repaymentRules = sortRules([...s.repaymentRules, rule])
+    assertRepaymentPlanValid(s.config, s.repayments, repaymentRules, s.gracePeriods)
+    return syncActive(s, { repaymentRules })
   }),
-  updateRepaymentRule: (rule) => set(s => syncActive(s, { repaymentRules: sortRules(s.repaymentRules.map(item => item.id === rule.id ? rule : item)) })),
+  updateRepaymentRule: (rule) => set(s => {
+    const repaymentRules = sortRules(s.repaymentRules.map(item => item.id === rule.id ? rule : item))
+    assertRepaymentPlanValid(s.config, s.repayments, repaymentRules, s.gracePeriods)
+    return syncActive(s, { repaymentRules })
+  }),
   removeRepaymentRule: (id) => set(s => syncActive(s, { repaymentRules: s.repaymentRules.filter(rule => rule.id !== id) })),
   addGrace: (grace) => set(s => {
     if (s.gracePeriods.length >= MAX_GRACE_PERIODS) throw new Error(`Можно добавить не более ${MAX_GRACE_PERIODS} льготных периодов`)

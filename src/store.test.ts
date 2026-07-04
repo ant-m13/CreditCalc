@@ -184,6 +184,28 @@ describe('миграция локального хранилища', () => {
     }) as any
     expect(normalized.repaymentRules[0]).toMatchObject({ type: 'monthlyTotalPayment', amount: 100000, sameDayOrder: 'regularFirst' })
   })
+
+  it('восстанавливает порядок same-day досрочных платежей по исходному массиву', () => {
+    const normalized = normalizePersistedState({
+      repayments: [
+        { id: 'term-first', date: defaultConfig.firstPaymentDate, amount: 1000, amountMode: 'extra', ...repaymentBase, strategy: 'reduceTerm' },
+        { id: 'payment-second', date: defaultConfig.firstPaymentDate, amount: 1000, amountMode: 'extra', ...repaymentBase, strategy: 'reducePayment' }
+      ]
+    }) as any
+    expect(normalized.repayments.map((item: any) => item.sameDaySequence)).toEqual([0, 1])
+  })
+
+  it('сохраняет предсказуемые первые 1000 изменений ставки после сортировки при миграции', () => {
+    const lateRates = Array.from({ length: MAX_RATE_CHANGES }, (_, index) => {
+      const year = 2035 + Math.floor(index / 336)
+      const dayOfYear = index % 336
+      return { id: `late-${index}`, date: `${year}-${String(Math.floor(dayOfYear / 28) + 1).padStart(2, '0')}-${String(dayOfYear % 28 + 1).padStart(2, '0')}`, annualRate: 7 }
+    })
+    const earlyRate = { id: 'early-rate', date: '2030-02-01', annualRate: 6 }
+    const normalized = normalizePersistedState({ config: { ...defaultConfig, issueDate: '2030-01-01', firstPaymentDate: '2030-02-01', rateChanges: [...lateRates, earlyRate] } }) as any
+    expect(normalized.config.rateChanges).toHaveLength(MAX_RATE_CHANGES)
+    expect(normalized.config.rateChanges[0]).toEqual(earlyRate)
+  })
 })
 
 describe('лимиты store до мутации', () => {
@@ -207,6 +229,41 @@ describe('лимиты store до мутации', () => {
     setStoreLoan(loanProfile({ repaymentRules }))
     expect(() => useLoanStore.getState().addRepaymentRule(rule(MAX_REPAYMENT_RULES + 1))).toThrow(String(MAX_REPAYMENT_RULES))
     expect(useLoanStore.getState().repaymentRules).toHaveLength(MAX_REPAYMENT_RULES)
+  })
+
+  it('не сохраняет конфликтующие monthlyTotalPayment rules', () => {
+    setStoreLoan(loanProfile())
+    const first = { ...rule(1), type: 'monthlyTotalPayment' as const, amount: 100000, startDate: defaultConfig.firstPaymentDate, endDate: defaultConfig.firstPaymentDate }
+    const second = { ...rule(2), type: 'monthlyTotalPayment' as const, amount: 110000, startDate: defaultConfig.firstPaymentDate, endDate: defaultConfig.firstPaymentDate }
+    useLoanStore.getState().addRepaymentRule(first)
+    expect(() => useLoanStore.getState().addRepaymentRule(second)).toThrow('только одну общую сумму')
+    expect(useLoanStore.getState().repaymentRules).toHaveLength(1)
+  })
+
+  it('не сохраняет total rule, конфликтующее с ручной total-операцией', () => {
+    setStoreLoan(loanProfile({ repayments: [{ ...repayment(1), amount: 100000, amountMode: 'total', sameDayOrder: 'regularFirst' }] }))
+    const totalRule = { ...rule(1), type: 'monthlyTotalPayment' as const, amount: 110000, startDate: defaultConfig.firstPaymentDate, endDate: defaultConfig.firstPaymentDate }
+    expect(() => useLoanStore.getState().addRepaymentRule(totalRule)).toThrow('только одну общую сумму')
+    expect(useLoanStore.getState().repaymentRules).toHaveLength(0)
+  })
+
+  it('не сохраняет ручную total-операцию, конфликтующую с существующей', () => {
+    const activeTotal = { ...repayment(1), amount: 100000, amountMode: 'total' as const, sameDayOrder: 'regularFirst' as const, sameDaySequence: 0 }
+    const disabledTotal = { ...repayment(2), id: 'disabled-total', amount: 110000, amountMode: 'total' as const, enabled: false, sameDayOrder: 'regularFirst' as const, sameDaySequence: 1 }
+    setStoreLoan(loanProfile({ repayments: [activeTotal, disabledTotal] }))
+
+    expect(() => useLoanStore.getState().updateRepayment({ ...disabledTotal, enabled: true })).toThrow('только одну общую сумму')
+    expect(useLoanStore.getState().repayments.find(item => item.id === 'disabled-total')?.enabled).toBe(false)
+  })
+
+  it('назначает новую sameDaySequence при переносе платежа на занятую дату', () => {
+    const occupied = { ...repayment(1), id: 'occupied', sameDaySequence: 0 }
+    const moving = { ...repayment(2), id: 'moving', date: '2026-08-15', sameDaySequence: 0 }
+    setStoreLoan(loanProfile({ repayments: [occupied, moving] }))
+
+    useLoanStore.getState().updateRepayment({ ...moving, date: defaultConfig.firstPaymentDate })
+
+    expect(useLoanStore.getState().repayments.find(item => item.id === 'moving')?.sameDaySequence).toBe(1)
   })
 
   it('не импортирует кредит с количеством правил сверх лимита', () => {
