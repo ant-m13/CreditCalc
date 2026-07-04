@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from './App'
 import { defaultConfig, useLoanStore, type LoanProfile } from './store'
+import { APP_VERSION } from './version'
 
 class ResizeObserverMock {
   observe() {}
@@ -40,7 +41,7 @@ const resetStore = () => {
 beforeEach(() => {
   localStorage.clear()
   localStorage.setItem('credit-calculator-onboarding-done', 'yes')
-  localStorage.setItem('credit-calculator-seen-version', '1.5.8')
+  localStorage.setItem('credit-calculator-seen-version', APP_VERSION)
   window.history.replaceState(null, '', '/')
   vi.stubGlobal('ResizeObserver', ResizeObserverMock)
   vi.stubGlobal('matchMedia', vi.fn().mockReturnValue({

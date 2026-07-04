@@ -47,14 +47,6 @@ export function accrueInterestSegmentsRaw(
     return dates
   }
   const sortedRateChanges = sortRateChanges(rateChanges)
-  const rateForDate = (date: string) => {
-    let rate = annualRate
-    for (const change of sortedRateChanges) {
-      if (change.date <= date) rate = change.annualRate
-      else break
-    }
-    return rate
-  }
   const accrueRawSegment = (segmentFrom: string, segmentTo: string, segmentIncludeTo: boolean, segmentExcludeStartDate: boolean, segmentAnnualRate: number) => {
     if (segmentTo < segmentFrom || currentBalance.lte(0)) return new Decimal(0)
     if (config.interest.method === 'daily') {
@@ -96,6 +88,8 @@ export function accrueInterestSegmentsRaw(
   let segmentYear = ''
   let segmentAnnualRate = annualRate
   let segmentEnd = dates[0]
+  let rateIndex = 0
+  let currentAnnualRate = annualRate
   const segments: ReturnType<typeof segment>[] = []
   const closeSegment = () => {
     if (!segmentStart) return
@@ -104,10 +98,13 @@ export function accrueInterestSegmentsRaw(
   }
 
   for (const currentDate of dates) {
+    while (rateIndex < sortedRateChanges.length && sortedRateChanges[rateIndex].date <= currentDate) {
+      currentAnnualRate = sortedRateChanges[rateIndex].annualRate
+      rateIndex += 1
+    }
     const shouldAccrue = !noAccrualGracePeriods.some(period => period.startDate <= currentDate && currentDate <= period.endDate)
     const currentReason = shouldAccrue ? reason : 'Беспроцентная льгота'
     const currentYear = shouldAccrue && config.interest.dayCountBasis === 'actualActual' ? currentDate.slice(0, 4) : ''
-    const currentAnnualRate = rateForDate(currentDate)
     if (!segmentStart || segmentAccrues !== shouldAccrue || segmentReason !== currentReason || segmentYear !== currentYear || segmentAnnualRate !== currentAnnualRate) {
       closeSegment()
       if (!segmentStart) segmentStart = currentDate

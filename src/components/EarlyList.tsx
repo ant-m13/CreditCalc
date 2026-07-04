@@ -15,11 +15,10 @@ function Empty({ title, action }: { title: string; action: () => void }) {
 }
 
 const repaymentDisabled = (item: EarlyRepayment) => item.enabled === false || item.amount <= 0
-const repaymentEnabled = (item: EarlyRepayment) => item.enabled !== false
 const ruleHasNoAmount = (rule: RepaymentRule) => rule.type === 'paymentPercent' ? (rule.percent ?? 0) <= 0 : (rule.amount ?? 0) <= 0
 const ruleDisabled = (rule: RepaymentRule) => rule.enabled === false || ruleHasNoAmount(rule)
 const ruleValueLabel = (rule: RepaymentRule) =>
-  rule.type === 'paymentPercent' ? `${rule.percent ?? 0}% от регулярного платежа` :
+  rule.type === 'paymentPercent' ? `${rule.percent ?? 0}% от первоначального регулярного платежа` :
   rule.type === 'monthlyTotalPayment' ? `итого ${money(rule.amount ?? 0)}` :
   money(rule.amount ?? 0)
 const ruleName = (type: RepaymentRule['type']) =>
@@ -35,7 +34,7 @@ const ruleName = (type: RepaymentRule['type']) =>
 const disabledClass = (disabled: boolean) => disabled ? ' disabled-event' : ''
 
 function RepaymentToggleButton({ item, toggle }: { item: EarlyRepayment; toggle: (item: EarlyRepayment) => void }) {
-  const enabled = repaymentEnabled(item)
+  const enabled = !repaymentDisabled(item)
   const label = `${enabled ? 'Выключить' : 'Включить'} платёж ${shortDate(item.date)}`
 
   return <button type="button" className={`icon-btn toggle-payment${enabled ? '' : ' is-off'}`} aria-label={label} aria-pressed={enabled} title={enabled ? 'Выключить платёж' : 'Включить платёж'} onClick={() => toggle(item)}>{enabled ? <Power/> : <PowerOff/>}</button>
@@ -108,7 +107,7 @@ function RepaymentRulesPanel({ rules, addRule, updateRule, removeRule, defaultSt
       sameDayOrder: type === 'monthlyTotalPayment' ? 'regularFirst' : sameDayOrder,
       interestFirst: true,
       skipMonths,
-      comment: type === 'paymentPercent' ? `${value}% от регулярного платежа` : type === 'monthlyTotalPayment' ? `Итого к списанию ${money(value)}` : undefined
+      comment: type === 'paymentPercent' ? `${value}% от первоначального регулярного платежа` : type === 'monthlyTotalPayment' ? `Итого к списанию ${money(value)}` : undefined
     }
     try {
       if (editingRule) updateRule(rule)
@@ -122,7 +121,7 @@ function RepaymentRulesPanel({ rules, addRule, updateRule, removeRule, defaultSt
   return <section className="panel list-panel rule-panel early-card">
     <div className="panel-head"><div><h3>Регулярные досрочные платежи</h3><p>{editingRule ? 'Редактирование регулярного платежа' : 'Повторяющиеся операции до заданной даты'}</p></div><span className="early-counter">{rules.length}</span></div>
     <div className="rule-form form-grid">
-      <Field label="Тип регулярного платежа"><select value={type} onChange={event => setType(event.target.value as RepaymentRule['type'])}><option value="weeklyFixed">Раз в неделю фиксированная сумма</option><option value="monthlyFixed">Каждый месяц фиксированная сумма</option><option value="bimonthlyFixed">Раз в 2 месяца фиксированная сумма</option><option value="quarterlyFixed">Раз в квартал фиксированная сумма</option><option value="semiannualFixed">Раз в полгода фиксированная сумма</option><option value="annualFixed">Раз в год фиксированная сумма</option><option value="annualBonus">Ежегодная премия</option><option value="monthlyTotalPayment">Общий ежемесячный платёж</option><option value="paymentPercent">Процент от регулярного платежа</option></select></Field>
+      <Field label="Тип регулярного платежа"><select value={type} onChange={event => setType(event.target.value as RepaymentRule['type'])}><option value="weeklyFixed">Раз в неделю фиксированная сумма</option><option value="monthlyFixed">Каждый месяц фиксированная сумма</option><option value="bimonthlyFixed">Раз в 2 месяца фиксированная сумма</option><option value="quarterlyFixed">Раз в квартал фиксированная сумма</option><option value="semiannualFixed">Раз в полгода фиксированная сумма</option><option value="annualFixed">Раз в год фиксированная сумма</option><option value="annualBonus">Ежегодная премия</option><option value="monthlyTotalPayment">Общий ежемесячный платёж</option><option value="paymentPercent">Процент от первоначального регулярного платежа</option></select></Field>
       <Field label={amountFieldLabel}>{type === 'paymentPercent' ? <div className="with-suffix"><input type="number" min="0" value={percent} onChange={event => setPercent(event.target.value)}/><i>%</i></div> : <div className="with-suffix"><input type="number" min="0" value={amount} onChange={event => setAmount(event.target.value)}/><i>{currencySymbol()}</i></div>}</Field>
       <Field label="Начать с"><input type="date" value={start} onChange={event => setStart(event.target.value)}/></Field>
       <Field label="Применять до"><input type="date" value={end} onChange={event => setEnd(event.target.value)}/></Field>

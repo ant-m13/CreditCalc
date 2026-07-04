@@ -1,8 +1,10 @@
 import { useState } from 'react'
 import { Plus, Trash2 } from 'lucide-react'
-import { sortRateChanges, type LoanConfig, type RateChange } from '../loanEngine'
+import { nextPaymentDate, sortRateChanges, type LoanConfig, type RateChange } from '../loanEngine'
+import { MAX_RATE_CHANGES } from '../loanEngine/limits'
 import { currencySymbol } from '../formatters'
 import { createId } from '../utils/createId'
+import { isISODate } from '../utils/dateValidation'
 import { Field, NumberInput } from './ui'
 
 type TextScale = 'normal' | 'large' | 'xlarge'
@@ -42,10 +44,18 @@ export function Settings({
   const [newRateAnnualRate, setNewRateAnnualRate] = useState(config.annualRate)
   const [rateError, setRateError] = useState('')
   const rateChanges = config.rateChanges ?? []
+  const configuredPeriods = config.frequency === 'biweekly' ? Math.max(1, Math.round(config.termMonths * 26 / 12)) : config.frequency === 'quarterly' ? Math.max(1, Math.round(config.termMonths / 3)) : config.termMonths
+  let contractFinalDate = config.firstPaymentDate
+  for (let index = 1; index < configuredPeriods && isISODate(contractFinalDate); index += 1) contractFinalDate = nextPaymentDate(contractFinalDate, config)
+  const hasRateAfterContractEnd = isISODate(contractFinalDate) && rateChanges.some(change => isISODate(change.date) && change.date > contractFinalDate)
   const updateRateChanges = (items: RateChange[]) => update({ rateChanges: sortRateChanges(items) })
   const addRateChange = () => {
-    if (!newRateDate) {
-      setRateError('Укажите дату изменения ставки')
+    if (rateChanges.length >= MAX_RATE_CHANGES) {
+      setRateError(`Можно добавить не более ${MAX_RATE_CHANGES} изменений ставки`)
+      return
+    }
+    if (!isISODate(newRateDate)) {
+      setRateError('Укажите корректную дату изменения ставки')
       return
     }
     if (newRateDate <= config.issueDate) {
@@ -61,9 +71,19 @@ export function Settings({
     setRateError('')
   }
   const editRateChange = (id: string, patch: Partial<RateChange>) => {
-    if (patch.date && rateChanges.some(item => item.id !== id && item.date === patch.date)) {
-      setRateError('На эту дату уже есть изменение ставки')
-      return
+    if (patch.date !== undefined) {
+      if (!isISODate(patch.date)) {
+        setRateError('Укажите корректную дату изменения ставки')
+        return
+      }
+      if (patch.date <= config.issueDate) {
+        setRateError('Дата изменения ставки должна быть после выдачи кредита')
+        return
+      }
+      if (rateChanges.some(item => item.id !== id && item.date === patch.date)) {
+        setRateError('На эту дату уже есть изменение ставки')
+        return
+      }
     }
     setRateError('')
     updateRateChanges(rateChanges.map(item => item.id === id ? { ...item, ...patch } : item))
@@ -120,6 +140,7 @@ export function Settings({
         <button className="primary rate-add-button" onClick={addRateChange}><Plus size={16}/>Добавить</button>
       </div>
       <div className="tip">{config.rateChangeMode === 'exactDate' ? 'В режиме точной даты проценты внутри периода делятся на сегменты по ставкам.' : 'Новая ставка применяется со следующего платёжного периода.'}</div>
+      {hasRateAfterContractEnd && <div className="tip">В истории есть ставка после ориентировочной договорной даты закрытия {contractFinalDate}. Она сохранится в расчёте, но может не повлиять на график.</div>}
       {rateError && <p className="inline-error">{rateError}</p>}
       {rateChanges.length > 0 && <div className="rate-change-list">
         {rateChanges.map(change => <div className="rate-change-row" key={change.id}>

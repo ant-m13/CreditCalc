@@ -11,3 +11,12 @@ export const rateForNextPeriod = (config: LoanConfig, completedPaymentDate: stri
   }
   return nextRate
 }
+
+export const rateForDate = (config: LoanConfig, date: string, fallbackAnnualRate = config.annualRate) => {
+  let rate = fallbackAnnualRate
+  for (const change of sortRateChanges(config.rateChanges ?? [])) {
+    if (change.date <= date) rate = change.annualRate
+    else break
+  }
+  return rate
+}

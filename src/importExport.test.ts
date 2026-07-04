@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { parseLoanBackup } from './importExport'
-import { MAX_REPAYMENT_RULES } from './loanEngine/limits'
+import { MAX_RATE_CHANGES, MAX_REPAYMENT_RULES } from './loanEngine/limits'
 import { defaultConfig } from './store'
 
 const repayment = { id: 'early-1', date: '2026-01-26', amount: 8704.99, amountMode: 'extra', strategy: 'reduceTerm', source: 'own', sameDayOrder: 'regularFirst', interestFirst: true }
@@ -71,6 +71,11 @@ describe('импорт резервной копии', () => {
     const rule = { id: 'rule-1', name: 'Ежемесячно', type: 'monthlyFixed', startDate: '2026-02-26', endDate: '2026-12-26', amount: 20000, strategy: 'reduceTerm', source: 'own', sameDayOrder: 'regularFirst', interestFirst: true, skipMonths: ['2026-05'] }
     const result = parseLoanBackup(JSON.stringify({ config: defaultConfig, repayments: [], repaymentRules: [rule], gracePeriods: [], selectedScenario: 'combined' }))
     expect(result.repaymentRules[0]).toMatchObject(rule)
+  })
+
+  it('отклоняет импорт с количеством изменений ставки сверх лимита', () => {
+    const rateChanges = Array.from({ length: MAX_RATE_CHANGES + 1 }, (_, index) => ({ id: `rate-${index}`, date: `2030-${String(Math.floor(index / 28) % 12 + 1).padStart(2, '0')}-${String(index % 28 + 1).padStart(2, '0')}`, annualRate: 7 }))
+    expect(() => parseLoanBackup(JSON.stringify({ config: { ...defaultConfig, rateChanges }, repayments: [], gracePeriods: [], selectedScenario: 'combined' }))).toThrow(String(MAX_RATE_CHANGES))
   })
 
   it('восстанавливает расширенные правила досрочных платежей', () => {

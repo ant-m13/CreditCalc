@@ -3,4 +3,5 @@ export const MAX_EARLY_REPAYMENTS = 5000
 export const MAX_REPAYMENT_RULES = 5000
 export const MAX_GENERATED_REPAYMENTS = 5000
 export const MAX_GRACE_PERIODS = 100
+export const MAX_RATE_CHANGES = 1000
 export const MAX_SCHEDULE_ROWS = 10000

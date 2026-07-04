@@ -15,7 +15,8 @@ export default defineConfig(({ mode }) => {
     plugins: [react()],
     define: {
       __APP_VERSION__: JSON.stringify(pkg.version ?? '0.0.0'),
-      __BUILD_DATE__: JSON.stringify(new Date().toISOString())
+      __BUILD_DATE__: JSON.stringify(new Date().toISOString()),
+      __COMMIT_SHA__: JSON.stringify(env.VITE_COMMIT_SHA || env.GITHUB_SHA || 'dev')
     },
     server: { port: 4317, strictPort: true }
   }

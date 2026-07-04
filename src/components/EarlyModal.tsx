@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Sparkles, X } from 'lucide-react'
 import type { EarlyRepayment } from '../loanEngine'
 import { currencySymbol } from '../formatters'
+import { useModalDialog } from '../hooks/useModalDialog'
 import { createId } from '../utils/createId'
 import { isISODate } from '../utils/dateValidation'
 import { Field } from './ui'
@@ -15,6 +16,7 @@ interface EarlyModalProps {
 }
 
 export function EarlyModal({ close, save, initial, defaultDate, isRegularPaymentDate }: EarlyModalProps) {
+  const { dialogRef, titleId } = useModalDialog(close)
   const [date, setDate] = useState(initial?.date ?? defaultDate)
   const [amount, setAmount] = useState(initial ? String(initial.amount) : '100000')
   const [enabled, setEnabled] = useState(initial?.enabled ?? true)
@@ -52,9 +54,9 @@ export function EarlyModal({ close, save, initial, defaultDate, isRegularPayment
   }
 
   return <div className="modal-backdrop" onMouseDown={event => event.target === event.currentTarget && close()}>
-    <div className="modal">
+    <div className="modal" ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby={titleId} tabIndex={-1}>
       <div className="modal-head">
-        <div><span className="eyebrow">{initial ? 'Редактирование события' : 'Новое событие'}</span><h2>Досрочный платёж</h2></div>
+        <div><span className="eyebrow">{initial ? 'Редактирование события' : 'Новое событие'}</span><h2 id={titleId}>Досрочный платёж</h2></div>
         <button className="icon-btn" aria-label="Закрыть окно досрочного платежа" onClick={close}><X/></button>
       </div>
       <div className="modal-body">
