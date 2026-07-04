@@ -3,7 +3,7 @@ import { differenceInCalendarMonths, format, parseISO } from 'date-fns'
 import { CalendarDays, Check, Clock3, Sparkles, Target, WalletCards } from 'lucide-react'
 import type { ComparisonResult, EarlyRepayment, GracePeriod, LoanConfig, PaymentScheduleItem, ScenarioResult } from '../loanEngine'
 import { calculateDebtAtDate } from '../loanEngine'
-import { fmtMonths, fmtMonthsFull, money, plural, shortDate } from '../formatters'
+import { createMoneyFormatter, fmtMonths, fmtMonthsFull, plural, shortDate } from '../formatters'
 import { repaymentStrategyName } from '../labels'
 
 const todayISO = () => format(new Date(), 'yyyy-MM-dd')
@@ -13,7 +13,8 @@ function ProgressBar({ title, value }: { title: string; value: number }) {
   return <div className="progress-item"><div><span>{title}</span><b>{Math.round(value)}%</b></div><i><em style={{ width: `${Math.min(100, Math.max(0, value))}%` }}/></i></div>
 }
 
-export function Overview({ config, repayments, gracePeriods, comparison, selected, chartData, onSelect, onOpen }: { config: LoanConfig; repayments: EarlyRepayment[]; gracePeriods: GracePeriod[]; comparison: ComparisonResult; selected: ScenarioResult; chartData: { date: string; base: number; balance: number | null }[]; onSelect: (id: string) => void; onOpen: () => void }) {
+export function Overview({ config, displayDecimals, repayments, gracePeriods, comparison, selected, chartData, onSelect, onOpen }: { config: LoanConfig; displayDecimals: 0 | 2; repayments: EarlyRepayment[]; gracePeriods: GracePeriod[]; comparison: ComparisonResult; selected: ScenarioResult; chartData: { date: string; base: number; balance: number | null }[]; onSelect: (id: string) => void; onOpen: () => void }) {
+  const { money } = createMoneyFormatter(config.currency, displayDecimals)
   const base = comparison.scenarios[0]
   const earlyTotal = selected.schedule.reduce((sum, row) => sum + row.earlyPayment, 0)
   const today = todayISO()

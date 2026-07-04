@@ -13,10 +13,11 @@ interface EarlyModalProps {
   initial: EarlyRepayment | null
   initialError?: string
   defaultDate: string
+  currency: string
   isRegularPaymentDate: (date: string) => boolean
 }
 
-export function EarlyModal({ close, save, initial, initialError = '', defaultDate, isRegularPaymentDate }: EarlyModalProps) {
+export function EarlyModal({ close, save, initial, initialError = '', defaultDate, currency, isRegularPaymentDate }: EarlyModalProps) {
   const { dialogRef, titleId } = useModalDialog(close)
   const [date, setDate] = useState(initial?.date ?? defaultDate)
   const [amount, setAmount] = useState(initial ? String(initial.amount) : '100000')
@@ -67,7 +68,7 @@ export function EarlyModal({ close, save, initial, initialError = '', defaultDat
       <div className="modal-body">
         <div className="form-grid">
           <Field label="Дата"><input type="date" value={date} onChange={event => setDate(event.target.value)}/></Field>
-          <Field label="Сумма"><div className="with-suffix"><input autoFocus type="number" min="0" value={amount} onChange={event => setAmount(event.target.value)}/><i>{currencySymbol()}</i></div></Field>
+          <Field label="Сумма"><div className="with-suffix"><input autoFocus type="number" min="0" value={amount} onChange={event => setAmount(event.target.value)}/><i>{currencySymbol(currency)}</i></div></Field>
           <Field label="Как указана сумма"><select value={amountMode} onChange={event => setAmountMode(event.target.value as NonNullable<EarlyRepayment['amountMode']>)}><option value="extra">Сумма списания сверх платежа</option><option value="total">Итого по телу и процентам без комиссий</option></select></Field>
           <Field label="Стратегия"><select value={strategy} onChange={event => setStrategy(event.target.value as EarlyRepayment['strategy'])}><option value="reduceTerm">Уменьшить срок</option><option value="reducePayment">Уменьшить платёж</option><option value="full">Закрыть полностью</option></select></Field>
           <Field label="Источник"><select value={source} onChange={event => setSource(event.target.value as EarlyRepayment['source'])}><option value="own">Собственные средства</option><option value="subsidy">Маткапитал / субсидия</option><option value="insurance">Страховое возмещение</option><option value="other">Прочее</option></select></Field>

@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from './App'
@@ -32,7 +32,7 @@ class ResizeObserverMock {
   disconnect() {}
 }
 
-const loan = (): LoanProfile => ({
+const loan = (patch: Partial<LoanProfile> = {}): LoanProfile => ({
   id: 'loan-smoke',
   name: 'Мой кредит',
   config: defaultConfig,
@@ -46,7 +46,8 @@ const loan = (): LoanProfile => ({
   scheduleFontSize: 'large',
   theme: 'emerald',
   customAccentColor: '#0b9873',
-  useCustomAccentColor: false
+  useCustomAccentColor: false,
+  ...patch
 })
 
 const resetStore = () => {
@@ -210,5 +211,53 @@ describe('App smoke tests', () => {
     expect(screen.getByRole('button', { name: /Excel/i })).toBeTruthy()
     expect(screen.getByRole('button', { name: /Сохранить JSON/i })).toBeTruthy()
     expect(screen.getByRole('button', { name: /Код параметров/i })).toBeTruthy()
+  })
+
+  it('сбрасывает черновик изменения ставки при переключении кредита', async () => {
+    const user = userEvent.setup()
+    const first = loan({ id: 'loan-a', name: 'Первый' })
+    const second = loan({ id: 'loan-b', name: 'Второй', config: { ...defaultConfig, currency: 'USD' } })
+    useLoanStore.setState({ ...first, loans: [first, second], activeLoanId: first.id })
+    render(<App />)
+
+    await user.click(screen.getByRole('button', { name: 'Параметры' }))
+    const settingsSection = await screen.findByText('Изменение ставки')
+    const rateDate = settingsSection.closest('section')?.querySelector('input[type="date"]') as HTMLInputElement | null
+    if (!rateDate) throw new Error('Не найден input даты изменения ставки')
+    await user.clear(rateDate)
+    await user.type(rateDate, '2030-09-01')
+    expect(rateDate!.value).toBe('2030-09-01')
+
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Кредит' }), 'loan-b')
+
+    await waitFor(() => {
+      const nextRateDate = screen.getByText('Изменение ставки').closest('section')?.querySelector('input[type="date"]') as HTMLInputElement | null
+      expect(nextRateDate?.value).toBe('')
+    })
+  })
+
+  it('закрывает модалку и сбрасывает draft регулярного правила при переключении кредита', async () => {
+    const user = userEvent.setup()
+    const first = loan({ id: 'loan-a', name: 'Первый' })
+    const second = loan({ id: 'loan-b', name: 'Второй' })
+    useLoanStore.setState({ ...first, loans: [first, second], activeLoanId: first.id })
+    render(<App />)
+
+    await user.click(screen.getByRole('button', { name: /^Досрочные/ }))
+    const rulesPanel = await screen.findByText('Регулярные досрочные платежи')
+    const amount = rulesPanel.closest('section')?.querySelector('input[type="number"]') as HTMLInputElement | null
+    if (!amount) throw new Error('Не найден input суммы регулярного правила')
+    await user.clear(amount)
+    await user.type(amount, '77777')
+    await user.click(screen.getByRole('button', { name: /Досрочный платёж/i }))
+    expect(await screen.findByRole('dialog', { name: 'Досрочный платёж' })).toBeTruthy()
+
+    await act(async () => {
+      useLoanStore.getState().switchLoan('loan-b')
+    })
+
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Досрочный платёж' })).toBeNull())
+    const nextAmount = screen.getByText('Регулярные досрочные платежи').closest('section')?.querySelector('input[type="number"]') as HTMLInputElement | null
+    expect(nextAmount?.value).toBe('20000')
   })
 })

@@ -71,6 +71,10 @@ export function Settings({
     setRateError('')
   }
   const editRateChange = (id: string, patch: Partial<RateChange>) => {
+    if (!rateChanges.some(item => item.id === id)) {
+      setRateError('Изменение ставки уже не найдено в этом кредите')
+      return
+    }
     if (patch.date !== undefined) {
       if (!isISODate(patch.date)) {
         setRateError('Укажите корректную дату изменения ставки')
@@ -89,6 +93,10 @@ export function Settings({
     updateRateChanges(rateChanges.map(item => item.id === id ? { ...item, ...patch } : item))
   }
   const removeRateChange = (id: string) => {
+    if (!rateChanges.some(item => item.id === id)) {
+      setRateError('Изменение ставки уже не найдено в этом кредите')
+      return
+    }
     setRateError('')
     updateRateChanges(rateChanges.filter(item => item.id !== id))
   }
@@ -115,7 +123,7 @@ export function Settings({
         <div className="setting-item"><Field label="Метод" help="Выбирает формулу процентов. Фактические дни нужны для банковских графиков с разной длиной месяцев; номинальная ставка делит год на равные периоды."><select value={config.interest.method} onChange={e => updateInterest({ method: e.target.value as LoanConfig['interest']['method'] })}><option value="daily">По фактическим дням</option><option value="annuity">Номинальная ставка / период</option></select></Field></div>
         <div className="setting-item"><Field label="База года" help="Знаменатель дневной ставки. Особенно заметен в високосные годы и при сверке процентов с банком."><select value={config.interest.dayCountBasis} onChange={e => updateInterest({ dayCountBasis: e.target.value as LoanConfig['interest']['dayCountBasis'] })}><option value="actualActual">Фактические дни / фактический год</option><option value="actual365">Фактические дни / 365 дней</option><option value="365">365 дней</option><option value="366">366 дней</option><option value="360">360 дней</option></select></Field></div>
         <div className="setting-item"><Field label="Округление" help="Правило округления платежей и процентов. Может давать копеечные отличия в остатке и итоговой переплате."><select value={config.rounding} onChange={e => update({ rounding: e.target.value as LoanConfig['rounding'] })}><option value="kopecks">До копеек</option><option value="rubles">До рублей</option><option value="bank">Банковское</option></select></Field></div>
-        <div className="setting-item"><Field label="Порог закрытия" help="Если остаток тела стал меньше порога, приложение добавит его к ближайшему платежу и закроет кредит."><div className="with-suffix"><NumberInput min="0" value={config.closeThreshold} onCommit={closeThreshold => update({ closeThreshold })}/><i>{currencySymbol()}</i></div></Field></div>
+        <div className="setting-item"><Field label="Порог закрытия" help="Если остаток тела стал меньше порога, приложение добавит его к ближайшему платежу и закроет кредит."><div className="with-suffix"><NumberInput min="0" value={config.closeThreshold} onCommit={closeThreshold => update({ closeThreshold })}/><i>{currencySymbol(config.currency)}</i></div></Field></div>
         <div className="setting-item"><label className="toggle-row"><div><b className="setting-title">Включать дату платежа<SettingHelp text="Определяет, начисляются ли проценты за сам день платежа. Влияет на проценты каждой строки и текущий долг между платежами."/></b><span>В расчёт процентного периода</span></div><input type="checkbox" checked={config.interest.includePaymentDate} onChange={e => updateInterest({ includePaymentDate: e.target.checked })}/></label></div>
         <div className="setting-item"><Field label="Начало периода" help="Задает, включается ли дата прошлой операции в новый процентный период. Для многих банков подходит “со следующего дня”."><select value={config.interest.periodStart} onChange={e => updateInterest({ periodStart: e.target.value as LoanConfig['interest']['periodStart'] })}><option value="inclusive">С даты прошлой операции</option><option value="exclusive">Со следующего дня</option></select></Field></div>
         <div className="setting-item"><Field label="Остаток для начисления" help="Определяет, на какой остаток начислять проценты в день платежа или досрочного погашения. Важно для банков, которые меняют остаток до или после начисления."><select value={config.interest.balanceMoment} onChange={e => updateInterest({ balanceMoment: e.target.value as LoanConfig['interest']['balanceMoment'] })}><option value="startOfDay">На начало дня</option><option value="endOfDay">На конец дня</option></select></Field></div>

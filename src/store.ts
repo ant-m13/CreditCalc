@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { createJSONStorage, persist } from 'zustand/middleware'
 import { addMonths, format, parseISO } from 'date-fns'
-import { generateBaseSchedule, isRegularPaymentDate, nextSameDaySequence, sortRateChanges, sortRepaymentsByApplicationOrder, validateScenario, type EarlyRepayment, type GracePeriod, type LoanConfig, type RateChange } from './loanEngine'
+import { generateBaseSchedule, isRegularPaymentDate, nextPaymentDate, nextSameDaySequence, sortRateChanges, sortRepaymentsByApplicationOrder, validateScenario, type EarlyRepayment, type GracePeriod, type LoanConfig, type RateChange } from './loanEngine'
 import { createDefaultConfig, defaultConfig } from './loanDefaults'
 import type { LoanBackupData } from './importExport'
 import { expandRepaymentRules, sortRepaymentRulesByApplicationOrder, type RepaymentRule } from './repaymentRules'
@@ -113,7 +113,23 @@ interface LoanState extends LoanData {
   replaceData: (data: LoanImportData) => void
 }
 
-const seedRepayments: EarlyRepayment[] = [{ id: 'seed-1', date: '2027-01-15', amount: 350000, amountMode: 'extra', strategy: 'reduceTerm', source: 'own', sameDayOrder: 'regularFirst', interestFirst: true, comment: 'Годовой бонус' }]
+const advancePaymentPeriods = (startDate: string, config: LoanConfig, periods: number) => {
+  let date = startDate
+  for (let index = 0; index < periods; index += 1) date = nextPaymentDate(date, config)
+  return date
+}
+
+const createSeedRepayments = (config: LoanConfig): EarlyRepayment[] => [{
+  id: 'seed-1',
+  date: advancePaymentPeriods(config.firstPaymentDate, config, 11),
+  amount: 350000,
+  amountMode: 'extra',
+  strategy: 'reduceTerm',
+  source: 'own',
+  sameDayOrder: 'regularFirst',
+  interestFirst: true,
+  comment: 'Годовой бонус'
+}]
 
 const sortRepayments = (repayments: EarlyRepayment[]) =>
   sortRepaymentsByApplicationOrder(repayments)
@@ -162,9 +178,11 @@ const withUniqueIds = <T extends { id: string }>(items: T[], prefix: string): T[
   })
 }
 
-const defaultLoanData = (withSeedRepayment = false): LoanData => ({
-  config: createDefaultConfig(),
-  repayments: withSeedRepayment ? seedRepayments.map(item => ({ ...item })) : [],
+const defaultLoanData = (withSeedRepayment = false, today = new Date()): LoanData => {
+  const config = createDefaultConfig(today)
+  return {
+  config,
+  repayments: withSeedRepayment ? createSeedRepayments(config).map(item => ({ ...item })) : [],
   repaymentRules: [],
   gracePeriods: [],
   selectedScenario: 'combined',
@@ -175,7 +193,8 @@ const defaultLoanData = (withSeedRepayment = false): LoanData => ({
   theme: 'emerald',
   customAccentColor: defaultAccentColor,
   useCustomAccentColor: false
-})
+}
+}
 
 const normalizeRateChanges = (value: unknown, issueDate: string): RateChange[] => {
   if (!Array.isArray(value)) return []
@@ -243,7 +262,7 @@ const normalizeRepayments = (value: unknown, config: LoanConfig): EarlyRepayment
     usedSequences.set(date, used)
     return sequence
   }
-  return withUniqueIds(sortRepayments(value.slice(0, MAX_EARLY_REPAYMENTS).flatMap((item, index): EarlyRepayment[] => {
+  return withUniqueIds(sortRepayments(value.flatMap((item, index): EarlyRepayment[] => {
     if (!isObject(item) || typeof item.id !== 'string' || !isISODate(item.date)) return []
     const amount = optionalFiniteNumber(item.amount, 0)
     if (amount === undefined) return []
@@ -265,7 +284,7 @@ const normalizeRepayments = (value: unknown, config: LoanConfig): EarlyRepayment
       interestFirst: typeof item.interestFirst === 'boolean' ? item.interestFirst : true,
       ...(typeof item.comment === 'string' ? { comment: item.comment } : {})
     }]
-  })), 'early')
+  })).slice(0, MAX_EARLY_REPAYMENTS), 'early')
 }
 
 const normalizeRepaymentRules = (value: unknown): RepaymentRule[] => {
@@ -277,7 +296,7 @@ const normalizeRepaymentRules = (value: unknown): RepaymentRule[] => {
     usedSequences.add(sequence)
     return sequence
   }
-  return withUniqueIds(sortRules(value.slice(0, MAX_REPAYMENT_RULES).flatMap((item, index): RepaymentRule[] => {
+  return withUniqueIds(sortRules(value.flatMap((item, index): RepaymentRule[] => {
     if (!isObject(item) || typeof item.id !== 'string' || typeof item.name !== 'string' || !isISODate(item.startDate) || !isISODate(item.endDate) || item.endDate < item.startDate) return []
     const type = oneOf(item.type, repaymentRuleTypes, 'monthlyFixed')
     const amount = optionalFiniteNumber(item.amount, 0)
@@ -300,12 +319,12 @@ const normalizeRepaymentRules = (value: unknown): RepaymentRule[] => {
       skipMonths: Array.isArray(item.skipMonths) ? item.skipMonths.filter(isISOYearMonth) : [],
       ...(typeof item.comment === 'string' ? { comment: item.comment } : {})
     }]
-  })), 'rule')
+  })).slice(0, MAX_REPAYMENT_RULES), 'rule')
 }
 
 const normalizeGracePeriods = (value: unknown): GracePeriod[] => {
   if (!Array.isArray(value)) return []
-  return withUniqueIds(value.slice(0, MAX_GRACE_PERIODS).flatMap((item): GracePeriod[] => {
+  return withUniqueIds(value.flatMap((item): GracePeriod[] => {
     if (!isObject(item) || typeof item.id !== 'string' || !isISODate(item.startDate) || !isISODate(item.endDate) || item.endDate < item.startDate) return []
     const paymentAmount = item.paymentAmount === undefined ? undefined : optionalFiniteNumber(item.paymentAmount, 0)
     return [{
@@ -318,7 +337,7 @@ const normalizeGracePeriods = (value: unknown): GracePeriod[] => {
       accrueInterest: typeof item.accrueInterest === 'boolean' ? item.accrueInterest : true,
       capitalizeInterest: typeof item.capitalizeInterest === 'boolean' ? item.capitalizeInterest : false
     }]
-  }).sort((a, b) => a.startDate.localeCompare(b.startDate) || a.id.localeCompare(b.id)), 'grace')
+  }).sort((a, b) => a.startDate.localeCompare(b.startDate) || a.id.localeCompare(b.id)).slice(0, MAX_GRACE_PERIODS), 'grace')
 }
 
 const assertGracePeriodsDoNotOverlap = (gracePeriods: GracePeriod[]) => {
@@ -440,7 +459,10 @@ const initialLoan = loanFromData(defaultLoanData(), 'Мой кредит', 'loan
 
 export const normalizePersistedState = (persisted: unknown): Partial<LoanState> => {
   const state = (isObject(persisted) ? persisted : {}) as Partial<LoanState>
-  const rawLoans = Array.isArray(state.loans) ? state.loans.filter(isObject).slice(0, MAX_LOANS) : []
+  const rawLoans = Array.isArray(state.loans)
+    ? state.loans.filter(loan =>
+      isObject(loan) && (isObject(loan.config) || Array.isArray(loan.repayments) || Array.isArray(loan.repaymentRules) || Array.isArray(loan.gracePeriods)))
+    : []
   const seenLoanIds = new Set<string>()
   const uniqueLoanId = (value: unknown) => {
     const id = typeof value === 'string' && value.trim() ? value : createId('loan')
@@ -453,7 +475,7 @@ export const normalizePersistedState = (persisted: unknown): Partial<LoanState> 
     return nextId
   }
   const loans = rawLoans.length
-    ? rawLoans.map((loan, index) => loanFromData(loan, typeof loan.name === 'string' ? loan.name : `Кредит ${index + 1}`, uniqueLoanId(loan.id)))
+    ? rawLoans.map((loan, index) => loanFromData(loan, typeof loan.name === 'string' ? loan.name : `Кредит ${index + 1}`, uniqueLoanId(loan.id))).slice(0, MAX_LOANS)
     : [loanFromData(state, 'Мой кредит', 'loan-default')]
   const activeLoanId = typeof state.activeLoanId === 'string' && loans.some(loan => loan.id === state.activeLoanId) ? state.activeLoanId : loans[0].id
   const active = loans.find(loan => loan.id === activeLoanId) ?? loans[0]
@@ -473,6 +495,7 @@ export const useLoanStore = create<LoanState>()(persist((set) => ({
     return syncActive(s, { repayments })
   }),
   updateRepayment: (repayment) => set(s => {
+    if (!s.repayments.some(item => item.id === repayment.id)) throw new Error('Редактируемый досрочный платёж не найден в активном кредите')
     const repayments = sortRepayments(s.repayments.map(item => item.id === repayment.id
       ? withRepaymentSequence(s.repayments.filter(current => current.id !== repayment.id), {
         ...repayment,
@@ -490,6 +513,7 @@ export const useLoanStore = create<LoanState>()(persist((set) => ({
     return syncActive(s, { repaymentRules })
   }),
   updateRepaymentRule: (rule) => set(s => {
+    if (!s.repaymentRules.some(item => item.id === rule.id)) throw new Error('Редактируемое правило не найдено в активном кредите')
     const repaymentRules = sortRules(s.repaymentRules.map(item => item.id === rule.id ? { ...rule, ruleSequence: rule.ruleSequence ?? item.ruleSequence } : item))
     assertRepaymentPlanValid(s.config, s.repayments, repaymentRules, s.gracePeriods)
     return syncActive(s, { repaymentRules })
@@ -499,9 +523,15 @@ export const useLoanStore = create<LoanState>()(persist((set) => ({
     if (s.gracePeriods.length >= MAX_GRACE_PERIODS) throw new Error(`Можно добавить не более ${MAX_GRACE_PERIODS} льготных периодов`)
     const gracePeriods = [...s.gracePeriods, grace]
     assertGracePeriodsDoNotOverlap(gracePeriods)
+    assertRepaymentPlanValid(s.config, s.repayments, s.repaymentRules, gracePeriods)
     return syncActive(s, { gracePeriods })
   }),
-  removeGrace: (id) => set(s => syncActive(s, { gracePeriods: s.gracePeriods.filter(g => g.id !== id) })),
+  removeGrace: (id) => set(s => {
+    const gracePeriods = s.gracePeriods.filter(g => g.id !== id)
+    if (gracePeriods.length === s.gracePeriods.length) throw new Error('Льготный период не найден в активном кредите')
+    assertRepaymentPlanValid(s.config, s.repayments, s.repaymentRules, gracePeriods)
+    return syncActive(s, { gracePeriods })
+  }),
   selectScenario: (selectedScenario) => set(s => syncActive(s, { selectedScenario })),
   setTermUnit: (termUnit) => set(s => syncActive(s, { termUnit })),
   setDisplayDecimals: (displayDecimals) => set(s => syncActive(s, { displayDecimals })),
@@ -526,7 +556,7 @@ export const useLoanStore = create<LoanState>()(persist((set) => ({
     return { loans, activeLoanId, ...publicData(active) }
   }),
   loadExampleLoan: () => set(s => {
-    const data = defaultLoanData(true)
+    const data = defaultLoanData(true, new Date())
     return { ...data, loans: s.loans.map(loan => loan.id === s.activeLoanId ? { ...loan, name: 'Пример кредита', ...data } : loan) }
   }),
   addLoanFromData: (data) => set(s => {
