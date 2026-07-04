@@ -30,6 +30,12 @@ For dependency security checks:
 pnpm audit --prod
 ```
 
+## Issues and Pull Requests
+
+Use the GitHub issue forms for bug reports and feature requests. For calculation bugs, include minimal synthetic loan parameters and avoid real personal data.
+
+Pull requests should follow the repository PR template: describe what changed, why it changed, how it was checked, and whether calculation, import/export, sharing, or local-storage compatibility is affected.
+
 ## Calculation Changes
 
 Changes in `src/loanEngine` should include focused regression tests. Prefer small tests that capture the business rule being changed: dates, rounding, payment order, early repayment strategy, grace period behavior, or import compatibility.
