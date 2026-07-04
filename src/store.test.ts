@@ -98,7 +98,7 @@ describe('миграция локального хранилища', () => {
         ],
         gracePeriods: [
           { id: 'bad-grace', startDate: '', endDate: '2030-04-01', type: 'full', extendTerm: true, accrueInterest: true, capitalizeInterest: false },
-          { id: 'good-grace', startDate: '2030-05-01', endDate: '2030-05-31', type: 'full', extendTerm: true, accrueInterest: false, capitalizeInterest: false }
+          { id: 'good-grace', startDate: '2030-05-01', endDate: '2030-05-31', type: 'custom', paymentAmount: 1234.56, extendTerm: true, accrueInterest: false, capitalizeInterest: false }
         ],
         selectedScenario: 'reduceTerm',
         termUnit: 'months',
@@ -123,7 +123,7 @@ describe('миграция локального хранилища', () => {
     expect(normalized.repaymentRules).toHaveLength(1)
     expect(normalized.repaymentRules[0]).toMatchObject({ id: 'good-rule', name: 'Регулярный платёж', skipMonths: ['2030-04'] })
     expect(normalized.gracePeriods).toHaveLength(1)
-    expect(normalized.gracePeriods[0]).toMatchObject({ id: 'good-grace', accrueInterest: false })
+    expect(normalized.gracePeriods[0]).toMatchObject({ id: 'good-grace', type: 'custom', paymentAmount: 1234.56, accrueInterest: false })
   })
 
   it('игнорирует повреждённые элементы массива loans и ограничивает их число', () => {

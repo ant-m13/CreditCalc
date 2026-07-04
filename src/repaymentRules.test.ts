@@ -18,6 +18,10 @@ const rule = (patch: Partial<RepaymentRule>): RepaymentRule => ({
 })
 
 describe('правила досрочных платежей', () => {
+  it('не строит базовый график, если правил нет', () => {
+    expect(expandRepaymentRules({ ...defaultConfig, firstPaymentDate: defaultConfig.issueDate }, [])).toEqual([])
+  })
+
   it('создаёт ежемесячные досрочные платежи и пропускает выбранные месяцы', () => {
     const items = expandRepaymentRules(defaultConfig, [rule({ skipMonths: ['2026-03'] })])
     expect(items.map(item => item.date)).toEqual(['2026-01-26', '2026-02-26', '2026-04-26'])

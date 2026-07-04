@@ -37,8 +37,8 @@ const firstRegularPayment = (config: LoanConfig) => {
   return row?.payment ?? 0
 }
 
-const ruleAmount = (rule: RepaymentRule, regularPayment: number, config: LoanConfig) => {
-  if (rule.type === 'paymentPercent') return num(regularPayment * Math.max(0, rule.percent ?? 0) / 100, config.rounding)
+const ruleAmount = (rule: RepaymentRule, regularPayment: () => number, config: LoanConfig) => {
+  if (rule.type === 'paymentPercent') return num(regularPayment() * Math.max(0, rule.percent ?? 0) / 100, config.rounding)
   return num(rule.amount ?? 0, config.rounding)
 }
 
@@ -67,14 +67,23 @@ const pushRuleRepayment = (result: EarlyRepayment[], rule: RepaymentRule, date: 
 }
 
 export function expandRepaymentRules(config: LoanConfig, rules: RepaymentRule[]): EarlyRepayment[] {
-  const regularPayment = firstRegularPayment(config)
-  const baseSchedule = () => generateBaseSchedule(config)
+  if (rules.length === 0) return []
+  let regularPayment: number | null = null
+  let schedule: ReturnType<typeof generateBaseSchedule> | null = null
+  const baseSchedule = () => {
+    schedule ??= generateBaseSchedule(config)
+    return schedule
+  }
+  const getRegularPayment = () => {
+    regularPayment ??= firstRegularPayment(config)
+    return regularPayment
+  }
   const result: EarlyRepayment[] = []
   for (const rule of rules) {
     if (!isISODate(rule.startDate) || !isISODate(rule.endDate)) throw new Error(`Правило «${rule.name}» содержит некорректные даты`)
     if (!rule.skipMonths.every(isISOYearMonth)) throw new Error(`Правило «${rule.name}» содержит некорректный месяц пропуска`)
     if (rule.enabled === false) continue
-    const amount = ruleAmount(rule, regularPayment, config)
+    const amount = ruleAmount(rule, getRegularPayment, config)
     if (amount <= 0 || rule.startDate > rule.endDate) continue
     if (rule.type === 'monthlyTotalPayment') {
       for (const row of baseSchedule()) {
