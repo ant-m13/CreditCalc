@@ -1,0 +1,71 @@
+name: Ошибка в расчёте или интерфейсе
+description: Сообщить о воспроизводимой ошибке в приложении
+title: "[bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Спасибо за отчёт. Не прикладывайте реальные кредитные документы, приватные JSON-экспорты или ссылки с персональными параметрами.
+  - type: textarea
+    id: summary
+    attributes:
+      label: Что случилось?
+      description: Коротко опишите ошибку и ожидаемое поведение.
+      placeholder: Например, платёж после досрочного погашения пересчитался неверно.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Как воспроизвести?
+      description: Перечислите действия и минимальные параметры расчёта.
+      placeholder: |
+        1. Сумма кредита ...
+        2. Ставка ...
+        3. Добавить досрочный платёж ...
+        4. Открыть график ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Ожидаемый результат
+      description: Что должно было произойти?
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Фактический результат
+      description: Что показывает приложение?
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Область
+      options:
+        - Расчётный график
+        - Досрочные платежи
+        - Льготные периоды
+        - Переменная ставка
+        - Импорт / экспорт / ссылка
+        - Оформление / тема
+        - Другое
+    validations:
+      required: true
+  - type: input
+    id: browser
+    attributes:
+      label: Браузер и устройство
+      placeholder: Chrome 126, Windows 11
+    validations:
+      required: false
+  - type: textarea
+    id: extra
+    attributes:
+      label: Дополнительный контекст
+      description: Скриншоты, обезличенный JSON или фрагмент банковского графика.
+    validations:
+      required: false

@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Вопрос безопасности
+    url: https://github.com/ant-m13/CreditCalc/security/advisories/new
+    about: Сообщайте уязвимости приватно через GitHub Security Advisories.

@@ -1,0 +1,47 @@
+name: Идея или улучшение
+description: Предложить новую возможность или улучшение существующего сценария
+title: "[feature]: "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Какую задачу нужно решить?
+      description: Опишите пользовательский сценарий или банковское расхождение.
+      placeholder: Например, нужно сверять график с банком, который переносит платежи с выходных.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Предложенное решение
+      description: Как это должно работать в интерфейсе или расчёте?
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Область
+      options:
+        - Расчётное ядро
+        - Интерфейс
+        - Импорт / экспорт / ссылка
+        - Документация
+        - GitHub / релизы
+        - Другое
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Альтернативы
+      description: Какие обходные пути или другие варианты вы рассматривали?
+    validations:
+      required: false
+  - type: textarea
+    id: extra
+    attributes:
+      label: Дополнительный контекст
+      description: Ссылки на банковские правила, обезличенные примеры или похожие калькуляторы.
+    validations:
+      required: false
