@@ -7,6 +7,7 @@ interface UseSharedCalculationOptions {
   createLoanFromData: (data: LoanBackupData, source?: string) => boolean
   replaceActiveWithData: (data: LoanBackupData, source?: string) => boolean
   setImportStatus: (status: ImportStatus | null) => void
+  onAccept?: () => void
 }
 
 const clearSharedHash = () => {
@@ -15,7 +16,7 @@ const clearSharedHash = () => {
   window.history.replaceState(null, '', `${url.pathname}${url.search}`)
 }
 
-export function useSharedCalculation({ createLoanFromData, replaceActiveWithData, setImportStatus }: UseSharedCalculationOptions) {
+export function useSharedCalculation({ createLoanFromData, replaceActiveWithData, setImportStatus, onAccept }: UseSharedCalculationOptions) {
   const [sharedCalculation, setSharedCalculation] = useState<LoanBackupData | null>(null)
 
   useEffect(() => {
@@ -35,16 +36,18 @@ export function useSharedCalculation({ createLoanFromData, replaceActiveWithData
     if (createLoanFromData(sharedCalculation, 'ссылки')) {
       setSharedCalculation(null)
       clearSharedHash()
+      onAccept?.()
     }
-  }, [createLoanFromData, sharedCalculation])
+  }, [createLoanFromData, onAccept, sharedCalculation])
 
   const replaceActiveWithSharedCalculation = useCallback(() => {
     if (!sharedCalculation) return
     if (replaceActiveWithData(sharedCalculation, 'ссылки')) {
       setSharedCalculation(null)
       clearSharedHash()
+      onAccept?.()
     }
-  }, [replaceActiveWithData, sharedCalculation])
+  }, [onAccept, replaceActiveWithData, sharedCalculation])
 
   const declineSharedCalculation = useCallback(() => {
     setSharedCalculation(null)

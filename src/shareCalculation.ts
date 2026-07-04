@@ -57,17 +57,27 @@ const streamToBytes = async (stream: ReadableStream<Uint8Array>) => {
 }
 
 const bytesToBlobPart = (input: Uint8Array) => input.buffer.slice(input.byteOffset, input.byteOffset + input.byteLength) as ArrayBuffer
+const bytesToStream = (input: Uint8Array): ReadableStream<BufferSource> => {
+  const blob = new Blob([bytesToBlobPart(input)])
+  if (typeof blob.stream === 'function') return blob.stream() as ReadableStream<BufferSource>
+  return new ReadableStream<BufferSource>({
+    start(controller) {
+      controller.enqueue(bytesToBlobPart(input))
+      controller.close()
+    }
+  })
+}
 
 const gzip = async (input: Uint8Array) => {
   if (typeof CompressionStream === 'undefined') throw new Error('Ваш браузер не поддерживает создание сжатых ссылок. Используйте JSON-файл')
-  const writer = new Blob([bytesToBlobPart(input)]).stream().pipeThrough(new CompressionStream('gzip'))
+  const writer = bytesToStream(input).pipeThrough(new CompressionStream('gzip'))
   return streamToBytes(writer)
 }
 
 const gunzip = async (input: Uint8Array) => {
   if (typeof DecompressionStream === 'undefined') throw new Error('Ваш браузер не поддерживает загрузку сжатых ссылок. Используйте JSON-файл')
   try {
-    return await streamToBytes(new Blob([bytesToBlobPart(input)]).stream().pipeThrough(new DecompressionStream('gzip')))
+    return await streamToBytes(bytesToStream(input).pipeThrough(new DecompressionStream('gzip')))
   } catch {
     throw new Error('Ссылка повреждена. Проверьте ссылку или используйте JSON-файл')
   }
