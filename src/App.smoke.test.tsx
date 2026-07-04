@@ -6,6 +6,26 @@ import App from './App'
 import { defaultConfig, useLoanStore, type LoanProfile } from './store'
 import { APP_VERSION } from './version'
 
+const sharedLinkMock = vi.hoisted(() => ({
+  payload: 'test-shared-payload',
+  data: null as unknown
+}))
+
+vi.mock('./shareCalculation', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./shareCalculation')>()
+  return {
+    ...actual,
+    readSharedCalculationFromLocation: vi.fn((location: Pick<Location, 'hash'>) => {
+      const hash = location.hash.startsWith('#') ? location.hash.slice(1) : location.hash
+      return hash === `calc=${sharedLinkMock.payload}` ? sharedLinkMock.payload : null
+    }),
+    decodeSharedCalculation: vi.fn(async (payload: string) => {
+      if (payload === sharedLinkMock.payload) return sharedLinkMock.data
+      return actual.decodeSharedCalculation(payload)
+    })
+  }
+})
+
 class ResizeObserverMock {
   observe() {}
   unobserve() {}
@@ -38,6 +58,30 @@ const resetStore = () => {
   })
 }
 
+const sharedLoan = () => ({
+  name: 'Кредит из ссылки',
+  config: {
+    ...defaultConfig,
+    principal: 3_210_000,
+    annualRate: 8.4
+  },
+  repayments: [],
+  repaymentRules: [],
+  gracePeriods: [],
+  selectedScenario: 'reducePayment',
+  termUnit: 'months' as const,
+  displayDecimals: 2 as const,
+  appFontSize: 'normal' as const,
+  scheduleFontSize: 'large' as const,
+  theme: 'ocean' as const
+})
+
+const openSharedCalculation = async (data = sharedLoan()) => {
+  sharedLinkMock.data = data
+  window.history.replaceState(null, '', `/#calc=${sharedLinkMock.payload}`)
+  return data
+}
+
 beforeEach(() => {
   localStorage.clear()
   localStorage.setItem('credit-calculator-onboarding-done', 'yes')
@@ -55,6 +99,7 @@ beforeEach(() => {
     dispatchEvent: vi.fn()
   }))
   vi.stubGlobal('scrollTo', vi.fn())
+  sharedLinkMock.data = null
   resetStore()
 })
 
@@ -91,6 +136,49 @@ describe('App smoke tests', () => {
 
     expect(useLoanStore.getState().repayments[0]).toMatchObject({ amount: 100000, enabled: true })
     expect(screen.getAllByRole('button', { name: /Выключить платёж/i })).toHaveLength(2)
+  })
+
+  it('на первом запуске без ссылки показывает знакомство', async () => {
+    localStorage.clear()
+    render(<App />)
+
+    expect(await screen.findByRole('dialog', { name: 'Короткое знакомство' })).toBeTruthy()
+  })
+
+  it('на первом запуске по ссылке сначала предлагает загрузить кредит из ссылки', async () => {
+    localStorage.clear()
+    await openSharedCalculation()
+    render(<App />)
+
+    expect(await screen.findByRole('dialog', { name: 'Загрузить кредит из ссылки?' })).toBeTruthy()
+    expect(screen.queryByRole('dialog', { name: 'Короткое знакомство' })).toBeNull()
+  })
+
+  it('после принятия кредита из ссылки на первом запуске не открывает знакомство и пример', async () => {
+    const user = userEvent.setup()
+    localStorage.clear()
+    const data = await openSharedCalculation()
+    render(<App />)
+
+    await user.click(await screen.findByRole('button', { name: 'Заменить текущий' }))
+
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Загрузить кредит из ссылки?' })).toBeNull())
+    expect(screen.queryByRole('dialog', { name: 'Короткое знакомство' })).toBeNull()
+    expect(useLoanStore.getState().config.principal).toBe(data.config.principal)
+    expect(useLoanStore.getState().loans[0].name).toBe(data.name)
+    expect(localStorage.getItem('credit-calculator-onboarding-done')).toBe('yes')
+  })
+
+  it('после отказа от ссылки на первом запуске показывает знакомство', async () => {
+    const user = userEvent.setup()
+    localStorage.clear()
+    await openSharedCalculation()
+    render(<App />)
+
+    await user.click(await screen.findByRole('button', { name: 'Отказаться' }))
+
+    expect(await screen.findByRole('dialog', { name: 'Короткое знакомство' })).toBeTruthy()
+    expect(screen.queryByRole('dialog', { name: 'Загрузить кредит из ссылки?' })).toBeNull()
   })
 
   it('не включает конфликтующую total-операцию быстрой кнопкой', async () => {

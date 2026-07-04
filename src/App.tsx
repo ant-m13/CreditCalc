@@ -80,16 +80,6 @@ function App() {
     setImportStatus
   })
   const {
-    sharedCalculation,
-    createLoanFromSharedCalculation,
-    replaceActiveWithSharedCalculation,
-    declineSharedCalculation
-  } = useSharedCalculation({
-    createLoanFromData,
-    replaceActiveWithData,
-    setImportStatus
-  })
-  const {
     showWhatsNew,
     showOnboarding,
     lastLightTheme,
@@ -98,6 +88,20 @@ function App() {
     closeWhatsNew,
     finishOnboarding
   } = useStorageStatus(store.theme)
+  const acceptSharedCalculation = useCallback(() => {
+    if (showOnboarding) finishOnboarding()
+  }, [finishOnboarding, showOnboarding])
+  const {
+    sharedCalculation,
+    createLoanFromSharedCalculation,
+    replaceActiveWithSharedCalculation,
+    declineSharedCalculation
+  } = useSharedCalculation({
+    createLoanFromData,
+    replaceActiveWithData,
+    setImportStatus,
+    onAccept: acceptSharedCalculation
+  })
 
   const nav = [
     ['overview', Landmark, 'Обзор'], ['settings', Settings2, 'Параметры'], ['early', TrendingDown, 'Досрочные'],
@@ -169,9 +173,9 @@ function App() {
       </div>
     </main>
     {comparison && selected && <PrintReport config={calculationSnapshot.config} repayments={allRepayments} comparison={comparison} selected={selected}/>}
-    {showOnboarding ? <OnboardingModal close={finishOnboarding} showExample={() => { store.loadExampleLoan(); finishOnboarding(); setSection('overview') }} startSettings={() => { finishOnboarding(); setSection('settings') }}/> :
-      showWhatsNew ? <WhatsNewModal close={closeWhatsNew} openChanges={() => { closeWhatsNew(); setSection('changes') }}/> :
-        sharedCalculation ? <SharedCalculationModal data={sharedCalculation} createNew={createLoanFromSharedCalculation} replaceCurrent={replaceActiveWithSharedCalculation} decline={declineSharedCalculation}/> :
+    {sharedCalculation ? <SharedCalculationModal data={sharedCalculation} createNew={createLoanFromSharedCalculation} replaceCurrent={replaceActiveWithSharedCalculation} decline={declineSharedCalculation}/> :
+      showOnboarding ? <OnboardingModal close={finishOnboarding} showExample={() => { store.loadExampleLoan(); finishOnboarding(); setSection('overview') }} startSettings={() => { finishOnboarding(); setSection('settings') }}/> :
+        showWhatsNew ? <WhatsNewModal close={closeWhatsNew} openChanges={() => { closeWhatsNew(); setSection('changes') }}/> :
           showEarly ? <EarlyModal close={closeEarly} save={editingEarly ? store.updateRepayment : store.addRepayment} initial={editingEarly} initialError={earlyError} defaultDate={defaultEarlyDate} isRegularPaymentDate={(date) => isRegularPaymentDate(date, store.config)}/> :
             showGrace ? <GraceModal close={() => setShowGrace(false)} add={store.addGrace}/> : null}
   </div>
