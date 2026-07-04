@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useState, type CSSProperties } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useState, type CSSProperties } from 'react'
 import { ArrowDownToLine, CalendarDays, CircleHelp, History, Landmark, Menu, Moon, Plus, Printer, ReceiptText, Settings2, ShieldCheck, Sun, Trash2, TrendingDown, X } from 'lucide-react'
 import { compareScenarios, isRegularPaymentDate, validateScenario, type EarlyRepayment, type GracePeriod } from './loanEngine'
 import { useLoanStore } from './store'
@@ -10,7 +10,7 @@ import { Changelog, WhatsNewModal } from './components/Changelog'
 import { OnboardingModal } from './components/OnboardingModal'
 import { EarlyModal } from './components/EarlyModal'
 import { GraceModal } from './components/GraceModal'
-import { configureFormatters, shortDate } from './formatters'
+import { shortDate } from './formatters'
 import { APP_VERSION } from './version'
 import { graceTypeName } from './labels'
 import { useLoanCalculation } from './hooks/useLoanCalculation'
@@ -58,7 +58,6 @@ function App() {
     displayDecimals: store.displayDecimals,
     loanId: store.activeLoanId
   })
-  configureFormatters(calculationSnapshot.displayDecimals, calculationSnapshot.config.currency)
   const {
     importStatus,
     setImportStatus,
@@ -104,6 +103,14 @@ function App() {
     setImportStatus,
     onAccept: acceptSharedCalculation
   })
+
+  useEffect(() => {
+    setShowEarly(false)
+    setEditingEarly(null)
+    setEarlyError('')
+    setShowGrace(false)
+    resetRows()
+  }, [store.activeLoanId, resetRows])
 
   const nav = [
     ['overview', Landmark, 'Обзор'], ['settings', Settings2, 'Параметры'], ['early', TrendingDown, 'Досрочные'],
@@ -177,28 +184,39 @@ function App() {
         {isStale && <div className="alert">Пересчитываем график. На экране пока показан предыдущий согласованный расчёт.</div>}
         {errors.length > 0 && <div className="alert">{errors.join(' · ')}</div>}
         <Suspense fallback={<SectionLoading/>}>
-          {section === 'overview' && comparison && selected && <Overview config={calculationSnapshot.config} repayments={allRepayments} gracePeriods={calculationSnapshot.gracePeriods} comparison={comparison} selected={selected} chartData={overviewChartData} onSelect={store.selectScenario} onOpen={() => openEarly()}/>}
+          {section === 'overview' && comparison && selected && <Overview config={calculationSnapshot.config} displayDecimals={calculationSnapshot.displayDecimals} repayments={allRepayments} gracePeriods={calculationSnapshot.gracePeriods} comparison={comparison} selected={selected} chartData={overviewChartData} onSelect={store.selectScenario} onOpen={() => openEarly()}/>}
           {section === 'overview' && (!comparison || !selected) && <section className="panel list-panel"><div className="panel-head"><div><h3>Расчёт временно остановлен</h3><p>Исправьте параметры кредита или правила досрочных платежей, чтобы построить график.</p></div></div></section>}
-          {section === 'settings' && <Settings config={store.config} update={store.updateConfig} updateInterest={store.updateInterest} termUnit={store.termUnit} setTermUnit={store.setTermUnit} displayDecimals={store.displayDecimals} setDisplayDecimals={store.setDisplayDecimals} appFontSize={store.appFontSize} setAppFontSize={store.setAppFontSize} theme={store.theme} setTheme={store.setTheme} customAccentColor={store.customAccentColor} useCustomAccentColor={store.useCustomAccentColor} setCustomAccentColor={store.setCustomAccentColor} setUseCustomAccentColor={store.setUseCustomAccentColor} resetCustomAccentColor={store.resetCustomAccentColor}/>}
-          {section === 'early' && <EarlyList items={store.repayments} rules={store.repaymentRules} generated={generatedRepayments} remove={store.removeRepayment} edit={openEarly} toggle={toggleEarlyRepayment} open={() => openEarly()} addRule={store.addRepaymentRule} updateRule={store.updateRepaymentRule} removeRule={store.removeRepaymentRule} defaultStart={store.config.firstPaymentDate}/>}
+          {section === 'settings' && <Settings key={`settings-${store.activeLoanId}`} config={store.config} update={store.updateConfig} updateInterest={store.updateInterest} termUnit={store.termUnit} setTermUnit={store.setTermUnit} displayDecimals={store.displayDecimals} setDisplayDecimals={store.setDisplayDecimals} appFontSize={store.appFontSize} setAppFontSize={store.setAppFontSize} theme={store.theme} setTheme={store.setTheme} customAccentColor={store.customAccentColor} useCustomAccentColor={store.useCustomAccentColor} setCustomAccentColor={store.setCustomAccentColor} setUseCustomAccentColor={store.setUseCustomAccentColor} resetCustomAccentColor={store.resetCustomAccentColor}/>}
+          {section === 'early' && <EarlyList key={`early-${store.activeLoanId}`} items={store.repayments} rules={store.repaymentRules} generated={generatedRepayments} currency={store.config.currency} displayDecimals={store.displayDecimals} remove={store.removeRepayment} edit={openEarly} toggle={toggleEarlyRepayment} open={() => openEarly()} addRule={store.addRepaymentRule} updateRule={store.updateRepaymentRule} removeRule={store.removeRepaymentRule} defaultStart={store.config.firstPaymentDate}/>}
           {section === 'grace' && <GraceList items={store.gracePeriods} remove={store.removeGrace} open={() => setShowGrace(true)}/>}
-          {section === 'schedule' && selected && base && <Schedule schedule={selected.schedule} baseSchedule={base.schedule} repayments={allRepayments} rows={rows} setRows={setRows} more={() => setRows(r => r + 24)}/>}
+          {section === 'schedule' && selected && base && <Schedule schedule={selected.schedule} baseSchedule={base.schedule} repayments={allRepayments} currency={calculationSnapshot.config.currency} displayDecimals={calculationSnapshot.displayDecimals} rows={rows} setRows={setRows} more={() => setRows(r => r + 24)}/>}
           {section === 'schedule' && (!selected || !base) && <section className="panel list-panel"><div className="panel-head"><div><h3>График недоступен</h3><p>Сначала исправьте ошибки в параметрах расчёта.</p></div></div></section>}
           {section === 'export' && <ExportPanel download={downloadExport} print={printCalculated} calculatedExportsDisabled={isStale} createImported={createLoanFromData} replaceImported={replaceActiveWithData} copyShareLink={copyShareLink} createParameterCode={createParameterCode} decodeParameterCode={decodeParameterCode} looksLikeParameterLink={looksLikeParameterLink} status={importStatus}/>}
           {section === 'changes' && <Changelog/>}
         </Suspense>
       </div>
     </main>
-    {comparison && selected && <PrintReport config={calculationSnapshot.config} repayments={allRepayments} comparison={comparison} selected={selected}/>}
+    {comparison && selected && <PrintReport config={calculationSnapshot.config} displayDecimals={calculationSnapshot.displayDecimals} repayments={allRepayments} comparison={comparison} selected={selected}/>}
     {sharedCalculation ? <SharedCalculationModal data={sharedCalculation} createNew={createLoanFromSharedCalculation} replaceCurrent={replaceActiveWithSharedCalculation} decline={declineSharedCalculation}/> :
       showOnboarding ? <OnboardingModal close={finishOnboarding} showExample={() => { store.loadExampleLoan(); finishOnboarding(); setSection('overview') }} startSettings={() => { finishOnboarding(); setSection('settings') }}/> :
         showWhatsNew ? <WhatsNewModal close={closeWhatsNew} openChanges={() => { closeWhatsNew(); setSection('changes') }}/> :
-          showEarly ? <EarlyModal close={closeEarly} save={editingEarly ? store.updateRepayment : store.addRepayment} initial={editingEarly} initialError={earlyError} defaultDate={defaultEarlyDate} isRegularPaymentDate={(date) => isRegularPaymentDate(date, store.config)}/> :
-            showGrace ? <GraceModal close={() => setShowGrace(false)} add={store.addGrace}/> : null}
+          showEarly ? <EarlyModal key={`early-modal-${store.activeLoanId}-${editingEarly?.id ?? 'new'}`} close={closeEarly} save={editingEarly ? store.updateRepayment : store.addRepayment} initial={editingEarly} initialError={earlyError} defaultDate={defaultEarlyDate} currency={store.config.currency} isRegularPaymentDate={(date) => isRegularPaymentDate(date, store.config)}/> :
+            showGrace ? <GraceModal key={`grace-${store.activeLoanId}`} close={() => setShowGrace(false)} add={store.addGrace} config={store.config} currency={store.config.currency}/> : null}
   </div>
 }
 
-function GraceList({ items, remove, open }: { items: GracePeriod[]; remove: (id: string) => void; open: () => void }) { return <section className="panel list-panel"><div className="panel-head"><div><h3>Льготные периоды</h3><p>Отсрочка, проценты или индивидуальный платёж</p></div><button className="primary" onClick={open}><Plus/> Добавить</button></div>{items.length ? <div className="event-list">{items.map(x => <div className="event" key={x.id}><div className="date-tile"><CalendarDays/></div><div><b>{shortDate(x.startDate)} — {shortDate(x.endDate)}</b><span>{graceTypeName(x.type)} · {x.extendTerm ? 'с продлением срока' : 'без продления'}</span></div><button className="icon-btn danger" aria-label={`Удалить льготный период ${shortDate(x.startDate)} — ${shortDate(x.endDate)}`} onClick={() => remove(x.id)}><Trash2/></button></div>)}</div> : <Empty title="Льготные периоды не добавлены" action={open}/>}<div className="tip"><CircleHelp/> После льготного периода сначала могут погашаться отложенные платежи и проценты.</div></section> }
+function GraceList({ items, remove, open }: { items: GracePeriod[]; remove: (id: string) => void; open: () => void }) {
+  const [error, setError] = useState('')
+  const removeGrace = (id: string) => {
+    try {
+      remove(id)
+      setError('')
+    } catch (issue) {
+      setError(issue instanceof Error ? issue.message : 'Не удалось изменить льготные периоды')
+    }
+  }
+  return <section className="panel list-panel"><div className="panel-head"><div><h3>Льготные периоды</h3><p>Отсрочка, проценты или индивидуальный платёж</p></div><button className="primary" onClick={open}><Plus/> Добавить</button></div>{error && <div className="alert">{error}</div>}{items.length ? <div className="event-list">{items.map(x => <div className="event" key={x.id}><div className="date-tile"><CalendarDays/></div><div><b>{shortDate(x.startDate)} — {shortDate(x.endDate)}</b><span>{graceTypeName(x.type)} · {x.extendTerm ? 'с продлением срока' : 'без продления'}</span></div><button className="icon-btn danger" aria-label={`Удалить льготный период ${shortDate(x.startDate)} — ${shortDate(x.endDate)}`} onClick={() => removeGrace(x.id)}><Trash2/></button></div>)}</div> : <Empty title="Льготные периоды не добавлены" action={open}/>}<div className="tip"><CircleHelp/> После льготного периода сначала могут погашаться отложенные платежи и проценты.</div></section>
+}
 
 function Empty({ title, action }: { title: string; action: () => void }) { return <div className="empty"><span><CalendarDays/></span><h3>{title}</h3><p>Добавьте событие, и мы сразу покажем его влияние на кредит.</p><button className="ghost" onClick={action}><Plus/> Добавить</button></div> }
 

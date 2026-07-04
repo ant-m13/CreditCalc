@@ -3,7 +3,7 @@ import { addMonths, format, parseISO } from 'date-fns'
 import { ru } from 'date-fns/locale'
 import { CalendarDays, CircleHelp, ListChecks, Pencil, Plus, Power, PowerOff, Trash2, TrendingDown } from 'lucide-react'
 import { sortRepaymentsByApplicationOrder, type EarlyRepayment } from '../loanEngine'
-import { currencySymbol, money, shortDate } from '../formatters'
+import { createMoneyFormatter, shortDate } from '../formatters'
 import { ruleTypeName, scenarioName, sourceName } from '../labels'
 import type { RepaymentRule } from '../repaymentRules'
 import { createId } from '../utils/createId'
@@ -17,10 +17,6 @@ function Empty({ title, action }: { title: string; action: () => void }) {
 const repaymentDisabled = (item: EarlyRepayment) => item.enabled === false || item.amount <= 0
 const ruleHasNoAmount = (rule: RepaymentRule) => rule.type === 'paymentPercent' ? (rule.percent ?? 0) <= 0 : (rule.amount ?? 0) <= 0
 const ruleDisabled = (rule: RepaymentRule) => rule.enabled === false || ruleHasNoAmount(rule)
-const ruleValueLabel = (rule: RepaymentRule) =>
-  rule.type === 'paymentPercent' ? `${rule.percent ?? 0}% от первоначального регулярного платежа` :
-  rule.type === 'monthlyTotalPayment' ? `итого ${money(rule.amount ?? 0)}` :
-  money(rule.amount ?? 0)
 const ruleName = (type: RepaymentRule['type']) =>
   type === 'weeklyFixed' ? 'Еженедельное пополнение' :
   type === 'monthlyFixed' ? 'Ежемесячное пополнение' :
@@ -40,7 +36,8 @@ function RepaymentToggleButton({ item, toggle }: { item: EarlyRepayment; toggle:
   return <button type="button" className={`icon-btn toggle-payment${enabled ? '' : ' is-off'}`} aria-label={label} aria-pressed={enabled} title={enabled ? 'Выключить платёж' : 'Включить платёж'} onClick={() => toggle(item)}>{enabled ? <Power/> : <PowerOff/>}</button>
 }
 
-function RepaymentRulesPanel({ rules, addRule, updateRule, removeRule, defaultStart }: { rules: RepaymentRule[]; addRule: (rule: RepaymentRule) => void; updateRule: (rule: RepaymentRule) => void; removeRule: (id: string) => void; defaultStart: string }) {
+function RepaymentRulesPanel({ rules, addRule, updateRule, removeRule, defaultStart, currency, displayDecimals }: { rules: RepaymentRule[]; addRule: (rule: RepaymentRule) => void; updateRule: (rule: RepaymentRule) => void; removeRule: (id: string) => void; defaultStart: string; currency: string; displayDecimals: 0 | 2 }) {
+  const { money, currencySymbol } = createMoneyFormatter(currency, displayDecimals)
   const [editingRule, setEditingRule] = useState<RepaymentRule | null>(null)
   const safeDefaultStart = isISODate(defaultStart) ? defaultStart : format(new Date(), 'yyyy-MM-dd')
   const defaultEnd = () => format(addMonths(parseISO(safeDefaultStart), 12), 'yyyy-MM-dd')
@@ -56,6 +53,10 @@ function RepaymentRulesPanel({ rules, addRule, updateRule, removeRule, defaultSt
   const [source, setSource] = useState<EarlyRepayment['source']>('own')
   const [sameDayOrder, setSameDayOrder] = useState<EarlyRepayment['sameDayOrder']>('regularFirst')
   const amountFieldLabel = type === 'paymentPercent' ? 'Процент' : type === 'monthlyTotalPayment' ? 'Общий платёж' : 'Сумма'
+  const ruleValueLabel = (rule: RepaymentRule) =>
+    rule.type === 'paymentPercent' ? `${rule.percent ?? 0}% от первоначального регулярного платежа` :
+    rule.type === 'monthlyTotalPayment' ? `итого ${money(rule.amount ?? 0)}` :
+    money(rule.amount ?? 0)
 
   const reset = () => {
     setEditingRule(null)
@@ -122,7 +123,7 @@ function RepaymentRulesPanel({ rules, addRule, updateRule, removeRule, defaultSt
     <div className="panel-head"><div><h3>Регулярные досрочные платежи</h3><p>{editingRule ? 'Редактирование регулярного платежа' : 'Повторяющиеся операции до заданной даты'}</p></div><span className="early-counter">{rules.length}</span></div>
     <div className="rule-form form-grid">
       <Field label="Тип регулярного платежа"><select value={type} onChange={event => setType(event.target.value as RepaymentRule['type'])}><option value="weeklyFixed">Раз в неделю фиксированная сумма</option><option value="monthlyFixed">Каждый месяц фиксированная сумма</option><option value="bimonthlyFixed">Раз в 2 месяца фиксированная сумма</option><option value="quarterlyFixed">Раз в квартал фиксированная сумма</option><option value="semiannualFixed">Раз в полгода фиксированная сумма</option><option value="annualFixed">Раз в год фиксированная сумма</option><option value="annualBonus">Ежегодная премия</option><option value="monthlyTotalPayment">Общий ежемесячный платёж</option><option value="paymentPercent">Процент от первоначального регулярного платежа</option></select></Field>
-      <Field label={amountFieldLabel}>{type === 'paymentPercent' ? <div className="with-suffix"><input type="number" min="0" value={percent} onChange={event => setPercent(event.target.value)}/><i>%</i></div> : <div className="with-suffix"><input type="number" min="0" value={amount} onChange={event => setAmount(event.target.value)}/><i>{currencySymbol()}</i></div>}</Field>
+      <Field label={amountFieldLabel}>{type === 'paymentPercent' ? <div className="with-suffix"><input type="number" min="0" value={percent} onChange={event => setPercent(event.target.value)}/><i>%</i></div> : <div className="with-suffix"><input type="number" min="0" value={amount} onChange={event => setAmount(event.target.value)}/><i>{currencySymbol}</i></div>}</Field>
       <Field label="Начать с"><input type="date" value={start} onChange={event => setStart(event.target.value)}/></Field>
       <Field label="Применять до"><input type="date" value={end} onChange={event => setEnd(event.target.value)}/></Field>
       <Field label="Стратегия"><select value={strategy} onChange={event => setStrategy(event.target.value as EarlyRepayment['strategy'])}><option value="reduceTerm">Уменьшить срок</option><option value="reducePayment">Уменьшить платёж</option><option value="full">Закрыть полностью</option></select></Field>
@@ -144,7 +145,8 @@ function RepaymentRulesPanel({ rules, addRule, updateRule, removeRule, defaultSt
   </section>
 }
 
-export function EarlyList({ items, rules, generated, remove, edit, toggle, open, addRule, updateRule, removeRule, defaultStart }: { items: EarlyRepayment[]; rules: RepaymentRule[]; generated: EarlyRepayment[]; remove: (id: string) => void; edit: (item: EarlyRepayment) => void; toggle: (item: EarlyRepayment) => void; open: () => void; addRule: (rule: RepaymentRule) => void; updateRule: (rule: RepaymentRule) => void; removeRule: (id: string) => void; defaultStart: string }) {
+export function EarlyList({ items, rules, generated, currency, displayDecimals, remove, edit, toggle, open, addRule, updateRule, removeRule, defaultStart }: { items: EarlyRepayment[]; rules: RepaymentRule[]; generated: EarlyRepayment[]; currency: string; displayDecimals: 0 | 2; remove: (id: string) => void; edit: (item: EarlyRepayment) => void; toggle: (item: EarlyRepayment) => void; open: () => void; addRule: (rule: RepaymentRule) => void; updateRule: (rule: RepaymentRule) => void; removeRule: (id: string) => void; defaultStart: string }) {
+  const { money } = createMoneyFormatter(currency, displayDecimals)
   const ruleNames = useMemo(() => new Map(rules.map(rule => [rule.id, rule.name])), [rules])
   const activeItems = useMemo(() => items.filter(item => !repaymentDisabled(item)), [items])
   const combined = useMemo(() => sortRepaymentsByApplicationOrder([
@@ -173,7 +175,7 @@ export function EarlyList({ items, rules, generated, remove, edit, toggle, open,
           </div>
         })}</div> : <Empty title="Пока нет разовых платежей" action={open}/>}
       </section>
-      <RepaymentRulesPanel rules={rules} addRule={addRule} updateRule={updateRule} removeRule={removeRule} defaultStart={defaultStart}/>
+      <RepaymentRulesPanel rules={rules} addRule={addRule} updateRule={updateRule} removeRule={removeRule} defaultStart={defaultStart} currency={currency} displayDecimals={displayDecimals}/>
     </div>
     <section className="panel list-panel early-calendar">
       <div className="panel-head"><div><h3>Календарь досрочных платежей</h3><p>Разовые и регулярные досрочные платежи</p></div><div className="early-summary inline"><div><span>Всего</span><b>{combined.length}</b></div><div><span>Регулярные</span><b>{money(generatedTotal)}</b></div></div></div>

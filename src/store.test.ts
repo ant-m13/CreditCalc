@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
+import { validateScenario } from './loanEngine'
 import { MAX_EARLY_REPAYMENTS, MAX_RATE_CHANGES, MAX_REPAYMENT_RULES } from './loanEngine/limits'
 import { defaultConfig, MAX_LOANS, normalizePersistedState, useLoanStore, type LoanProfile } from './store'
 import type { EarlyRepayment } from './loanEngine'
@@ -222,6 +223,34 @@ describe('миграция локального хранилища', () => {
     expect(normalized.config.rateChanges).toHaveLength(MAX_RATE_CHANGES)
     expect(normalized.config.rateChanges[0]).toEqual(earlyRate)
   })
+
+  it('не теряет валидный хвост после повреждённого префикса в массивах', () => {
+    const invalidRepayments = Array.from({ length: MAX_EARLY_REPAYMENTS }, (_, index) => ({ id: `bad-early-${index}`, date: '', amount: 1000, amountMode: 'extra', ...repaymentBase }))
+    const invalidRules = Array.from({ length: MAX_REPAYMENT_RULES }, (_, index) => ({ ...rule(index), id: `bad-rule-${index}`, startDate: '', endDate: '2030-12-01' }))
+    const invalidGrace = Array.from({ length: 100 }, (_, index) => ({ id: `bad-grace-${index}`, startDate: '', endDate: '2030-04-01', type: 'full', extendTerm: true, accrueInterest: true, capitalizeInterest: false }))
+    const normalized = normalizePersistedState({
+      repayments: [...invalidRepayments, { id: 'tail-early', date: defaultConfig.firstPaymentDate, amount: 7777, amountMode: 'extra', ...repaymentBase }],
+      repaymentRules: [...invalidRules, { ...rule(10_001), id: 'tail-rule', startDate: defaultConfig.firstPaymentDate, endDate: '2030-12-01' }],
+      gracePeriods: [...invalidGrace, { id: 'tail-grace', startDate: '2026-05-01', endDate: '2026-05-31', type: 'custom', paymentAmount: 1234, extendTerm: true, accrueInterest: true, capitalizeInterest: false }]
+    }) as any
+
+    expect(normalized.repayments).toHaveLength(1)
+    expect(normalized.repayments[0]).toMatchObject({ id: 'tail-early', amount: 7777 })
+    expect(normalized.repaymentRules).toHaveLength(1)
+    expect(normalized.repaymentRules[0]).toMatchObject({ id: 'tail-rule' })
+    expect(normalized.gracePeriods).toHaveLength(1)
+    expect(normalized.gracePeriods[0]).toMatchObject({ id: 'tail-grace', paymentAmount: 1234 })
+  })
+
+  it('не теряет валидный tail кредита после повреждённых первых 100 записей', () => {
+    const validLoan = { id: 'tail-loan', name: 'Хвост', config: defaultConfig, repayments: [], repaymentRules: [], gracePeriods: [], selectedScenario: 'reduceTerm', termUnit: 'months', displayDecimals: 2, appFontSize: 'normal', scheduleFontSize: 'large', theme: 'emerald' }
+    const brokenPrefix = Array.from({ length: MAX_LOANS }, (_, index) => ({ id: `broken-${index}` }))
+    const normalized = normalizePersistedState({ activeLoanId: 'tail-loan', loans: [...brokenPrefix, validLoan] }) as any
+
+    expect(normalized.loans).toHaveLength(1)
+    expect(normalized.loans[0].id).toBe('tail-loan')
+    expect(normalized.activeLoanId).toBe('tail-loan')
+  })
 })
 
 describe('лимиты store до мутации', () => {
@@ -320,5 +349,37 @@ describe('лимиты store до мутации', () => {
     setStoreLoan(loanProfile({ gracePeriods: [first] }))
     expect(() => useLoanStore.getState().addGrace(second)).toThrow('не должны пересекаться')
     expect(useLoanStore.getState().gracePeriods).toHaveLength(1)
+  })
+
+  it('не добавляет льготный период, который делает общий платёж невалидным', () => {
+    const totalRule = { ...rule(1), type: 'monthlyTotalPayment' as const, amount: 10000, startDate: defaultConfig.firstPaymentDate, endDate: defaultConfig.firstPaymentDate }
+    const invalidGrace = { id: 'g-invalid', startDate: defaultConfig.firstPaymentDate, endDate: defaultConfig.firstPaymentDate, type: 'custom' as const, paymentAmount: 20000, extendTerm: true, accrueInterest: true, capitalizeInterest: false }
+    setStoreLoan(loanProfile({ repaymentRules: [totalRule] }))
+
+    expect(() => useLoanStore.getState().addGrace(invalidGrace)).toThrow('не меньше обязательного платежа')
+    expect(useLoanStore.getState().gracePeriods).toHaveLength(0)
+  })
+
+  it('не удаляет льготный период, если без него общий платёж становится невалидным', () => {
+    const totalRule = { ...rule(1), type: 'monthlyTotalPayment' as const, amount: 10000, startDate: defaultConfig.firstPaymentDate, endDate: defaultConfig.firstPaymentDate }
+    const requiredGrace = { id: 'g-required', startDate: defaultConfig.firstPaymentDate, endDate: defaultConfig.firstPaymentDate, type: 'custom' as const, paymentAmount: 5000, extendTerm: true, accrueInterest: true, capitalizeInterest: false }
+    setStoreLoan(loanProfile({ repaymentRules: [totalRule], gracePeriods: [requiredGrace] }))
+
+    expect(() => useLoanStore.getState().removeGrace(requiredGrace.id)).toThrow('не меньше обязательного платежа')
+    expect(useLoanStore.getState().gracePeriods).toHaveLength(1)
+  })
+
+  it('строит примерный кредит с актуальными датами и валидным досрочным платежом', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date(2030, 6, 4))
+    setStoreLoan(loanProfile())
+
+    useLoanStore.getState().loadExampleLoan()
+
+    const state = useLoanStore.getState()
+    expect(state.config.issueDate).toBe('2030-07-04')
+    expect(state.repayments[0].date > state.config.issueDate).toBe(true)
+    expect(validateScenario(state.config, state.repayments, state.gracePeriods)).toEqual([])
+    vi.useRealTimers()
   })
 })

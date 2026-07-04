@@ -19,6 +19,7 @@ describe('EarlyModal', () => {
         save={save}
         initial={null}
         defaultDate="2026-01-15"
+        currency="RUB"
         isRegularPaymentDate={() => false}
       />
     )
@@ -47,6 +48,7 @@ describe('EarlyModal', () => {
         save={save}
         initial={null}
         defaultDate="2026-01-15"
+        currency="RUB"
         isRegularPaymentDate={() => false}
       />
     )

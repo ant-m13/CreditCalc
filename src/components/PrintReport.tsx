@@ -1,11 +1,12 @@
 import { format } from 'date-fns'
 import { Landmark } from 'lucide-react'
 import type { ComparisonResult, EarlyRepayment, LoanConfig, PaymentScheduleItem, ScenarioResult } from '../loanEngine'
-import { fmtMonths, money, shortDate } from '../formatters'
+import { createMoneyFormatter, fmtMonths, shortDate } from '../formatters'
 import { dayCountBasisLabel, rateChangeModeName, scenarioName } from '../labels'
 import { APP_VERSION, COMMIT_SHA, shortCommitSha } from '../version'
 
-export function PrintReport({ config, repayments, comparison, selected }: { config: LoanConfig; repayments: EarlyRepayment[]; comparison: ComparisonResult; selected: ScenarioResult }) {
+export function PrintReport({ config, displayDecimals, repayments, comparison, selected }: { config: LoanConfig; displayDecimals: 0 | 2; repayments: EarlyRepayment[]; comparison: ComparisonResult; selected: ScenarioResult }) {
+  const { money } = createMoneyFormatter(config.currency, displayDecimals)
   const generated = format(new Date(), 'dd.MM.yyyy HH:mm')
   const showFees = selected.schedule.some(row => Math.abs(row.feePaid ?? row.fee) > 0.004)
   const showDeferred = selected.schedule.some(row => Math.abs(row.deferredInterestOpening ?? 0) > 0.004 || Math.abs(row.deferredInterestClosing ?? 0) > 0.004)
