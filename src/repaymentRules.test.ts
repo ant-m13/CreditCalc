@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { defaultConfig } from './loanDefaults'
 import { expandRepaymentRules, type RepaymentRule } from './repaymentRules'
+import type { GracePeriod } from './loanEngine'
 
 const rule = (patch: Partial<RepaymentRule>): RepaymentRule => ({
   id: 'rule-1',
@@ -51,6 +52,28 @@ describe('правила досрочных платежей', () => {
     const items = expandRepaymentRules(defaultConfig, [rule({ type: 'monthlyTotalPayment', amount: 100000, startDate: '2026-08-15', endDate: '2026-10-15', sameDayOrder: 'earlyFirst' })])
     expect(items.map(item => item.date)).toEqual(['2026-08-15', '2026-09-15', '2026-10-15'])
     expect(items[0]).toMatchObject({ amount: 100000, amountMode: 'total', sameDayOrder: 'regularFirst' })
+  })
+
+  it('создаёт общий ежемесячный платёж на первой дате с платежом только по процентам', () => {
+    const items = expandRepaymentRules(defaultConfig, [rule({ type: 'monthlyTotalPayment', amount: 100000, startDate: defaultConfig.firstPaymentDate, endDate: defaultConfig.firstPaymentDate })])
+    expect(items.map(item => item.date)).toEqual([defaultConfig.firstPaymentDate])
+    expect(items[0]).toMatchObject({ amountMode: 'total', sameDayOrder: 'regularFirst' })
+  })
+
+  it('создаёт общий ежемесячный платёж на продлённых датах после длинной льготы', () => {
+    const short = { ...defaultConfig, principal: 30_000, annualRate: 0, termMonths: 3, issueDate: '2026-01-01', firstPaymentDate: '2026-02-01', paymentDay: 1, firstPaymentInterestOnly: false }
+    const grace: GracePeriod = { id: 'g-long', startDate: '2026-02-01', endDate: '2027-01-31', type: 'full', extendTerm: true, accrueInterest: false, capitalizeInterest: false }
+    const items = expandRepaymentRules(short, [rule({ type: 'monthlyTotalPayment', amount: 10000, startDate: '2027-02-01', endDate: '2027-04-01' })], [grace])
+    expect(items.map(item => item.date)).toEqual(['2027-02-01', '2027-03-01', '2027-04-01'])
+  })
+
+  it('создаёт общий платёж на продлённых двухнедельных и квартальных датах', () => {
+    const grace: GracePeriod = { id: 'g', startDate: '2026-02-01', endDate: '2026-03-31', type: 'full', extendTerm: true, accrueInterest: false, capitalizeInterest: false }
+    const quarterlyGrace: GracePeriod = { ...grace, id: 'g-quarter', startDate: '2026-04-01', endDate: '2026-06-30' }
+    const biweekly = { ...defaultConfig, principal: 260_000, annualRate: 0, termMonths: 3, frequency: 'biweekly' as const, issueDate: '2026-01-01', firstPaymentDate: '2026-01-15', paymentDay: 15, firstPaymentInterestOnly: false }
+    const quarterly = { ...defaultConfig, principal: 90_000, annualRate: 0, termMonths: 6, frequency: 'quarterly' as const, issueDate: '2026-01-01', firstPaymentDate: '2026-01-15', paymentDay: 15, firstPaymentInterestOnly: false }
+    expect(expandRepaymentRules(biweekly, [rule({ type: 'monthlyTotalPayment', amount: 10000, startDate: '2026-04-09', endDate: '2026-04-23' })], [grace]).map(item => item.date)).toEqual(['2026-04-09', '2026-04-23'])
+    expect(expandRepaymentRules(quarterly, [rule({ type: 'monthlyTotalPayment', amount: 10000, startDate: '2026-07-15', endDate: '2026-07-15' })], [quarterlyGrace]).map(item => item.date)).toEqual(['2026-07-15'])
   })
 
   it('не сдвигает день правила после короткого месяца', () => {

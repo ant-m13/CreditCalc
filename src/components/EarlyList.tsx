@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { addMonths, format, parseISO } from 'date-fns'
 import { ru } from 'date-fns/locale'
 import { CalendarDays, CircleHelp, ListChecks, Pencil, Plus, Power, PowerOff, Trash2, TrendingDown } from 'lucide-react'
-import type { EarlyRepayment } from '../loanEngine'
+import { sortRepaymentsByApplicationOrder, type EarlyRepayment } from '../loanEngine'
 import { currencySymbol, money, shortDate } from '../formatters'
 import { ruleTypeName, scenarioName, sourceName } from '../labels'
 import type { RepaymentRule } from '../repaymentRules'
@@ -147,13 +147,15 @@ function RepaymentRulesPanel({ rules, addRule, updateRule, removeRule, defaultSt
 export function EarlyList({ items, rules, generated, remove, edit, toggle, open, addRule, updateRule, removeRule, defaultStart }: { items: EarlyRepayment[]; rules: RepaymentRule[]; generated: EarlyRepayment[]; remove: (id: string) => void; edit: (item: EarlyRepayment) => void; toggle: (item: EarlyRepayment) => void; open: () => void; addRule: (rule: RepaymentRule) => void; updateRule: (rule: RepaymentRule) => void; removeRule: (id: string) => void; defaultStart: string }) {
   const ruleNames = useMemo(() => new Map(rules.map(rule => [rule.id, rule.name])), [rules])
   const activeItems = useMemo(() => items.filter(item => !repaymentDisabled(item)), [items])
-  const combined = useMemo(() => [
-    ...items.map(item => ({ item, kind: 'manual' as const, label: 'Разовый платёж' })),
-    ...generated.map(item => {
+  const combined = useMemo(() => sortRepaymentsByApplicationOrder([
+    ...items,
+    ...generated
+  ]).map(item => {
+    const manual = items.some(manualItem => manualItem.id === item.id)
+    if (manual) return { item, kind: 'manual' as const, label: 'Разовый платёж' }
       const ruleId = item.id.startsWith('rule-') ? item.id.slice(5, -11) : ''
-      return { item, kind: 'rule' as const, label: ruleNames.get(ruleId) ?? 'Регулярный платёж' }
-    })
-  ].sort((a, b) => a.item.date.localeCompare(b.item.date) || a.item.id.localeCompare(b.item.id)), [items, generated, ruleNames])
+    return { item, kind: 'rule' as const, label: ruleNames.get(ruleId) ?? 'Регулярный платёж' }
+  }), [items, generated, ruleNames])
   const manualTotal = activeItems.reduce((sum, item) => sum + item.amount, 0)
   const generatedTotal = generated.reduce((sum, item) => sum + item.amount, 0)
 

@@ -13,7 +13,12 @@ type InertElement = HTMLElement & { inert?: boolean }
 
 export function useModalDialog(onClose: () => void) {
   const dialogRef = useRef<HTMLDivElement>(null)
+  const onCloseRef = useRef(onClose)
   const titleId = useId()
+
+  useEffect(() => {
+    onCloseRef.current = onClose
+  }, [onClose])
 
   useEffect(() => {
     const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null
@@ -44,7 +49,7 @@ export function useModalDialog(onClose: () => void) {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         event.preventDefault()
-        onClose()
+        onCloseRef.current()
         return
       }
       if (event.key !== 'Tab' || !dialog) return
@@ -75,7 +80,7 @@ export function useModalDialog(onClose: () => void) {
       }
       previousFocus?.focus()
     }
-  }, [onClose])
+  }, [])
 
   return { dialogRef, titleId }
 }

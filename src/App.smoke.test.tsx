@@ -93,6 +93,24 @@ describe('App smoke tests', () => {
     expect(screen.getAllByRole('button', { name: /Выключить платёж/i })).toHaveLength(2)
   })
 
+  it('не включает конфликтующую total-операцию быстрой кнопкой', async () => {
+    const user = userEvent.setup()
+    const activeLoan = loan()
+    activeLoan.repayments = [
+      { id: 'total-active', date: defaultConfig.firstPaymentDate, amount: 120000, amountMode: 'total', strategy: 'reduceTerm', source: 'own', sameDayOrder: 'regularFirst', interestFirst: true, sameDaySequence: 0 },
+      { id: 'total-disabled', date: defaultConfig.firstPaymentDate, amount: 130000, amountMode: 'total', enabled: false, strategy: 'reducePayment', source: 'own', sameDayOrder: 'regularFirst', interestFirst: true, sameDaySequence: 1 }
+    ]
+    useLoanStore.setState({ ...activeLoan, loans: [activeLoan], activeLoanId: activeLoan.id })
+    render(<App />)
+
+    await user.click(screen.getByRole('button', { name: /^Досрочные/ }))
+    await user.click(screen.getAllByRole('button', { name: /Включить платёж/i }).at(-1)!)
+
+    expect(useLoanStore.getState().repayments[1].enabled).toBe(false)
+    expect(await screen.findByRole('dialog', { name: 'Досрочный платёж' })).toBeTruthy()
+    expect(screen.getByText(/только одну общую сумму/i)).toBeTruthy()
+  })
+
   it('открывает раздел импорта и экспорта', async () => {
     const user = userEvent.setup()
     render(<App />)

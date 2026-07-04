@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { calculateAnnuityPayment, calculateDebtAtDate, calculateInterest, compareScenarios, generateBaseSchedule, nextPaymentDate, validateScenario } from '.'
+import { calculateAnnuityPayment, calculateDebtAtDate, calculateInterest, compareScenarios, generateBaseSchedule, nextPaymentDate, sortRepaymentsByApplicationOrder, validateScenario } from '.'
 import { MAX_RATE_CHANGES } from './limits'
 import type { EarlyRepayment, GracePeriod, LoanConfig } from './types'
 
@@ -27,6 +27,24 @@ describe('loan engine', () => {
     expect(s.find(x=>x.date==='2024-08-15')!.days).toBe(13)
   })
   it('поддерживает несколько досрочных платежей', () => { const s=generateBaseSchedule(config,{earlyRepayments:[early(),early({id:'e2',date:'2025-02-15',amount:200000})]}); expect(s.reduce((a,x)=>a+x.earlyPayment,0)).toBe(500000) })
+  it('не меняет финансовый результат same-day операций при изменении технических ID', () => {
+    const repaymentA = early({ id: 'a', date: '2024-08-15', amount: 100_000, strategy: 'reduceTerm', sameDaySequence: 0 })
+    const repaymentB = early({ id: 'b', date: '2024-08-15', amount: 100_000, strategy: 'reducePayment', sameDaySequence: 1 })
+    const renamedA = { ...repaymentA, id: 'z' }
+    const renamedB = { ...repaymentB, id: 'm' }
+    const first = compareScenarios(config, sortRepaymentsByApplicationOrder([repaymentA, repaymentB])).scenarios.find(s => s.id === 'combined')!
+    const second = compareScenarios(config, sortRepaymentsByApplicationOrder([renamedA, renamedB])).scenarios.find(s => s.id === 'combined')!
+    expect(second.monthlyPayment).toBe(first.monthlyPayment)
+    expect(second.closingDate).toBe(first.closingDate)
+    expect(second.totalInterest).toBe(first.totalInterest)
+  })
+  it('сохраняет sequence same-day операций при перестановке JSON-массива', () => {
+    const repaymentA = early({ id: 'late-id', date: '2024-08-15', amount: 100_000, strategy: 'reduceTerm', sameDaySequence: 0 })
+    const repaymentB = early({ id: 'early-id', date: '2024-08-15', amount: 100_000, strategy: 'reducePayment', sameDaySequence: 1 })
+    const first = generateBaseSchedule(config, { earlyRepayments: sortRepaymentsByApplicationOrder([repaymentA, repaymentB]) })
+    const second = generateBaseSchedule(config, { earlyRepayments: sortRepaymentsByApplicationOrder([repaymentB, repaymentA]) })
+    expect(second.map(row => [row.date, row.payment, row.earlyPayment, row.closingBalance])).toEqual(first.map(row => [row.date, row.payment, row.earlyPayment, row.closingBalance]))
+  })
   it('учитывает льготный период', () => { const grace:GracePeriod={id:'g',startDate:'2024-03-01',endDate:'2024-04-30',type:'interestOnly',extendTerm:true,accrueInterest:true,capitalizeInterest:false}; const s=generateBaseSchedule(config,{gracePeriods:[grace]}); const row=s.find(x=>x.date==='2024-03-15')!; expect(row.principal).toBe(0); expect(row.event).toContain('проценты') })
   it('продлевает льготу дольше исходного срока до устойчивой даты закрытия', () => {
     const short = { ...config, principal: 30_000, annualRate: 0, termMonths: 3, issueDate: '2024-01-01', firstPaymentDate: '2024-02-01', paymentDay: 1 }

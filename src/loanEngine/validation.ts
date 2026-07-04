@@ -78,6 +78,7 @@ export function validateScenario(config: LoanConfig, repayments: EarlyRepayment[
     if (repayment.enabled !== undefined && typeof repayment.enabled !== 'boolean') errors.push(`Досрочный платёж №${index + 1}: признак активности повреждён`)
     if (!finite(repayment.amount) || repayment.amount < 0) errors.push(`Досрочный платёж №${index + 1}: сумма не может быть отрицательной`)
     if (repayment.amountMode !== undefined && !oneOf(repayment.amountMode, amountModes)) errors.push(`Досрочный платёж №${index + 1}: режим суммы повреждён`)
+    if (repayment.sameDaySequence !== undefined && (!Number.isInteger(repayment.sameDaySequence) || repayment.sameDaySequence < 0)) errors.push(`Досрочный платёж №${index + 1}: порядок применения повреждён`)
     if (!oneOf(repayment.strategy, repaymentStrategies)) errors.push(`Досрочный платёж №${index + 1}: стратегия повреждена`)
     if (!oneOf(repayment.source, repaymentSources)) errors.push(`Досрочный платёж №${index + 1}: источник повреждён`)
     if (!oneOf(repayment.sameDayOrder, sameDayOrders)) errors.push(`Досрочный платёж №${index + 1}: порядок в дату платежа повреждён`)

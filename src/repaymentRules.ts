@@ -1,5 +1,5 @@
 import { addMonths, addWeeks, addYears, format, parseISO } from 'date-fns'
-import { generateBaseSchedule, type EarlyRepayment, type LoanConfig } from './loanEngine'
+import { generateBaseSchedule, scheduledPaymentDates, sortRepaymentsByApplicationOrder, type EarlyRepayment, type GracePeriod, type LoanConfig } from './loanEngine'
 import { MAX_GENERATED_REPAYMENTS } from './loanEngine/limits'
 import { num } from './loanEngine/rounding'
 import { isISODate, isISOYearMonth } from './utils/dateValidation'
@@ -60,20 +60,16 @@ const pushRuleRepayment = (result: EarlyRepayment[], rule: RepaymentRule, date: 
     strategy: rule.strategy,
     source: rule.source,
     sameDayOrder: rule.type === 'monthlyTotalPayment' ? 'regularFirst' : rule.sameDayOrder,
+    sameDaySequence: result.length,
     interestFirst: rule.interestFirst,
     comment: rule.comment || rule.name
   })
   if (result.length > MAX_GENERATED_REPAYMENTS) throw new Error(`Правила создают слишком много досрочных операций. Максимум: ${MAX_GENERATED_REPAYMENTS}`)
 }
 
-export function expandRepaymentRules(config: LoanConfig, rules: RepaymentRule[]): EarlyRepayment[] {
+export function expandRepaymentRules(config: LoanConfig, rules: RepaymentRule[], gracePeriods: GracePeriod[] = []): EarlyRepayment[] {
   if (rules.length === 0) return []
   let regularPayment: number | null = null
-  let schedule: ReturnType<typeof generateBaseSchedule> | null = null
-  const baseSchedule = () => {
-    schedule ??= generateBaseSchedule(config)
-    return schedule
-  }
   const getRegularPayment = () => {
     regularPayment ??= firstRegularPayment(config)
     return regularPayment
@@ -86,10 +82,10 @@ export function expandRepaymentRules(config: LoanConfig, rules: RepaymentRule[])
     const amount = ruleAmount(rule, getRegularPayment, config)
     if (amount <= 0 || rule.startDate > rule.endDate) continue
     if (rule.type === 'monthlyTotalPayment') {
-      for (const row of baseSchedule()) {
-        if (!row.isRegularPayment || row.date < rule.startDate || row.date > rule.endDate) continue
-        if (rule.skipMonths.includes(row.date.slice(0, 7))) continue
-        pushRuleRepayment(result, rule, row.date, amount)
+      for (const date of scheduledPaymentDates(config, gracePeriods)) {
+        if (date < rule.startDate || date > rule.endDate) continue
+        if (rule.skipMonths.includes(date.slice(0, 7))) continue
+        pushRuleRepayment(result, rule, date, amount)
       }
       continue
     }
@@ -107,5 +103,5 @@ export function expandRepaymentRules(config: LoanConfig, rules: RepaymentRule[])
       if (guard > MAX_GENERATED_REPAYMENTS) throw new Error(`Правило досрочных платежей создаёт слишком много операций. Максимум: ${MAX_GENERATED_REPAYMENTS}`)
     }
   }
-  return result.sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id))
+  return sortRepaymentsByApplicationOrder(result)
 }

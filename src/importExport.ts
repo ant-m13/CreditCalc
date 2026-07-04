@@ -77,13 +77,15 @@ export function parseLoanBackupObject(raw: unknown): LoanBackupData {
     if (!isObject(item) || typeof item.id !== 'string' || !isISODate(item.date) || !finite(item.amount) || !oneOf(item.strategy, ['reduceTerm', 'reducePayment', 'full', 'custom']) || !oneOf(item.source, ['own', 'subsidy', 'insurance', 'other']) || !oneOf(item.sameDayOrder, ['regularFirst', 'earlyFirst']) || typeof item.interestFirst !== 'boolean') throw new Error(`Ошибка в досрочном платеже №${index + 1}`)
     if (item.amountMode !== undefined && !oneOf(item.amountMode, ['extra', 'total'])) throw new Error(`Ошибка в досрочном платеже №${index + 1}`)
     if (item.enabled !== undefined && typeof item.enabled !== 'boolean') throw new Error(`Ошибка в досрочном платеже №${index + 1}`)
+    const sameDaySequence = typeof item.sameDaySequence === 'number' && Number.isInteger(item.sameDaySequence) && item.sameDaySequence >= 0 ? item.sameDaySequence : undefined
+    if (item.sameDaySequence !== undefined && sameDaySequence === undefined) throw new Error(`Ошибка в досрочном платеже №${index + 1}`)
     const isRegularDate = isRegularPaymentDate(item.date, config)
     const amountMode = item.amountMode === undefined ? (isRegularDate ? 'total' : 'extra') : item.amountMode
     const enabled = item.enabled ?? true
     const disabled = !enabled || item.amount === 0
     if (!disabled && amountMode === 'total' && item.sameDayOrder === 'earlyFirst') throw new Error(`Ошибка в досрочном платеже №${index + 1}: общая сумма по телу и процентам без комиссий применяется после регулярного платежа`)
     if (!disabled && amountMode === 'total' && !isRegularDate) throw new Error(`Ошибка в досрочном платеже №${index + 1}: общую сумму по телу и процентам без комиссий можно указать только в дату регулярного платежа`)
-    return { ...item, enabled, amountMode, sameDayOrder: amountMode === 'total' ? 'regularFirst' : item.sameDayOrder } as unknown as EarlyRepayment
+    return { ...item, enabled, amountMode, sameDaySequence: sameDaySequence ?? index, sameDayOrder: amountMode === 'total' ? 'regularFirst' : item.sameDayOrder } as unknown as EarlyRepayment
   })
   ensureUniqueIds(repayments, 'Досрочные платежи')
   ensureUniqueIds(repayments.filter(item => item.enabled !== false && item.amount > 0 && item.amountMode === 'total').map(item => ({ id: item.date })), 'Операции с общей суммой по телу и процентам без комиссий')
