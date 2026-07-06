@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { parseLoanBackup } from './importExport'
-import { MAX_RATE_CHANGES, MAX_REPAYMENT_RULES } from './loanEngine/limits'
+import { MAX_RATE_CHANGES, MAX_REPAYMENT_RULES, MAX_RULE_SKIP_MONTHS } from './loanEngine/limits'
 import { defaultConfig } from './store'
 
-const repayment = { id: 'early-1', date: '2026-01-26', amount: 8704.99, amountMode: 'extra', strategy: 'reduceTerm', source: 'own', sameDayOrder: 'regularFirst', interestFirst: true }
+const repayment = { id: 'early-1', date: defaultConfig.firstPaymentDate, amount: 8704.99, amountMode: 'extra', strategy: 'reduceTerm', source: 'own', sameDayOrder: 'regularFirst', interestFirst: true }
 
 describe('импорт резервной копии', () => {
   it('восстанавливает расчёт и настройки интерфейса', () => {
@@ -68,9 +68,9 @@ describe('импорт резервной копии', () => {
   })
 
   it('восстанавливает правила досрочных платежей', () => {
-    const rule = { id: 'rule-1', name: 'Ежемесячно', ruleSequence: 3, type: 'monthlyFixed', startDate: '2026-02-26', endDate: '2026-12-26', amount: 20000, strategy: 'reduceTerm', source: 'own', sameDayOrder: 'regularFirst', interestFirst: true, skipMonths: ['2026-05'] }
+    const rule = { id: 'rule-1', name: 'Ежемесячно', ruleSequence: 3, type: 'monthlyFixed', startDate: '2026-08-15', endDate: '2026-12-15', amount: 20000, strategy: 'reduceTerm', source: 'own', sameDayOrder: 'regularFirst', interestFirst: true, skipMonths: ['2026-09', '2026-09'] }
     const result = parseLoanBackup(JSON.stringify({ config: defaultConfig, repayments: [], repaymentRules: [rule], gracePeriods: [], selectedScenario: 'combined' }))
-    expect(result.repaymentRules[0]).toMatchObject(rule)
+    expect(result.repaymentRules[0]).toMatchObject({ ...rule, skipMonths: ['2026-09'] })
   })
 
   it('отклоняет дублирующийся порядок досрочных платежей в одну дату', () => {
@@ -81,10 +81,27 @@ describe('импорт резервной копии', () => {
   })
 
   it('отклоняет дублирующийся порядок правил досрочных платежей', () => {
-    const firstRule = { id: 'rule-1', name: 'Первое', ruleSequence: 0, type: 'monthlyFixed', startDate: '2026-02-26', endDate: '2026-12-26', amount: 20000, strategy: 'reduceTerm', source: 'own', sameDayOrder: 'regularFirst', interestFirst: true, skipMonths: [] }
+    const firstRule = { id: 'rule-1', name: 'Первое', ruleSequence: 0, type: 'monthlyFixed', startDate: '2026-08-15', endDate: '2026-12-15', amount: 20000, strategy: 'reduceTerm', source: 'own', sameDayOrder: 'regularFirst', interestFirst: true, skipMonths: [] }
     const secondRule = { ...firstRule, id: 'rule-2', name: 'Второе' }
 
     expect(() => parseLoanBackup(JSON.stringify({ config: defaultConfig, repayments: [], repaymentRules: [firstRule, secondRule], gracePeriods: [], selectedScenario: 'combined' }))).toThrow('дублирующийся порядок')
+  })
+
+  it('отклоняет импорт с платежом раньше даты выдачи', () => {
+    expect(() => parseLoanBackup(JSON.stringify({
+      config: defaultConfig,
+      repayments: [{ ...repayment, date: '2026-06-01' }],
+      repaymentRules: [],
+      gracePeriods: [],
+      selectedScenario: 'combined'
+    }))).toThrow('раньше выдачи')
+  })
+
+  it('отклоняет слишком большой массив месяцев пропуска', () => {
+    const skipMonths = Array.from({ length: MAX_RULE_SKIP_MONTHS + 1 }, (_, index) => `20${String(Math.floor(index / 12) + 30).padStart(2, '0')}-${String(index % 12 + 1).padStart(2, '0')}`)
+    const rule = { id: 'rule-big-skip', name: 'Много пропусков', type: 'monthlyFixed', startDate: '2026-08-15', endDate: '2026-12-15', amount: 20000, strategy: 'reduceTerm', source: 'own', sameDayOrder: 'regularFirst', interestFirst: true, skipMonths }
+
+    expect(() => parseLoanBackup(JSON.stringify({ config: defaultConfig, repayments: [], repaymentRules: [rule], gracePeriods: [], selectedScenario: 'combined' }))).toThrow(String(MAX_RULE_SKIP_MONTHS))
   })
 
   it('отклоняет импорт с количеством изменений ставки сверх лимита', () => {
@@ -94,12 +111,12 @@ describe('импорт резервной копии', () => {
 
   it('восстанавливает расширенные правила досрочных платежей', () => {
     const rules = [
-      { id: 'rule-week', name: 'Раз в неделю', type: 'weeklyFixed', startDate: '2026-02-26', endDate: '2026-03-26', amount: 20000, strategy: 'reduceTerm', source: 'own', sameDayOrder: 'regularFirst', interestFirst: true, skipMonths: [] },
-      { id: 'rule-two-months', name: 'Раз в 2 месяца', type: 'bimonthlyFixed', startDate: '2026-02-26', endDate: '2026-12-26', amount: 20000, strategy: 'reduceTerm', source: 'own', sameDayOrder: 'regularFirst', interestFirst: true, skipMonths: [] },
-      { id: 'rule-quarter', name: 'Квартал', type: 'quarterlyFixed', startDate: '2026-02-26', endDate: '2026-12-26', amount: 20000, strategy: 'reduceTerm', source: 'own', sameDayOrder: 'regularFirst', interestFirst: true, skipMonths: [] },
-      { id: 'rule-half-year', name: 'Полгода', type: 'semiannualFixed', startDate: '2026-02-26', endDate: '2026-12-26', amount: 20000, strategy: 'reduceTerm', source: 'own', sameDayOrder: 'regularFirst', interestFirst: true, skipMonths: [] },
-      { id: 'rule-year', name: 'Год', type: 'annualFixed', startDate: '2026-02-26', endDate: '2027-02-26', amount: 20000, strategy: 'reduceTerm', source: 'own', sameDayOrder: 'regularFirst', interestFirst: true, skipMonths: [] },
-      { id: 'rule-total', name: 'Итого каждый месяц', type: 'monthlyTotalPayment', startDate: '2026-02-26', endDate: '2026-12-26', amount: 100000, strategy: 'reduceTerm', source: 'own', sameDayOrder: 'earlyFirst', interestFirst: true, skipMonths: [] }
+      { id: 'rule-week', name: 'Раз в неделю', type: 'weeklyFixed', startDate: '2026-08-15', endDate: '2026-09-15', amount: 20000, strategy: 'reduceTerm', source: 'own', sameDayOrder: 'regularFirst', interestFirst: true, skipMonths: [] },
+      { id: 'rule-two-months', name: 'Раз в 2 месяца', type: 'bimonthlyFixed', startDate: '2026-08-15', endDate: '2026-12-15', amount: 20000, strategy: 'reduceTerm', source: 'own', sameDayOrder: 'regularFirst', interestFirst: true, skipMonths: [] },
+      { id: 'rule-quarter', name: 'Квартал', type: 'quarterlyFixed', startDate: '2026-08-15', endDate: '2026-12-15', amount: 20000, strategy: 'reduceTerm', source: 'own', sameDayOrder: 'regularFirst', interestFirst: true, skipMonths: [] },
+      { id: 'rule-half-year', name: 'Полгода', type: 'semiannualFixed', startDate: '2026-08-15', endDate: '2027-08-15', amount: 20000, strategy: 'reduceTerm', source: 'own', sameDayOrder: 'regularFirst', interestFirst: true, skipMonths: [] },
+      { id: 'rule-year', name: 'Год', type: 'annualFixed', startDate: '2026-08-15', endDate: '2028-08-15', amount: 20000, strategy: 'reduceTerm', source: 'own', sameDayOrder: 'regularFirst', interestFirst: true, skipMonths: [] },
+      { id: 'rule-total', name: 'Итого каждый месяц', type: 'monthlyTotalPayment', startDate: '2026-08-15', endDate: '2026-12-15', amount: 100000, strategy: 'reduceTerm', source: 'own', sameDayOrder: 'earlyFirst', interestFirst: true, skipMonths: [] }
     ]
     const result = parseLoanBackup(JSON.stringify({ config: defaultConfig, repayments: [], repaymentRules: rules, gracePeriods: [], selectedScenario: 'combined' }))
     expect(result.repaymentRules.map(rule => rule.type)).toEqual(['weeklyFixed', 'bimonthlyFixed', 'quarterlyFixed', 'semiannualFixed', 'annualFixed', 'monthlyTotalPayment'])
@@ -108,7 +125,7 @@ describe('импорт резервной копии', () => {
 
   it('восстанавливает временно отключенные досрочные платежи и правила', () => {
     const disabledRepayment = { ...repayment, enabled: false, amountMode: 'total', sameDayOrder: 'earlyFirst' }
-    const disabledRule = { id: 'rule-off', name: 'Пауза', type: 'monthlyFixed', startDate: '2026-02-26', endDate: '2026-12-26', amount: 20000, enabled: false, strategy: 'reduceTerm', source: 'own', sameDayOrder: 'regularFirst', interestFirst: true, skipMonths: [] }
+    const disabledRule = { id: 'rule-off', name: 'Пауза', type: 'monthlyFixed', startDate: '2026-08-15', endDate: '2026-12-15', amount: 20000, enabled: false, strategy: 'reduceTerm', source: 'own', sameDayOrder: 'regularFirst', interestFirst: true, skipMonths: [] }
     const result = parseLoanBackup(JSON.stringify({ config: defaultConfig, repayments: [disabledRepayment], repaymentRules: [disabledRule], gracePeriods: [], selectedScenario: 'combined' }))
     expect(result.repayments[0]).toMatchObject({ amount: 8704.99, enabled: false })
     expect(result.repaymentRules[0]).toMatchObject({ amount: 20000, enabled: false })
@@ -161,7 +178,7 @@ describe('импорт резервной копии', () => {
 
   it('нормализует legacy amountMode до preview и не допускает две общие суммы на дату', () => {
     const config = { ...defaultConfig, issueDate: '2026-01-01', firstPaymentDate: '2026-01-26', paymentDay: 26 }
-    const legacy = parseLoanBackup(JSON.stringify({ config, repayments: [{ ...repayment, date: '2026-01-26', amountMode: undefined }], gracePeriods: [] }))
+    const legacy = parseLoanBackup(JSON.stringify({ config, repayments: [{ ...repayment, date: '2026-01-26', amount: 100000, amountMode: undefined }], gracePeriods: [] }))
     expect(legacy.repayments[0]).toMatchObject({ amountMode: 'total', sameDayOrder: 'regularFirst' })
     expect(() => parseLoanBackup(JSON.stringify({ config, repayments: [
       { ...repayment, id: 'total-1', date: '2026-01-26', amountMode: 'total', sameDayOrder: 'regularFirst' },
@@ -170,19 +187,19 @@ describe('импорт резервной копии', () => {
   })
 
   it('отклоняет дублирующиеся ID в импортируемых коллекциях', () => {
-    const grace = { id: 'same', startDate: '2026-05-01', endDate: '2026-05-31', type: 'full', extendTerm: true, accrueInterest: true, capitalizeInterest: false }
+    const grace = { id: 'same', startDate: '2026-08-01', endDate: '2026-08-31', type: 'full', extendTerm: true, accrueInterest: true, capitalizeInterest: false }
     expect(() => parseLoanBackup(JSON.stringify({ config: defaultConfig, repayments: [{ ...repayment, id: 'same' }, { ...repayment, id: 'same' }], gracePeriods: [] }))).toThrow('дублирующийся ID')
     expect(() => parseLoanBackup(JSON.stringify({ config: defaultConfig, repayments: [], gracePeriods: [grace, grace] }))).toThrow('дублирующийся ID')
   })
 
   it('отклоняет обратный льготный период', () => {
-    const grace = { id: 'g1', startDate: '2026-05-01', endDate: '2026-04-01', type: 'full', extendTerm: true, accrueInterest: true, capitalizeInterest: false }
+    const grace = { id: 'g1', startDate: '2026-09-01', endDate: '2026-08-01', type: 'full', extendTerm: true, accrueInterest: true, capitalizeInterest: false }
     expect(() => parseLoanBackup(JSON.stringify({ config: defaultConfig, repayments: [], gracePeriods: [grace] }))).toThrow('окончание раньше начала')
   })
 
   it('отклоняет пересекающиеся льготные периоды в preview импорта', () => {
-    const first = { id: 'g1', startDate: '2026-05-01', endDate: '2026-05-31', type: 'full', extendTerm: true, accrueInterest: true, capitalizeInterest: false }
-    const second = { id: 'g2', startDate: '2026-05-15', endDate: '2026-06-15', type: 'interestOnly', extendTerm: false, accrueInterest: true, capitalizeInterest: false }
+    const first = { id: 'g1', startDate: '2026-08-01', endDate: '2026-08-31', type: 'full', extendTerm: true, accrueInterest: true, capitalizeInterest: false }
+    const second = { id: 'g2', startDate: '2026-08-15', endDate: '2026-09-15', type: 'interestOnly', extendTerm: false, accrueInterest: true, capitalizeInterest: false }
     expect(() => parseLoanBackup(JSON.stringify({ config: defaultConfig, repayments: [], gracePeriods: [first, second] }))).toThrow('не должны пересекаться')
   })
 })

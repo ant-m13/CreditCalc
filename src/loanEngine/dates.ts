@@ -4,6 +4,11 @@ import type { GracePeriod, LoanConfig } from './types'
 
 export const iso = (date: Date) => format(date, 'yyyy-MM-dd')
 
+export interface PreparedPaymentCalendar {
+  dates: string[]
+  extendedPeriods: number
+}
+
 export function nextPaymentDate(date: string, config: LoanConfig) {
   const parsed = parseISO(date)
   if (config.frequency === 'biweekly') return iso(addDays(parsed, 14))
@@ -34,7 +39,7 @@ const extendingIntervals = (gracePeriods: GracePeriod[]) =>
     .filter(period => period.extendTerm)
     .sort((a, b) => a.startDate.localeCompare(b.startDate) || a.endDate.localeCompare(b.endDate))
 
-const buildPaymentCalendar = (config: LoanConfig, gracePeriods: GracePeriod[] = []) => {
+export const preparePaymentCalendar = (config: LoanConfig, gracePeriods: GracePeriod[] = []): PreparedPaymentCalendar => {
   const configuredPeriods = totalPaymentPeriods(config)
   const intervals = extendingIntervals(gracePeriods)
   const dates: string[] = []
@@ -58,8 +63,8 @@ const buildPaymentCalendar = (config: LoanConfig, gracePeriods: GracePeriod[] = 
   return { dates, extendedPeriods: dates.length - configuredPeriods }
 }
 
-export const extendedPaymentPeriods = (config: LoanConfig, gracePeriods: GracePeriod[]) =>
-  buildPaymentCalendar(config, gracePeriods).extendedPeriods
+export const extendedPaymentPeriods = (config: LoanConfig, gracePeriods: GracePeriod[], calendar?: PreparedPaymentCalendar) =>
+  (calendar ?? preparePaymentCalendar(config, gracePeriods)).extendedPeriods
 
-export const scheduledPaymentDates = (config: LoanConfig, gracePeriods: GracePeriod[] = []) =>
-  buildPaymentCalendar(config, gracePeriods).dates
+export const scheduledPaymentDates = (config: LoanConfig, gracePeriods: GracePeriod[] = [], calendar?: PreparedPaymentCalendar) =>
+  (calendar ?? preparePaymentCalendar(config, gracePeriods)).dates

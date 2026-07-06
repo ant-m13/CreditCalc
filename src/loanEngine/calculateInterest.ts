@@ -1,5 +1,5 @@
 import Decimal from 'decimal.js'
-import { addDays, differenceInCalendarDays, isLeapYear, parseISO } from 'date-fns'
+import { addDays, differenceInCalendarDays, isBefore, isLeapYear, min, parseISO, startOfYear, addYears } from 'date-fns'
 import type { InterestConfig } from './types'
 
 export function periodDays(from: string, to: string, includePaymentDate = false, excludeStartDate = false) {
@@ -14,9 +14,14 @@ export function calculateInterest(balance: Decimal.Value, annualRate: number, fr
   const annualFraction = new Decimal(annualRate).div(100)
   if (config.dayCountBasis === 'actualActual') {
     let result = new Decimal(0)
-    for (let day = 0; day < days; day++) {
-      const date = addDays(start, day)
-      result = result.add(new Decimal(balance).mul(annualFraction).div(isLeapYear(date) ? 366 : 365))
+    let cursor = start
+    const endExclusive = addDays(start, days)
+    while (isBefore(cursor, endExclusive)) {
+      const nextYear = addYears(startOfYear(cursor), 1)
+      const segmentEnd = min([nextYear, endExclusive])
+      const segmentDays = differenceInCalendarDays(segmentEnd, cursor)
+      result = result.add(new Decimal(balance).mul(annualFraction).mul(segmentDays).div(isLeapYear(cursor) ? 366 : 365))
+      cursor = segmentEnd
     }
     return result
   }
