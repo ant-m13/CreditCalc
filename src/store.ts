@@ -1,13 +1,14 @@
 import { create } from 'zustand'
 import { createJSONStorage, persist } from 'zustand/middleware'
 import { addMonths, format, parseISO } from 'date-fns'
-import { generateBaseSchedule, isRegularPaymentDate, nextPaymentDate, nextSameDaySequence, sortRateChanges, sortRepaymentsByApplicationOrder, validateScenario, type EarlyRepayment, type GracePeriod, type LoanConfig, type RateChange } from './loanEngine'
+import { isRegularPaymentDate, nextPaymentDate, nextSameDaySequence, sortRateChanges, sortRepaymentsByApplicationOrder, type EarlyRepayment, type GracePeriod, type LoanConfig, type RateChange } from './loanEngine'
 import { createDefaultConfig, defaultConfig } from './loanDefaults'
 import type { LoanBackupData } from './importExport'
-import { expandRepaymentRules, sortRepaymentRulesByApplicationOrder, type RepaymentRule } from './repaymentRules'
+import { assertLoanCandidateValid } from './loanCandidate'
+import { sortRepaymentRulesByApplicationOrder, type RepaymentRule } from './repaymentRules'
 import { createId } from './utils/createId'
 import { isISODate, isISOYearMonth } from './utils/dateValidation'
-import { MAX_EARLY_REPAYMENTS, MAX_GRACE_PERIODS, MAX_RATE_CHANGES, MAX_REPAYMENT_RULES, MAX_TERM_MONTHS } from './loanEngine/limits'
+import { MAX_EARLY_REPAYMENTS, MAX_GRACE_PERIODS, MAX_RATE_CHANGES, MAX_REPAYMENT_RULES, MAX_RULE_SKIP_MONTHS, MAX_TERM_MONTHS, MAX_TEXT_FIELD_LENGTH } from './loanEngine/limits'
 export { defaultConfig } from './loanDefaults'
 
 export const STORAGE_ERROR_EVENT = 'credit-calculator-storage-error'
@@ -164,6 +165,15 @@ const finiteNumber = (value: unknown, fallback: number, min = 0, max = Number.PO
 const optionalFiniteNumber = (value: unknown, min = 0, max = Number.POSITIVE_INFINITY) => typeof value === 'number' && Number.isFinite(value) ? Math.min(max, Math.max(min, value)) : undefined
 const isObject = (value: unknown): value is Record<string, unknown> => Boolean(value) && typeof value === 'object' && !Array.isArray(value)
 const nextMonthDate = (date: string) => format(addMonths(parseISO(date), 1), 'yyyy-MM-dd')
+const normalizeText = (value: unknown, fallback = '') => {
+  const text = typeof value === 'string' ? value.trim() : fallback
+  return text.slice(0, MAX_TEXT_FIELD_LENGTH)
+}
+const optionalText = (value: unknown) => typeof value === 'string' ? value.slice(0, MAX_TEXT_FIELD_LENGTH) : undefined
+const uniqueYearMonths = (value: unknown) => {
+  if (!Array.isArray(value)) return []
+  return [...new Set(value.filter(isISOYearMonth))].slice(0, MAX_RULE_SKIP_MONTHS)
+}
 
 const withUniqueIds = <T extends { id: string }>(items: T[], prefix: string): T[] => {
   const seen = new Set<string>()
@@ -282,7 +292,7 @@ const normalizeRepayments = (value: unknown, config: LoanConfig): EarlyRepayment
       source: oneOf(item.source, repaymentSources, 'own'),
       sameDayOrder: amountMode === 'total' ? 'regularFirst' : oneOf(item.sameDayOrder, sameDayOrders, 'regularFirst'),
       interestFirst: typeof item.interestFirst === 'boolean' ? item.interestFirst : true,
-      ...(typeof item.comment === 'string' ? { comment: item.comment } : {})
+      ...(optionalText(item.comment) !== undefined ? { comment: optionalText(item.comment) } : {})
     }]
   })).slice(0, MAX_EARLY_REPAYMENTS), 'early')
 }
@@ -304,7 +314,7 @@ const normalizeRepaymentRules = (value: unknown): RepaymentRule[] => {
     if (type === 'paymentPercent' ? percent === undefined : amount === undefined) return []
     return [{
       id: item.id,
-      name: item.name.trim() || 'Регулярный платёж',
+      name: normalizeText(item.name) || 'Регулярный платёж',
       ruleSequence: nextRuleSequence(typeof item.ruleSequence === 'number' && Number.isInteger(item.ruleSequence) && item.ruleSequence >= 0 ? item.ruleSequence : index),
       type,
       startDate: item.startDate,
@@ -316,8 +326,8 @@ const normalizeRepaymentRules = (value: unknown): RepaymentRule[] => {
       source: oneOf(item.source, repaymentSources, 'own'),
       sameDayOrder: type === 'monthlyTotalPayment' ? 'regularFirst' : oneOf(item.sameDayOrder, sameDayOrders, 'regularFirst'),
       interestFirst: typeof item.interestFirst === 'boolean' ? item.interestFirst : true,
-      skipMonths: Array.isArray(item.skipMonths) ? item.skipMonths.filter(isISOYearMonth) : [],
-      ...(typeof item.comment === 'string' ? { comment: item.comment } : {})
+      skipMonths: uniqueYearMonths(item.skipMonths),
+      ...(optionalText(item.comment) !== undefined ? { comment: optionalText(item.comment) } : {})
     }]
   })).slice(0, MAX_REPAYMENT_RULES), 'rule')
 }
@@ -367,7 +377,7 @@ const normalizeLoanData = (data: Partial<LoanImportData | LoanData>): LoanData =
 
 const loanFromData = (data: Partial<LoanImportData | LoanData>, name = 'Мой кредит', id = createId('loan')): LoanProfile => ({
   id,
-  name: name.trim() || 'Мой кредит',
+  name: normalizeText(name, 'Мой кредит') || 'Мой кредит',
   ...normalizeLoanData(data)
 })
 
@@ -397,15 +407,8 @@ const assertImportWithinLimits = (data: Partial<LoanImportData | LoanData>) => {
   if (countArray(data.gracePeriods) > MAX_GRACE_PERIODS) throw new Error(`Слишком много льготных периодов. Максимум: ${MAX_GRACE_PERIODS}`)
 }
 
-const activeRepayments = (repayments: EarlyRepayment[]) =>
-  repayments.filter(item => item.enabled !== false && item.amount > 0)
-
 const assertRepaymentPlanValid = (config: LoanConfig, repayments: EarlyRepayment[], rules: RepaymentRule[], gracePeriods: GracePeriod[]) => {
-  const generated = expandRepaymentRules(config, rules, gracePeriods)
-  const candidateRepayments = sortRepayments([...activeRepayments(repayments), ...generated])
-  const validationErrors = validateScenario(config, candidateRepayments, gracePeriods)
-  if (validationErrors.length > 0) throw new Error(validationErrors.join(' · '))
-  generateBaseSchedule(config, { earlyRepayments: candidateRepayments, gracePeriods })
+  assertLoanCandidateValid(config, repayments, rules, gracePeriods)
 }
 
 const withRepaymentSequence = (repayments: EarlyRepayment[], repayment: EarlyRepayment) => ({
@@ -547,7 +550,7 @@ export const useLoanStore = create<LoanState>()(persist((set) => ({
     const loan = loanFromData(defaultLoanData(false), name)
     return { loans: [...s.loans, loan], activeLoanId: loan.id, ...publicData(loan) }
   }),
-  renameLoan: (id, name) => set(s => ({ loans: s.loans.map(loan => loan.id === id ? { ...loan, name: name.trim() || loan.name } : loan) })),
+  renameLoan: (id, name) => set(s => ({ loans: s.loans.map(loan => loan.id === id ? { ...loan, name: normalizeText(name) || loan.name } : loan) })),
   removeLoan: (id) => set(s => {
     if (s.loans.length <= 1) return {}
     const loans = s.loans.filter(loan => loan.id !== id)
@@ -563,12 +566,16 @@ export const useLoanStore = create<LoanState>()(persist((set) => ({
     assertCanAddLoan(s.loans.length)
     assertImportWithinLimits(data)
     const loan = loanFromData(data, data.name ?? 'Кредит из ссылки')
+    assertGracePeriodsDoNotOverlap(loan.gracePeriods)
+    assertRepaymentPlanValid(loan.config, loan.repayments, loan.repaymentRules, loan.gracePeriods)
     return { loans: [...s.loans, loan], activeLoanId: loan.id, ...publicData(loan) }
   }),
   replaceData: (data) => set(s => {
     assertImportWithinLimits(data)
     const normalized = normalizeLoanData(data)
-    const name = data.name?.trim()
+    assertGracePeriodsDoNotOverlap(normalized.gracePeriods)
+    assertRepaymentPlanValid(normalized.config, normalized.repayments, normalized.repaymentRules, normalized.gracePeriods)
+    const name = normalizeText(data.name)
     return { ...normalized, loans: s.loans.map(loan => loan.id === s.activeLoanId ? { ...loan, ...(name ? { name } : {}), ...normalized } : loan) }
   })
 }), {

@@ -1,5 +1,6 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Plus, Trash2 } from 'lucide-react'
+import { addYears, format, parseISO } from 'date-fns'
 import { nextPaymentDate, sortRateChanges, type LoanConfig, type RateChange } from '../loanEngine'
 import { MAX_RATE_CHANGES } from '../loanEngine/limits'
 import { currencySymbol } from '../formatters'
@@ -10,6 +11,16 @@ import { Field, NumberInput } from './ui'
 type TextScale = 'normal' | 'large' | 'xlarge'
 type ThemeName = 'emerald' | 'ocean' | 'violet' | 'graphite' | 'warm' | 'night'
 type SettingHelpProps = { text: string }
+type DateCommitInputProps = {
+  value: string
+  applyLabel: string
+  onCommit: (value: string) => void
+  validate?: (value: string) => string
+}
+
+const MIN_LOAN_YEAR = 1900
+const MIN_LOAN_DATE = `${MIN_LOAN_YEAR}-01-01`
+const MAX_DATE_SPAN_YEARS = 120
 
 interface SettingsProps {
   config: LoanConfig
@@ -32,6 +43,46 @@ interface SettingsProps {
 
 function SettingHelp({ text }: SettingHelpProps) {
   return <details className="field-help setting-help" onClick={event => event.stopPropagation()}><summary aria-label="Что влияет">?</summary><p>{text}</p></details>
+}
+
+const dateDraftError = (value: string) => {
+  if (!isISODate(value)) return 'Укажите корректную дату'
+  if (Number(value.slice(0, 4)) < MIN_LOAN_YEAR) return `Укажите год не раньше ${MIN_LOAN_YEAR}`
+  return ''
+}
+
+const isAfterDateHorizon = (startDate: string, endDate: string) => {
+  if (!isISODate(startDate) || !isISODate(endDate) || endDate <= startDate) return false
+  return endDate > format(addYears(parseISO(startDate), MAX_DATE_SPAN_YEARS), 'yyyy-MM-dd')
+}
+
+function DateCommitInput({ value, applyLabel, onCommit, validate }: DateCommitInputProps) {
+  const [draft, setDraft] = useState(value)
+  useEffect(() => setDraft(value), [value])
+
+  const changed = draft !== value
+  const error = changed ? dateDraftError(draft) || validate?.(draft) || '' : ''
+  const canCommit = changed && !error
+  const commit = () => {
+    if (canCommit) onCommit(draft)
+  }
+
+  return <>
+    <div className="date-commit-control">
+      <input type="date" min={MIN_LOAN_DATE} value={draft} onChange={event => setDraft(event.target.value)} onKeyDown={event => {
+        if (event.key === 'Enter') {
+          event.preventDefault()
+          commit()
+        }
+        if (event.key === 'Escape') {
+          setDraft(value)
+          event.currentTarget.blur()
+        }
+      }}/>
+      <button type="button" className="ghost compact" aria-label={applyLabel} disabled={!canCommit} onClick={commit}>Применить</button>
+    </div>
+    {error && <span className="date-commit-error">{error}</span>}
+  </>
 }
 
 export function Settings({
@@ -106,8 +157,8 @@ export function Settings({
       <div className="form-grid">
         <div className="setting-item"><Field label="Сумма кредита" help="Начальный основной долг. От него считаются проценты, аннуитетный платеж, переплата и прогресс погашения."><NumberInput value={config.principal} min="1" onCommit={principal => update({ principal })}/></Field></div>
         <div className="setting-item"><Field label="Годовая ставка" help="Процентная ставка банка. Влияет на начисленные проценты, долю тела в каждом платеже, переплату и срок после досрочных погашений."><div className="with-suffix"><NumberInput value={config.annualRate} min="0" max="100" step="0.1" onCommit={annualRate => update({ annualRate })}/><i>%</i></div></Field></div>
-        <div className="setting-item"><Field label="Дата выдачи" help="День выдачи кредита и старт первого процентного периода. От него зависит количество дней до первого платежа."><input type="date" value={config.issueDate} onChange={e => update({ issueDate: e.target.value })}/></Field></div>
-        <div className="setting-item"><Field label="Первый платёж" help="Первая плановая дата списания. Задает первый расчетный период и дальнейший календарь платежей."><input type="date" value={config.firstPaymentDate} onChange={e => update({ firstPaymentDate: e.target.value })}/></Field></div>
+        <div className="setting-item"><Field label="Дата выдачи" help="День выдачи кредита и старт первого процентного периода. От него зависит количество дней до первого платежа."><DateCommitInput value={config.issueDate} applyLabel="Применить дату выдачи" onCommit={issueDate => update({ issueDate })} validate={issueDate => isAfterDateHorizon(issueDate, config.firstPaymentDate) ? `Первый платёж должен быть в пределах ${MAX_DATE_SPAN_YEARS} лет от даты выдачи` : ''}/></Field></div>
+        <div className="setting-item"><Field label="Первый платёж" help="Первая плановая дата списания. Задает первый расчетный период и дальнейший календарь платежей."><DateCommitInput value={config.firstPaymentDate} applyLabel="Применить дату первого платежа" onCommit={firstPaymentDate => update({ firstPaymentDate })} validate={firstPaymentDate => isAfterDateHorizon(config.issueDate, firstPaymentDate) ? `Первый платёж должен быть в пределах ${MAX_DATE_SPAN_YEARS} лет от даты выдачи` : ''}/></Field></div>
         <div className="setting-item"><label className="toggle-row"><div><b className="setting-title">Первый платёж только проценты<SettingHelp text="Если банк в первый платеж списывает только проценты, включите настройку. Тело кредита начнет гаситься со следующего планового платежа."/></b><span>Без погашения тела кредита</span></div><input type="checkbox" checked={config.firstPaymentInterestOnly} onChange={e => update({ firstPaymentInterestOnly: e.target.checked })}/></label></div>
         <div className="setting-item"><Field label="Срок кредита" help="Договорной срок. Используется для расчета регулярного платежа и для сравнения, сколько месяцев экономят досрочные погашения."><div className="term-control"><NumberInput min="1" step={termUnit === 'years' ? .25 : 1} value={termUnit === 'years' ? Number((config.termMonths / 12).toFixed(2)) : config.termMonths} onCommit={value => update({ termMonths: Math.max(1, Math.round(value * (termUnit === 'years' ? 12 : 1))) })}/><select aria-label="Единица срока" value={termUnit} onChange={e => setTermUnit(e.target.value as 'months' | 'years')}><option value="months">месяцев</option><option value="years">лет</option></select></div></Field></div>
         <div className="setting-item"><Field label="День платежа" help="День месяца для следующих платежей. Меняет длину процентных периодов и даты строк графика."><NumberInput min="1" max="31" step="1" value={config.paymentDay} onCommit={paymentDay => update({ paymentDay })}/></Field></div>
@@ -152,7 +203,12 @@ export function Settings({
       {rateError && <p className="inline-error">{rateError}</p>}
       {rateChanges.length > 0 && <div className="rate-change-list">
         {rateChanges.map(change => <div className="rate-change-row" key={change.id}>
-          <Field label="Дата"><input type="date" value={change.date} onChange={e => editRateChange(change.id, { date: e.target.value })}/></Field>
+          <Field label="Дата"><DateCommitInput value={change.date} applyLabel="Применить дату изменения ставки" onCommit={date => editRateChange(change.id, { date })} validate={date => {
+            if (date <= config.issueDate) return 'Дата изменения ставки должна быть после выдачи кредита'
+            if (rateChanges.some(item => item.id !== change.id && item.date === date)) return 'На эту дату уже есть изменение ставки'
+            if (isAfterDateHorizon(config.issueDate, date)) return `Дата изменения ставки должна быть в пределах ${MAX_DATE_SPAN_YEARS} лет от даты выдачи`
+            return ''
+          }}/></Field>
           <Field label="Ставка"><div className="with-suffix"><NumberInput value={change.annualRate} min="0" max="100" step="0.1" onCommit={annualRate => editRateChange(change.id, { annualRate })}/><i>%</i></div></Field>
           <button className="icon-btn danger" title="Удалить изменение ставки" aria-label="Удалить изменение ставки" onClick={() => removeRateChange(change.id)}><Trash2 size={17}/></button>
         </div>)}

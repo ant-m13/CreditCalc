@@ -1,5 +1,5 @@
 import Decimal from 'decimal.js'
-import { addDays, differenceInCalendarDays, parseISO } from 'date-fns'
+import { addDays, parseISO } from 'date-fns'
 import { calculateInterest, periodDays } from './calculateInterest'
 import { iso } from './dates'
 import { sortRateChanges } from './rateChanges'
@@ -38,15 +38,12 @@ export function accrueInterestSegmentsRaw(
   rateChangesAreSorted = false
 ) {
   const excludeStartDate = config.interest.periodStart === 'exclusive'
-  const includedDates = () => {
-    const dates: string[] = []
-    const calendarDays = differenceInCalendarDays(parseISO(to), parseISO(from))
-    const startOffset = excludeStartDate ? 1 : 0
-    const endOffset = calendarDays + (includeTo ? 1 : 0)
-    for (let day = startOffset; day < endOffset; day += 1) {
-      dates.push(iso(addDays(parseISO(from), day)))
-    }
-    return dates
+  const addIsoDays = (date: string, days: number) => iso(addDays(parseISO(date), days))
+  const includedRange = () => {
+    const days = periodDays(from, to, includeTo, excludeStartDate)
+    if (days === 0) return null
+    const start = addIsoDays(from, excludeStartDate ? 1 : 0)
+    return { start, endExclusive: addIsoDays(start, days) }
   }
   const sortedRateChanges = rateChangesAreSorted ? rateChanges : sortRateChanges(rateChanges)
   const accrueRawSegment = (segmentFrom: string, segmentTo: string, segmentIncludeTo: boolean, segmentExcludeStartDate: boolean, segmentAnnualRate: number) => {
@@ -79,49 +76,49 @@ export function accrueInterestSegmentsRaw(
     }
   }
 
-  const dates = includedDates()
-  const days = dates.length
+  const range = includedRange()
   const noAccrualGracePeriods = gracePeriods
     .filter(period => period.accrueInterest === false)
     .sort((a, b) => a.startDate.localeCompare(b.startDate) || a.endDate.localeCompare(b.endDate))
-  if (days === 0) return []
+  if (!range) return []
 
-  let segmentStart: string | null = null
-  let segmentAccrues = false
-  let segmentReason = reason
-  let segmentYear = ''
-  let segmentAnnualRate = annualRate
-  let segmentEnd = dates[0]
+  const boundaries = new Set<string>([range.start, range.endExclusive])
+  sortedRateChanges.forEach(change => {
+    if (change.date > range.start && change.date < range.endExclusive) boundaries.add(change.date)
+  })
+  noAccrualGracePeriods.forEach(period => {
+    if (period.endDate < range.start || period.startDate >= range.endExclusive) return
+    if (period.startDate > range.start) boundaries.add(period.startDate)
+    const afterGrace = addIsoDays(period.endDate, 1)
+    if (afterGrace > range.start && afterGrace < range.endExclusive) boundaries.add(afterGrace)
+  })
+  if (config.interest.dayCountBasis === 'actualActual') {
+    for (let year = Number(range.start.slice(0, 4)) + 1; ; year += 1) {
+      const yearStart = `${String(year).padStart(4, '0')}-01-01`
+      if (yearStart >= range.endExclusive) break
+      if (yearStart > range.start) boundaries.add(yearStart)
+    }
+  }
+
+  const sortedBoundaries = [...boundaries].sort()
   let rateIndex = 0
   let graceIndex = 0
   let currentAnnualRate = annualRate
   const segments: ReturnType<typeof segment>[] = []
-  const closeSegment = () => {
-    if (!segmentStart) return
-    segments.push(segment(segmentStart, segmentEnd, true, segmentAccrues, segmentReason, segmentAnnualRate))
-    segmentStart = null
-  }
 
-  for (const currentDate of dates) {
-    while (rateIndex < sortedRateChanges.length && sortedRateChanges[rateIndex].date <= currentDate) {
+  for (let index = 0; index < sortedBoundaries.length - 1; index += 1) {
+    const segmentStart = sortedBoundaries[index]
+    const segmentEndExclusive = sortedBoundaries[index + 1]
+    if (segmentStart >= segmentEndExclusive) continue
+    while (rateIndex < sortedRateChanges.length && sortedRateChanges[rateIndex].date <= segmentStart) {
       currentAnnualRate = sortedRateChanges[rateIndex].annualRate
       rateIndex += 1
     }
-    while (graceIndex < noAccrualGracePeriods.length && noAccrualGracePeriods[graceIndex].endDate < currentDate) graceIndex += 1
+    while (graceIndex < noAccrualGracePeriods.length && noAccrualGracePeriods[graceIndex].endDate < segmentStart) graceIndex += 1
     const noAccrualGrace = noAccrualGracePeriods[graceIndex]
-    const shouldAccrue = !(noAccrualGrace && noAccrualGrace.startDate <= currentDate && currentDate <= noAccrualGrace.endDate)
+    const shouldAccrue = !(noAccrualGrace && noAccrualGrace.startDate <= segmentStart && segmentStart <= noAccrualGrace.endDate)
     const currentReason = shouldAccrue ? reason : 'Беспроцентная льгота'
-    const currentYear = shouldAccrue && config.interest.dayCountBasis === 'actualActual' ? currentDate.slice(0, 4) : ''
-    if (!segmentStart || segmentAccrues !== shouldAccrue || segmentReason !== currentReason || segmentYear !== currentYear || segmentAnnualRate !== currentAnnualRate) {
-      closeSegment()
-      if (!segmentStart) segmentStart = currentDate
-      segmentAccrues = shouldAccrue
-      segmentReason = currentReason
-      segmentYear = currentYear
-      segmentAnnualRate = currentAnnualRate
-    }
-    segmentEnd = currentDate
+    segments.push(segment(segmentStart, addIsoDays(segmentEndExclusive, -1), true, shouldAccrue, currentReason, currentAnnualRate))
   }
-  closeSegment()
   return segments
 }

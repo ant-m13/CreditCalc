@@ -117,6 +117,16 @@ describe('loan engine', () => {
   })
   it('работает с нулевой ставкой', () => { const s=generateBaseSchedule({...config,annualRate:0}); const first=s.find(x=>x.date==='2024-02-15')!; expect(first.interest).toBe(0); expect(first.payment).toBe(25000) })
   it('выполняет полное досрочное погашение', () => { const s=generateBaseSchedule(config,{earlyRepayments:[early({date:'2024-03-15',amount:4_000_000,strategy:'full'})]}); expect(s.length).toBe(3); expect(s.at(-1)?.closingBalance).toBe(0) })
+  it('считает кредит закрытым при фактическом погашении через reducePayment', () => {
+    const closingConfig: LoanConfig = { ...config, principal: 100_000, annualRate: 0, termMonths: 12, issueDate: '2024-01-01', firstPaymentDate: '2024-02-01', paymentDay: 1, firstPaymentInterestOnly: false }
+    const result = compareScenarios(closingConfig, [early({ date: '2024-01-15', amount: 100_000, strategy: 'reducePayment', interestFirst: false })])
+    const paymentScenario = result.scenarios.find(scenario => scenario.id === 'reducePayment')!
+    const closingRow = paymentScenario.schedule.at(-1)!
+
+    expect(closingRow.closingBalance).toBe(0)
+    expect(closingRow.fullyClosedByEarlyRepayment).toBe(true)
+    expect(paymentScenario.monthlyPayment).toBe(0)
+  })
   it('не начисляет комиссию за последующую same-day операцию после полного закрытия', () => {
     const closingConfig: LoanConfig = { ...config, principal: 100_000, annualRate: 0, termMonths: 12, issueDate: '2024-01-01', firstPaymentDate: '2024-02-01', paymentDay: 1, earlyRepaymentFeePercent: 10 }
     const schedule = generateBaseSchedule(closingConfig, {
@@ -179,6 +189,29 @@ describe('loan engine', () => {
     const earlier=generateBaseSchedule(daily,{earlyRepayments:[early({date:'2024-03-01'})]})
     const later=generateBaseSchedule(daily,{earlyRepayments:[early({date:'2024-03-14'})]})
     expect(earlier.reduce((s,x)=>s+x.interest,0)).toBeLessThan(later.reduce((s,x)=>s+x.interest,0))
+  })
+
+  it('начисляет end-of-day процент после досрочной операции между платежами', () => {
+    const dailyEnd: LoanConfig = {
+      ...config,
+      principal: 365_000,
+      annualRate: 10,
+      termMonths: 12,
+      issueDate: '2024-01-01',
+      firstPaymentDate: '2024-02-01',
+      paymentDay: 1,
+      firstPaymentInterestOnly: false,
+      interest: { method: 'daily', dayCountBasis: '365', includePaymentDate: true, periodStart: 'exclusive', balanceMoment: 'endOfDay' }
+    }
+    const schedule = generateBaseSchedule(dailyEnd, {
+      earlyRepayments: [early({ date: '2024-01-15', amount: 65_000, strategy: 'reduceTerm', interestFirst: false })]
+    })
+    const row = schedule.find(item => item.date === '2024-01-15')!
+    const endDaySegment = row.audit!.interestSegments.find(segment => segment.reason === 'Начисление на конец дня')!
+
+    expect(endDaySegment).toMatchObject({ from: '2024-01-15', to: '2024-01-15', days: 1, balance: 300_000 })
+    expect(endDaySegment.rawInterest).toBeCloseTo(300_000 * 0.10 / 365, 6)
+    expect(row.interest).toBeCloseTo((365_000 * 0.10 * 13 / 365) + (300_000 * 0.10 / 365), 2)
   })
 
   it('совпадает с банковским графиком после всех досрочных платежей', () => {
@@ -893,6 +926,12 @@ describe('edge cases', () => {
   it('отрицательная ставка — ошибка валидации', () => expect(() => generateBaseSchedule({ ...config, annualRate: -5 })).toThrow('Ставка'))
 
   it('слишком длинный срок — ошибка валидации', () => expect(() => generateBaseSchedule({ ...config, termMonths: 1201 })).toThrow('1200'))
+
+  it('слишком большой календарный горизонт — ошибка валидации', () => {
+    const errors = validateScenario({ ...config, issueDate: '1000-01-01', firstPaymentDate: '9999-12-31' }, [], [])
+    expect(errors.some(error => error.includes('120 лет'))).toBe(true)
+    expect(() => generateBaseSchedule({ ...config, issueDate: '1000-01-01', firstPaymentDate: '9999-12-31' })).toThrow('120 лет')
+  })
 
   it('комиссия за досрочное погашение выше 100% — ошибка валидации', () => expect(() => generateBaseSchedule({ ...config, earlyRepaymentFeePercent: 150 })).toThrow('0 до 100'))
 

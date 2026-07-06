@@ -1,11 +1,11 @@
 import { lazy, Suspense, useCallback, useEffect, useState, type CSSProperties } from 'react'
 import { ArrowDownToLine, CalendarDays, CircleHelp, History, Landmark, Menu, Moon, Plus, Printer, ReceiptText, Settings2, ShieldCheck, Sun, Trash2, TrendingDown, X } from 'lucide-react'
-import { compareScenarios, isRegularPaymentDate, validateScenario, type EarlyRepayment, type GracePeriod } from './loanEngine'
+import { compareScenarios, isRegularPaymentDate, preparePaymentCalendar, validateScenario, type EarlyRepayment, type GracePeriod } from './loanEngine'
 import { useLoanStore } from './store'
 import { FontControls } from './components/FontControls'
 import { LoanSwitcher } from './components/LoanSwitcher'
 import { SharedCalculationModal } from './components/SharedCalculationModal'
-import { PrintReport } from './components/PrintReport'
+import { PrintReport, StalePrintReport } from './components/PrintReport'
 import { Changelog, WhatsNewModal } from './components/Changelog'
 import { OnboardingModal } from './components/OnboardingModal'
 import { EarlyModal } from './components/EarlyModal'
@@ -138,11 +138,12 @@ function App() {
     if (nextEnabled) {
       try {
         const candidateManual = store.repayments.map(item => item.id === repayment.id ? { ...repayment, enabled: true } : item)
-        const generated = expandRepaymentRules(store.config, store.repaymentRules, store.gracePeriods)
+        const paymentCalendar = preparePaymentCalendar(store.config, store.gracePeriods)
+        const generated = expandRepaymentRules(store.config, store.repaymentRules, store.gracePeriods, paymentCalendar)
         const candidateRepayments = [...candidateManual.filter(item => item.enabled !== false && item.amount > 0), ...generated]
         const validationErrors = validateScenario(store.config, candidateRepayments, store.gracePeriods)
         if (validationErrors.length) throw new Error(validationErrors.join(' · '))
-        compareScenarios(store.config, candidateRepayments, store.gracePeriods)
+        compareScenarios(store.config, candidateRepayments, store.gracePeriods, paymentCalendar)
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Платёж нельзя включить без исправления параметров'
         setImportStatus({ kind: 'error', text: message })
@@ -196,7 +197,7 @@ function App() {
         </Suspense>
       </div>
     </main>
-    {comparison && selected && <PrintReport config={calculationSnapshot.config} displayDecimals={calculationSnapshot.displayDecimals} repayments={allRepayments} comparison={comparison} selected={selected}/>}
+    {isStale ? <StalePrintReport/> : comparison && selected && <PrintReport config={calculationSnapshot.config} displayDecimals={calculationSnapshot.displayDecimals} repayments={allRepayments} comparison={comparison} selected={selected}/>}
     {sharedCalculation ? <SharedCalculationModal data={sharedCalculation} createNew={createLoanFromSharedCalculation} replaceCurrent={replaceActiveWithSharedCalculation} decline={declineSharedCalculation}/> :
       showOnboarding ? <OnboardingModal close={finishOnboarding} showExample={() => { store.loadExampleLoan(); finishOnboarding(); setSection('overview') }} startSettings={() => { finishOnboarding(); setSection('settings') }}/> :
         showWhatsNew ? <WhatsNewModal close={closeWhatsNew} openChanges={() => { closeWhatsNew(); setSection('changes') }}/> :

@@ -343,6 +343,27 @@ describe('лимиты store до мутации', () => {
     expect(useLoanStore.getState().loans).toHaveLength(1)
   })
 
+  it('не мутирует активный кредит при невалидном импорте', () => {
+    const activeLoan = loanProfile({ repayments: [repayment(1)] })
+    setStoreLoan(activeLoan)
+    const before = useLoanStore.getState()
+
+    expect(() => useLoanStore.getState().replaceData({
+      config: defaultConfig,
+      repayments: [{ ...repayment(2), amount: 1, amountMode: 'total', sameDayOrder: 'regularFirst' }],
+      repaymentRules: [],
+      gracePeriods: [],
+      selectedScenario: 'combined',
+      termUnit: 'months',
+      displayDecimals: 2,
+      theme: 'emerald'
+    })).toThrow('не меньше обязательного платежа')
+
+    expect(useLoanStore.getState().config).toEqual(before.config)
+    expect(useLoanStore.getState().repayments).toEqual(before.repayments)
+    expect(useLoanStore.getState().loans).toEqual(before.loans)
+  })
+
   it('не добавляет пересекающиеся льготные периоды', () => {
     const first = { id: 'g1', startDate: '2026-05-01', endDate: '2026-05-31', type: 'full', extendTerm: true, accrueInterest: true, capitalizeInterest: false } as const
     const second = { id: 'g2', startDate: '2026-05-15', endDate: '2026-06-15', type: 'interestOnly', extendTerm: true, accrueInterest: true, capitalizeInterest: false } as const
