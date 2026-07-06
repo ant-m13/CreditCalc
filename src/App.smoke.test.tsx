@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, cleanup, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from './App'
@@ -234,6 +234,42 @@ describe('App smoke tests', () => {
       const nextRateDate = screen.getByText('Изменение ставки').closest('section')?.querySelector('input[type="date"]') as HTMLInputElement | null
       expect(nextRateDate?.value).toBe('')
     })
+  })
+
+  it('не применяет промежуточный год даты выдачи во время редактирования', async () => {
+    const user = userEvent.setup()
+    const activeLoan = loan({
+      config: {
+        ...defaultConfig,
+        issueDate: '2025-11-26',
+        firstPaymentDate: '2025-12-26',
+        paymentDay: 26
+      }
+    })
+    useLoanStore.setState({ ...activeLoan, loans: [activeLoan], activeLoanId: activeLoan.id })
+    render(<App />)
+
+    await user.click(screen.getByRole('button', { name: 'Параметры' }))
+    const settingsSection = (await screen.findByRole('heading', { level: 3, name: 'Параметры кредита' })).closest('section')
+    const issueDate = settingsSection?.querySelector('input[type="date"]') as HTMLInputElement | null
+    if (!issueDate) throw new Error('Не найден input даты выдачи')
+    const applyIssueDate = screen.getByRole('button', { name: 'Применить дату выдачи' }) as HTMLButtonElement
+
+    fireEvent.change(issueDate, { target: { value: '0002-11-26' } })
+
+    expect(issueDate.value).toBe('0002-11-26')
+    expect(applyIssueDate.disabled).toBe(true)
+    expect(useLoanStore.getState().config.issueDate).toBe('2025-11-26')
+    expect(screen.getByText(/год не раньше 1900/i)).toBeTruthy()
+
+    fireEvent.change(issueDate, { target: { value: '2024-11-26' } })
+
+    expect(applyIssueDate.disabled).toBe(false)
+    expect(useLoanStore.getState().config.issueDate).toBe('2025-11-26')
+    await user.click(applyIssueDate)
+
+    await waitFor(() => expect(useLoanStore.getState().config.issueDate).toBe('2024-11-26'))
+    expect(screen.queryByText(/год не раньше 1900/i)).toBeNull()
   })
 
   it('закрывает модалку и сбрасывает draft регулярного правила при переключении кредита', async () => {
