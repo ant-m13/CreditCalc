@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { defaultConfig } from './loanDefaults'
 import { expandRepaymentRules, type RepaymentRule } from './repaymentRules'
 import { compareScenarios, sortRepaymentsByApplicationOrder, type EarlyRepayment, type GracePeriod } from './loanEngine'
+import { MAX_RULE_SKIP_MONTHS } from './loanEngine/limits'
 
 const rule = (patch: Partial<RepaymentRule>): RepaymentRule => ({
   id: 'rule-1',
@@ -24,9 +25,15 @@ describe('правила досрочных платежей', () => {
   })
 
   it('создаёт ежемесячные досрочные платежи и пропускает выбранные месяцы', () => {
-    const items = expandRepaymentRules(defaultConfig, [rule({ skipMonths: ['2026-03'] })])
+    const items = expandRepaymentRules(defaultConfig, [rule({ skipMonths: ['2026-03', '2026-03'] })])
     expect(items.map(item => item.date)).toEqual(['2026-01-26', '2026-02-26', '2026-04-26'])
     expect(items[0]).toMatchObject({ amount: 10000, strategy: 'reduceTerm', amountMode: 'extra' })
+  })
+
+  it('ограничивает количество месяцев пропуска в правиле', () => {
+    const skipMonths = Array.from({ length: MAX_RULE_SKIP_MONTHS + 1 }, (_, index) => `20${String(Math.floor(index / 12) + 30).padStart(2, '0')}-${String(index % 12 + 1).padStart(2, '0')}`)
+
+    expect(() => expandRepaymentRules(defaultConfig, [rule({ skipMonths })])).toThrow(String(MAX_RULE_SKIP_MONTHS))
   })
 
   it('не меняет финансовый результат generated rules при изменении технических ID', () => {

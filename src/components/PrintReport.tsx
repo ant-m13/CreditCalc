@@ -5,6 +5,16 @@ import { createMoneyFormatter, fmtMonths, shortDate } from '../formatters'
 import { dayCountBasisLabel, rateChangeModeName, scenarioName } from '../labels'
 import { APP_VERSION, COMMIT_SHA, shortCommitSha } from '../version'
 
+export function StalePrintReport() {
+  return <article className="print-report print-warning">
+    <div className="print-title"><div><span>Кредитный калькулятор</span><h1>Расчёт обновляется</h1><p>График пересчитывается · версия {APP_VERSION} · commit {shortCommitSha(COMMIT_SHA)}</p></div><Landmark/></div>
+    <section className="print-stale-warning">
+      <h2>Печать временно недоступна</h2>
+      <p>Дождитесь окончания пересчёта, чтобы распечатать актуальный финансовый отчёт.</p>
+    </section>
+  </article>
+}
+
 export function PrintReport({ config, displayDecimals, repayments, comparison, selected }: { config: LoanConfig; displayDecimals: 0 | 2; repayments: EarlyRepayment[]; comparison: ComparisonResult; selected: ScenarioResult }) {
   const { money } = createMoneyFormatter(config.currency, displayDecimals)
   const generated = format(new Date(), 'dd.MM.yyyy HH:mm')

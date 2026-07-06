@@ -1,5 +1,6 @@
 import type { EarlyRepayment, GracePeriod, LoanConfig } from './types'
-import { MAX_EARLY_REPAYMENTS, MAX_GRACE_PERIODS, MAX_RATE_CHANGES, MAX_TERM_MONTHS } from './limits'
+import { differenceInCalendarDays, parseISO } from 'date-fns'
+import { MAX_CALENDAR_DAYS, MAX_CALENDAR_YEARS, MAX_EARLY_REPAYMENTS, MAX_GRACE_PERIODS, MAX_RATE_CHANGES, MAX_TERM_MONTHS } from './limits'
 import { isRegularPaymentDate } from './dates'
 import { isISODate } from '../utils/dateValidation'
 
@@ -17,6 +18,10 @@ const repaymentSources = ['own', 'subsidy', 'insurance', 'other'] as const
 const sameDayOrders = ['regularFirst', 'earlyFirst'] as const
 const amountModes = ['extra', 'total'] as const
 const graceTypes = ['full', 'interestOnly', 'reduced', 'custom'] as const
+
+const daysFromIssue = (issueDate: string, date: string) => differenceInCalendarDays(parseISO(date), parseISO(issueDate))
+const exceedsCalendarHorizon = (issueDate: string, date: string) => daysFromIssue(issueDate, date) > MAX_CALENDAR_DAYS
+const horizonError = (label: string) => `${label} должна быть в пределах ${MAX_CALENDAR_YEARS} лет от даты выдачи`
 
 export function validateLoan(config: LoanConfig) {
   const errors: string[] = []
@@ -38,6 +43,7 @@ export function validateLoan(config: LoanConfig) {
   if (!isISODate(config.issueDate)) errors.push('Дата выдачи должна быть корректной календарной датой')
   if (!isISODate(config.firstPaymentDate)) errors.push('Дата первого платежа должна быть корректной календарной датой')
   if (isISODate(config.issueDate) && isISODate(config.firstPaymentDate) && config.firstPaymentDate <= config.issueDate) errors.push('Первый платёж должен быть после даты выдачи')
+  if (isISODate(config.issueDate) && isISODate(config.firstPaymentDate) && config.firstPaymentDate > config.issueDate && exceedsCalendarHorizon(config.issueDate, config.firstPaymentDate)) errors.push(horizonError('Дата первого платежа'))
   if (!config.interest || typeof config.interest !== 'object') {
     errors.push('Правила начисления процентов повреждены')
   } else {
@@ -59,6 +65,7 @@ export function validateLoan(config: LoanConfig) {
         errors.push(`Изменение ставки №${index + 1}: дата должна быть корректной`)
       } else {
         if (isISODate(config.issueDate) && change.date <= config.issueDate) errors.push(`Изменение ставки №${index + 1}: дата должна быть после выдачи кредита`)
+        if (isISODate(config.issueDate) && change.date > config.issueDate && exceedsCalendarHorizon(config.issueDate, change.date)) errors.push(horizonError(`Изменение ставки №${index + 1}`))
         if (rateChangeDates.has(change.date)) errors.push(`Изменение ставки №${index + 1}: дата дублируется`)
         rateChangeDates.add(change.date)
       }
@@ -85,6 +92,7 @@ export function validateScenario(config: LoanConfig, repayments: EarlyRepayment[
     if (typeof repayment.interestFirst !== 'boolean') errors.push(`Досрочный платёж №${index + 1}: правило погашения процентов повреждено`)
     if (!isISODate(repayment.date)) errors.push(`Досрочный платёж №${index + 1}: дата должна быть корректной`)
     else if (isISODate(config.issueDate) && repayment.date < config.issueDate) errors.push(`Досрочный платёж №${index + 1}: дата раньше выдачи кредита`)
+    else if (isISODate(config.issueDate) && exceedsCalendarHorizon(config.issueDate, repayment.date)) errors.push(horizonError(`Досрочный платёж №${index + 1}`))
     const isRegularDate = configDatesValid && isISODate(repayment.date) && isRegularPaymentDate(repayment.date, config)
     const isTotalMode = repayment.amountMode === 'total' || (repayment.amountMode === undefined && isRegularDate)
     if (!disabled && isTotalMode && repayment.sameDayOrder === 'earlyFirst') errors.push(`Досрочный платёж №${index + 1}: общая сумма по телу и процентам без комиссий может применяться только после регулярного платежа`)
@@ -99,6 +107,9 @@ export function validateScenario(config: LoanConfig, repayments: EarlyRepayment[
     if (!isISODate(period.startDate)) errors.push(`Льготный период №${index + 1}: дата начала должна быть корректной`)
     if (!isISODate(period.endDate)) errors.push(`Льготный период №${index + 1}: дата окончания должна быть корректной`)
     if (isISODate(period.startDate) && isISODate(period.endDate) && period.endDate < period.startDate) errors.push(`Льготный период №${index + 1}: окончание раньше начала`)
+    if (isISODate(config.issueDate) && isISODate(period.startDate) && period.startDate < config.issueDate) errors.push(`Льготный период №${index + 1}: дата начала раньше выдачи кредита`)
+    if (isISODate(config.issueDate) && isISODate(period.startDate) && period.startDate >= config.issueDate && exceedsCalendarHorizon(config.issueDate, period.startDate)) errors.push(horizonError(`Льготный период №${index + 1}: дата начала`))
+    if (isISODate(config.issueDate) && isISODate(period.endDate) && period.endDate >= config.issueDate && exceedsCalendarHorizon(config.issueDate, period.endDate)) errors.push(horizonError(`Льготный период №${index + 1}: дата окончания`))
     if (!oneOf(period.type, graceTypes)) errors.push(`Льготный период №${index + 1}: режим повреждён`)
     if (typeof period.extendTerm !== 'boolean') errors.push(`Льготный период №${index + 1}: правило продления срока повреждено`)
     if (typeof period.accrueInterest !== 'boolean') errors.push(`Льготный период №${index + 1}: правило начисления процентов повреждено`)

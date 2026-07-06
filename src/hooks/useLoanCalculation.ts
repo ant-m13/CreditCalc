@@ -1,7 +1,7 @@
 import { useDeferredValue, useMemo } from 'react'
 import { addMonths, format, parseISO } from 'date-fns'
 import { ru } from 'date-fns/locale'
-import { compareScenarios, sortRepaymentsByApplicationOrder, validateScenario, type EarlyRepayment, type GracePeriod, type LoanConfig, type PaymentScheduleItem } from '../loanEngine'
+import { compareScenarios, preparePaymentCalendar, sortRepaymentsByApplicationOrder, validateScenario, type EarlyRepayment, type GracePeriod, type LoanConfig, type PaymentScheduleItem } from '../loanEngine'
 import { expandRepaymentRules, type RepaymentRule } from '../repaymentRules'
 import type { LoanProfile } from '../store'
 import { isISODate } from '../utils/dateValidation'
@@ -17,9 +17,10 @@ export interface LoanCalculationInput {
 }
 
 export const buildLoanCalculation = (loan: LoanProfile) => {
-  const generated = expandRepaymentRules(loan.config, loan.repaymentRules, loan.gracePeriods)
+  const paymentCalendar = preparePaymentCalendar(loan.config, loan.gracePeriods)
+  const generated = expandRepaymentRules(loan.config, loan.repaymentRules, loan.gracePeriods, paymentCalendar)
   const repayments = sortRepaymentsByApplicationOrder([...loan.repayments, ...generated])
-  const comparison = compareScenarios(loan.config, repayments, loan.gracePeriods)
+  const comparison = compareScenarios(loan.config, repayments, loan.gracePeriods, paymentCalendar)
   const selected = comparison.scenarios.find(s => s.id === loan.selectedScenario) ?? comparison.scenarios[1]
   return { generated, repayments, comparison, selected }
 }
@@ -41,14 +42,24 @@ export function useLoanCalculation({ config, repayments, repaymentRules, gracePe
     [calculationConfig, calculationRepayments, calculationGracePeriods]
   )
 
+  const paymentCalendarResult = useMemo(() => {
+    if (validationErrors.length > 0) return { calendar: null, error: null as string | null }
+    try {
+      return { calendar: preparePaymentCalendar(calculationConfig, calculationGracePeriods), error: null }
+    } catch (error) {
+      return { calendar: null, error: error instanceof Error ? error.message : 'Не удалось построить календарь платежей' }
+    }
+  }, [calculationConfig, calculationGracePeriods, validationErrors])
+
   const generatedResult = useMemo(() => {
     if (validationErrors.length > 0) return { items: [] as EarlyRepayment[], error: null as string | null }
+    if (!paymentCalendarResult.calendar) return { items: [] as EarlyRepayment[], error: paymentCalendarResult.error }
     try {
-      return { items: expandRepaymentRules(calculationConfig, calculationRepaymentRules, calculationGracePeriods), error: null as string | null }
+      return { items: expandRepaymentRules(calculationConfig, calculationRepaymentRules, calculationGracePeriods, paymentCalendarResult.calendar), error: null as string | null }
     } catch (error) {
       return { items: [] as EarlyRepayment[], error: error instanceof Error ? error.message : 'Не удалось создать операции по правилам досрочных платежей' }
     }
-  }, [calculationConfig, calculationRepaymentRules, calculationGracePeriods, validationErrors])
+  }, [calculationConfig, calculationRepaymentRules, calculationGracePeriods, validationErrors, paymentCalendarResult])
 
   const generatedRepayments = generatedResult.items
 
@@ -69,12 +80,13 @@ export function useLoanCalculation({ config, repayments, repaymentRules, gracePe
 
   const comparisonResult = useMemo(() => {
     if (preliminaryErrors.length > 0) return { comparison: null, error: null as string | null }
+    if (!paymentCalendarResult.calendar) return { comparison: null, error: paymentCalendarResult.error }
     try {
-      return { comparison: compareScenarios(calculationConfig, allRepayments, calculationGracePeriods), error: null }
+      return { comparison: compareScenarios(calculationConfig, allRepayments, calculationGracePeriods, paymentCalendarResult.calendar), error: null }
     } catch (error) {
       return { comparison: null, error: error instanceof Error ? error.message : 'Не удалось построить график платежей' }
     }
-  }, [calculationConfig, allRepayments, calculationGracePeriods, preliminaryErrors])
+  }, [calculationConfig, allRepayments, calculationGracePeriods, preliminaryErrors, paymentCalendarResult])
 
   const errors = useMemo(
     () => comparisonResult.error ? [...preliminaryErrors, comparisonResult.error] : preliminaryErrors,
