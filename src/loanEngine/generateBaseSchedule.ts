@@ -3,7 +3,7 @@ import { addDays, parseISO } from 'date-fns'
 import { accrueInterestSegmentsRaw, periodsPerYear } from './accrual'
 import { calculateAnnuityPayment } from './calculateAnnuityPayment'
 import { periodDays } from './calculateInterest'
-import { extendedPaymentPeriods, iso, nextPaymentDate, totalPaymentPeriods } from './dates'
+import { extendedPaymentPeriods, iso, nextPaymentDate, preparePaymentCalendar, totalPaymentPeriods, type PreparedPaymentCalendar } from './dates'
 import { activeGrace } from './gracePeriod'
 import { MAX_EARLY_REPAYMENTS, MAX_GRACE_PERIODS, MAX_SCHEDULE_ROWS } from './limits'
 import { createRateTimeline } from './rateChanges'
@@ -12,7 +12,7 @@ import { sortRepaymentsByApplicationOrder } from './repaymentOrder'
 import type { EarlyRepayment, GracePeriod, LoanConfig, PaymentScheduleItem, RepaymentStrategy, ScheduleEventType } from './types'
 import { validateScenario } from './validation'
 
-interface Options { earlyRepayments?: EarlyRepayment[]; gracePeriods?: GracePeriod[]; forcedStrategy?: RepaymentStrategy }
+interface Options { earlyRepayments?: EarlyRepayment[]; gracePeriods?: GracePeriod[]; forcedStrategy?: RepaymentStrategy; paymentCalendar?: PreparedPaymentCalendar }
 
 /**
  * Builds an event-based schedule. An early repayment between two regular due
@@ -28,8 +28,9 @@ export function generateBaseSchedule(config: LoanConfig, options: Options = {}):
   if (gracePeriods.length > MAX_GRACE_PERIODS) throw new Error(`Слишком много льготных периодов. Максимум: ${MAX_GRACE_PERIODS}`)
   const validationErrors = validateScenario(config, allRepayments, gracePeriods)
   if (validationErrors.length > 0) throw new Error(validationErrors.join(' · '))
+  const paymentCalendar = options.paymentCalendar ?? preparePaymentCalendar(config, gracePeriods)
   const configuredPeriods = totalPaymentPeriods(config)
-  const maxPeriods = configuredPeriods + extendedPaymentPeriods(config, gracePeriods)
+  const maxPeriods = configuredPeriods + extendedPaymentPeriods(config, gracePeriods, paymentCalendar)
   const rateTimeline = createRateTimeline(config)
   let effectiveFinalRegularIndex = maxPeriods
   let balance = money(config.principal, config.rounding)
@@ -212,7 +213,7 @@ export function generateBaseSchedule(config: LoanConfig, options: Options = {}):
         fee,
         event: eventInfo(strategy, fullyClosed),
         paymentRecalculated: strategy === 'reducePayment' && balance.gt(0),
-        fullyClosedByEarlyRepayment: strategy === 'full' && fullyClosed,
+        fullyClosedByEarlyRepayment: fullyClosed,
         comment: early.comment ?? ''
       }
     }
@@ -226,9 +227,11 @@ export function generateBaseSchedule(config: LoanConfig, options: Options = {}):
       if (eventDate < accrualStart) continue
 
       const opening = balance
+      const rowStart = accrualStart
       const includeEventDay = config.interest.includePaymentDate && config.interest.balanceMoment === 'startOfDay'
-      const interestSegments = accrueSegments(accrualStart, eventDate, includeEventDay, balance, 'Начисление до досрочного погашения')
-      const chargedInterest = roundRawInterest(interestSegments)
+      const interestSegments = accrueSegments(rowStart, eventDate, includeEventDay, balance, 'Начисление до досрочного погашения')
+      let auditInterestSegments = [...interestSegments]
+      let chargedInterest = roundRawInterest(interestSegments)
       const deferredOpening = deferredInterest
       let interestDue = deferredInterest.add(chargedInterest)
       deferredInterest = new Decimal(0)
@@ -255,10 +258,22 @@ export function generateBaseSchedule(config: LoanConfig, options: Options = {}):
         if (applied.comment) comments.push(applied.comment)
       }
       if (interestDue.gt(0)) deferredInterest = deferredInterest.add(interestDue)
+
+      if (config.interest.includePaymentDate && config.interest.balanceMoment === 'endOfDay' && balance.gt(0)) {
+        const endDaySegments = accrueInterestSegmentsRaw({ ...config, interest: { ...config.interest, periodStart: 'inclusive' } }, balance, eventDate, iso(addDays(parseISO(eventDate), 1)), false, periodCalendarDays, gracePeriods, 'Начисление на конец дня', currentAnnualRate, exactRateChanges, true)
+        const endDayInterest = roundRawInterest(endDaySegments)
+        chargedInterest = chargedInterest.add(endDayInterest)
+        auditInterestSegments = [...auditInterestSegments, ...endDaySegments]
+        deferredInterest = deferredInterest.add(endDayInterest)
+        accrualStart = nextAccrualStart(eventDate, true)
+      } else {
+        accrualStart = nextAccrualStart(eventDate, includeEventDay)
+      }
+
       cumulativeInterest = cumulativeInterest.add(chargedInterest)
       const cashFlowTotal = earlyTotal.add(fees)
       pushScheduleRow({
-        number: ++rowNumber, date: eventDate, days: periodDays(accrualStart, eventDate, includeEventDay, excludeStartDate()),
+        number: ++rowNumber, date: eventDate, days: periodDays(rowStart, eventDate, includeEventDay, excludeStartDate()),
         openingBalance: num(opening, config.rounding), payment: 0, interest: num(chargedInterest, config.rounding), principal: num(earlyPrincipal, config.rounding),
         earlyPayment: num(earlyTotal, config.rounding), closingBalance: num(balance, config.rounding),
         interestAccrued: num(chargedInterest, config.rounding), interestPaid: num(earlyInterest, config.rounding), principalPaid: num(earlyPrincipal, config.rounding),
@@ -266,9 +281,8 @@ export function generateBaseSchedule(config: LoanConfig, options: Options = {}):
         cumulativeInterest: num(cumulativeInterest, config.rounding), cumulativeSavings: 0, fee: num(fees, config.rounding),
         comment: comments.join('; '), event: eventLabels.join('; '),
         eventTypes, paymentRecalculated, fullyClosedByEarlyRepayment, isRegularPayment: false, isGracePayment: false,
-        audit: audit(accrualStart, eventDate, includeEventDay, opening, 'Досрочное погашение между регулярными платежами', interestSegments)
+        audit: audit(rowStart, eventDate, includeEventDay, opening, 'Досрочное погашение между регулярными платежами', auditInterestSegments)
       })
-      accrualStart = nextAccrualStart(eventDate, includeEventDay)
     }
 
     if (balance.lte(0) && deferredInterest.lte(0)) break

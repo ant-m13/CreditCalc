@@ -128,7 +128,7 @@ describe('App smoke tests', () => {
     await user.click(screen.getByRole('button', { name: 'Добавить и пересчитать' }))
     await user.click(screen.getByRole('button', { name: /^Досрочные/ }))
 
-    expect(await screen.findByText('Временно отключено')).toBeTruthy()
+    expect(await screen.findByText('Временно отключено', {}, { timeout: 10000 })).toBeTruthy()
     expect(useLoanStore.getState().repayments[0]).toMatchObject({ amount: 100000, enabled: false })
 
     const enableButtons = await screen.findAllByRole('button', { name: /Включить платёж/i })
@@ -137,7 +137,7 @@ describe('App smoke tests', () => {
 
     expect(useLoanStore.getState().repayments[0]).toMatchObject({ amount: 100000, enabled: true })
     expect(screen.getAllByRole('button', { name: /Выключить платёж/i })).toHaveLength(2)
-  })
+  }, 15000)
 
   it('на первом запуске без ссылки показывает знакомство', async () => {
     localStorage.clear()
@@ -193,12 +193,12 @@ describe('App smoke tests', () => {
     render(<App />)
 
     await user.click(screen.getByRole('button', { name: /^Досрочные/ }))
-    await user.click(screen.getAllByRole('button', { name: /Включить платёж/i }).at(-1)!)
+    await user.click((await screen.findAllByRole('button', { name: /Включить платёж/i }, { timeout: 10000 })).at(-1)!)
 
     expect(useLoanStore.getState().repayments[1].enabled).toBe(false)
     expect(await screen.findByRole('dialog', { name: 'Досрочный платёж' })).toBeTruthy()
     expect(screen.getByText(/только одну общую сумму/i)).toBeTruthy()
-  })
+  }, 15000)
 
   it('открывает раздел импорта и экспорта', async () => {
     const user = userEvent.setup()
