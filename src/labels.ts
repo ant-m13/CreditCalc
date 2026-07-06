@@ -30,7 +30,7 @@ export const ruleTypeName = (type: RepaymentRule['type']) =>
   type === 'semiannualFixed' ? 'Раз в полгода фиксированная сумма' :
   type === 'annualFixed' ? 'Раз в год фиксированная сумма' :
   type === 'annualBonus' ? 'Ежегодная премия' :
-  type === 'monthlyTotalPayment' ? 'Общий ежемесячный платёж' :
+  type === 'monthlyTotalPayment' ? 'Общее ежемесячное списание с комиссией' :
   'Процент от регулярного платежа'
 
 export const graceTypeName = (type: GracePeriod['type']) =>

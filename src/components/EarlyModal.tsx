@@ -39,7 +39,7 @@ export function EarlyModal({ close, save, initial, initialError = '', defaultDat
     const active = enabled && parsed > 0
     if (!isISODate(date)) { setError('Укажите корректную дату досрочного платежа'); return }
     if (!Number.isFinite(parsed) || parsed < 0) { setError('Сумма не может быть отрицательной'); return }
-    if (active && amountMode === 'total' && !isRegularPaymentDate(date)) { setError('Общую сумму по телу и процентам без комиссий можно указать только в дату регулярного платежа'); return }
+    if (active && amountMode === 'totalWithFee' && !isRegularPaymentDate(date)) { setError('Общую сумму списания с учётом комиссии можно указать только в дату регулярного платежа'); return }
     try {
       save({
         id: initial?.id ?? createId('early'),
@@ -49,7 +49,7 @@ export function EarlyModal({ close, save, initial, initialError = '', defaultDat
         amountMode,
         strategy,
         source,
-        sameDayOrder: amountMode === 'total' ? 'regularFirst' : sameDayOrder,
+        sameDayOrder: amountMode === 'totalWithFee' ? 'regularFirst' : sameDayOrder,
         interestFirst,
         comment
       })
@@ -69,7 +69,7 @@ export function EarlyModal({ close, save, initial, initialError = '', defaultDat
         <div className="form-grid">
           <Field label="Дата"><input type="date" value={date} onChange={event => setDate(event.target.value)}/></Field>
           <Field label="Сумма"><div className="with-suffix"><input autoFocus type="number" min="0" value={amount} onChange={event => setAmount(event.target.value)}/><i>{currencySymbol(currency)}</i></div></Field>
-          <Field label="Как указана сумма"><select value={amountMode} onChange={event => setAmountMode(event.target.value as NonNullable<EarlyRepayment['amountMode']>)}><option value="extra">Сумма списания сверх платежа</option><option value="total">Итого по телу и процентам без комиссий</option></select></Field>
+          <Field label="Как указана сумма"><select value={amountMode} onChange={event => setAmountMode(event.target.value as NonNullable<EarlyRepayment['amountMode']>)}><option value="extra">Сумма списания сверх платежа</option><option value="totalWithFee">Общая сумма списания с комиссией</option></select></Field>
           <Field label="Стратегия"><select value={strategy} onChange={event => setStrategy(event.target.value as EarlyRepayment['strategy'])}><option value="reduceTerm">Уменьшить срок</option><option value="reducePayment">Уменьшить платёж</option><option value="full">Закрыть полностью</option></select></Field>
           <Field label="Источник"><select value={source} onChange={event => setSource(event.target.value as EarlyRepayment['source'])}><option value="own">Собственные средства</option><option value="subsidy">Маткапитал / субсидия</option><option value="insurance">Страховое возмещение</option><option value="other">Прочее</option></select></Field>
           {amountMode === 'extra' && <Field label="Порядок в дату платежа"><select value={sameDayOrder} onChange={event => setSameDayOrder(event.target.value as EarlyRepayment['sameDayOrder'])}><option value="regularFirst">Сначала регулярный платёж</option><option value="earlyFirst">Сначала досрочный платёж</option></select></Field>}
@@ -78,7 +78,7 @@ export function EarlyModal({ close, save, initial, initialError = '', defaultDat
         </div>
         <Field label="Комментарий"><input value={comment} onChange={event => setComment(event.target.value)} placeholder="Например, премия за год"/></Field>
         {error && <div className="alert modal-alert" role="alert">{error}</div>}
-        <div className="modal-tip"><Sparkles/> Если задана комиссия за досрочное погашение, она удерживается из суммы списания. Для банковского примера 26.01.2026 укажите сумму 8 704,99 ₽.</div>
+        <div className="modal-tip"><Sparkles/> Если задана комиссия за досрочное погашение, она удерживается из суммы списания. Режим общей суммы включает регулярный платёж и комиссию досрочного погашения.</div>
       </div>
       <div className="modal-actions"><button className="ghost" onClick={close}>Отмена</button><button className="primary" onClick={submit}>{initial ? 'Сохранить изменения' : 'Добавить и пересчитать'}</button></div>
     </div>

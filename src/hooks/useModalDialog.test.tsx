@@ -27,4 +27,13 @@ describe('useModalDialog', () => {
     expect((input as HTMLInputElement).value).toBe('123')
     expect(document.activeElement).toBe(input)
   })
+
+  it('блокирует прокрутку body и восстанавливает её при unmount', () => {
+    document.body.style.overflow = 'auto'
+    const { unmount } = render(<DialogWithChangingClose close={vi.fn()}/>)
+
+    expect(document.body.style.overflow).toBe('hidden')
+    unmount()
+    expect(document.body.style.overflow).toBe('auto')
+  })
 })

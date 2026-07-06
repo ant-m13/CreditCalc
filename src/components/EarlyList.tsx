@@ -25,7 +25,7 @@ const ruleName = (type: RepaymentRule['type']) =>
   type === 'semiannualFixed' ? 'Пополнение раз в полгода' :
   type === 'annualFixed' ? 'Ежегодное пополнение' :
   type === 'annualBonus' ? 'Ежегодная премия' :
-  type === 'monthlyTotalPayment' ? 'Общий ежемесячный платёж' :
+  type === 'monthlyTotalPayment' ? 'Общее ежемесячное списание' :
   'Процент от платежа'
 const disabledClass = (disabled: boolean) => disabled ? ' disabled-event' : ''
 
@@ -52,10 +52,10 @@ function RepaymentRulesPanel({ rules, addRule, updateRule, removeRule, defaultSt
   const [strategy, setStrategy] = useState<EarlyRepayment['strategy']>('reduceTerm')
   const [source, setSource] = useState<EarlyRepayment['source']>('own')
   const [sameDayOrder, setSameDayOrder] = useState<EarlyRepayment['sameDayOrder']>('regularFirst')
-  const amountFieldLabel = type === 'paymentPercent' ? 'Процент' : type === 'monthlyTotalPayment' ? 'Общий платёж' : 'Сумма'
+  const amountFieldLabel = type === 'paymentPercent' ? 'Процент' : type === 'monthlyTotalPayment' ? 'Общее списание' : 'Сумма'
   const ruleValueLabel = (rule: RepaymentRule) =>
     rule.type === 'paymentPercent' ? `${rule.percent ?? 0}% от первоначального регулярного платежа` :
-    rule.type === 'monthlyTotalPayment' ? `итого ${money(rule.amount ?? 0)}` :
+    rule.type === 'monthlyTotalPayment' ? `списание ${money(rule.amount ?? 0)}` :
     money(rule.amount ?? 0)
 
   const reset = () => {
@@ -108,7 +108,7 @@ function RepaymentRulesPanel({ rules, addRule, updateRule, removeRule, defaultSt
       sameDayOrder: type === 'monthlyTotalPayment' ? 'regularFirst' : sameDayOrder,
       interestFirst: true,
       skipMonths,
-      comment: type === 'paymentPercent' ? `${value}% от первоначального регулярного платежа` : type === 'monthlyTotalPayment' ? `Итого к списанию ${money(value)}` : undefined
+      comment: type === 'paymentPercent' ? `${value}% от первоначального регулярного платежа` : type === 'monthlyTotalPayment' ? `Общее списание с учётом комиссии ${money(value)}` : undefined
     }
     try {
       if (editingRule) updateRule(rule)
@@ -122,7 +122,7 @@ function RepaymentRulesPanel({ rules, addRule, updateRule, removeRule, defaultSt
   return <section className="panel list-panel rule-panel early-card">
     <div className="panel-head"><div><h3>Регулярные досрочные платежи</h3><p>{editingRule ? 'Редактирование регулярного платежа' : 'Повторяющиеся операции до заданной даты'}</p></div><span className="early-counter">{rules.length}</span></div>
     <div className="rule-form form-grid">
-      <Field label="Тип регулярного платежа"><select value={type} onChange={event => setType(event.target.value as RepaymentRule['type'])}><option value="weeklyFixed">Раз в неделю фиксированная сумма</option><option value="monthlyFixed">Каждый месяц фиксированная сумма</option><option value="bimonthlyFixed">Раз в 2 месяца фиксированная сумма</option><option value="quarterlyFixed">Раз в квартал фиксированная сумма</option><option value="semiannualFixed">Раз в полгода фиксированная сумма</option><option value="annualFixed">Раз в год фиксированная сумма</option><option value="annualBonus">Ежегодная премия</option><option value="monthlyTotalPayment">Общий ежемесячный платёж</option><option value="paymentPercent">Процент от первоначального регулярного платежа</option></select></Field>
+          <Field label="Тип регулярного платежа"><select value={type} onChange={event => setType(event.target.value as RepaymentRule['type'])}><option value="weeklyFixed">Раз в неделю фиксированная сумма</option><option value="monthlyFixed">Каждый месяц фиксированная сумма</option><option value="bimonthlyFixed">Раз в 2 месяца фиксированная сумма</option><option value="quarterlyFixed">Раз в квартал фиксированная сумма</option><option value="semiannualFixed">Раз в полгода фиксированная сумма</option><option value="annualFixed">Раз в год фиксированная сумма</option><option value="annualBonus">Ежегодная премия</option><option value="monthlyTotalPayment">Общее ежемесячное списание с комиссией</option><option value="paymentPercent">Процент от первоначального регулярного платежа</option></select></Field>
       <Field label={amountFieldLabel}>{type === 'paymentPercent' ? <div className="with-suffix"><input type="number" min="0" value={percent} onChange={event => setPercent(event.target.value)}/><i>%</i></div> : <div className="with-suffix"><input type="number" min="0" value={amount} onChange={event => setAmount(event.target.value)}/><i>{currencySymbol}</i></div>}</Field>
       <Field label="Начать с"><input type="date" value={start} onChange={event => setStart(event.target.value)}/></Field>
       <Field label="Применять до"><input type="date" value={end} onChange={event => setEnd(event.target.value)}/></Field>
@@ -170,7 +170,7 @@ export function EarlyList({ items, rules, generated, currency, displayDecimals, 
           const disabled = repaymentDisabled(item)
           return <div className={`event${disabledClass(disabled)}`} key={item.id}>
             <div className="date-tile"><b>{format(parseISO(item.date), 'dd')}</b><span>{format(parseISO(item.date), 'MMM yy', { locale: ru })}</span></div>
-            <div><b>{money(item.amount)}</b><span>{disabled ? 'Временно отключено' : `${scenarioName(item.strategy)} · ${item.amountMode === 'total' ? 'тело и проценты без комиссий' : 'сумма списания'} · ${sourceName(item.source)}`}</span>{item.comment && <small>{item.comment}</small>}</div>
+          <div><b>{money(item.amount)}</b><span>{disabled ? 'Временно отключено' : `${scenarioName(item.strategy)} · ${item.amountMode === 'totalWithFee' ? 'общее списание с комиссией' : 'сумма списания'} · ${sourceName(item.source)}`}</span>{item.comment && <small>{item.comment}</small>}</div>
             <div className="event-actions"><RepaymentToggleButton item={item} toggle={toggle}/><button className="icon-btn" aria-label={`Редактировать платёж ${shortDate(item.date)}`} onClick={() => edit(item)}><Pencil/></button><button className="icon-btn danger" aria-label={`Удалить платёж ${shortDate(item.date)}`} onClick={() => remove(item.id)}><Trash2/></button></div>
           </div>
         })}</div> : <Empty title="Пока нет разовых платежей" action={open}/>}

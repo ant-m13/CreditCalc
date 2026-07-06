@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useState, type CSSProperties } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import { ArrowDownToLine, CalendarDays, CircleHelp, History, Landmark, Menu, Moon, Plus, Printer, ReceiptText, Settings2, ShieldCheck, Sun, Trash2, TrendingDown, X } from 'lucide-react'
 import { compareScenarios, isRegularPaymentDate, preparePaymentCalendar, validateScenario, type EarlyRepayment, type GracePeriod } from './loanEngine'
 import { useLoanStore } from './store'
@@ -37,6 +37,7 @@ function App() {
   const [showGrace, setShowGrace] = useState(false)
   const [mobileNav, setMobileNav] = useState(false)
   const [rows, setRows] = useState(18)
+  const shellRef = useRef<HTMLDivElement>(null)
   const resetRows = useCallback(() => setRows(18), [])
   const {
     generatedRepayments,
@@ -112,6 +113,20 @@ function App() {
     resetRows()
   }, [store.activeLoanId, resetRows])
 
+  useEffect(() => {
+    const shell = shellRef.current
+    if (!shell) return
+    if (store.useCustomAccentColor) {
+      shell.style.setProperty('--green', store.customAccentColor)
+      shell.style.setProperty('--theme-accent', store.customAccentColor)
+      shell.style.setProperty('--theme-accent-text', store.customAccentColor)
+      return
+    }
+    shell.style.removeProperty('--green')
+    shell.style.removeProperty('--theme-accent')
+    shell.style.removeProperty('--theme-accent-text')
+  }, [store.customAccentColor, store.useCustomAccentColor])
+
   const nav = [
     ['overview', Landmark, 'Обзор'], ['settings', Settings2, 'Параметры'], ['early', TrendingDown, 'Досрочные'],
     ['grace', CalendarDays, 'Льготные периоды'], ['schedule', ReceiptText, 'График платежей'], ['export', ArrowDownToLine, 'Импорт/экспорт'], ['changes', History, 'Что изменилось']
@@ -128,7 +143,7 @@ function App() {
         openEarly(repayment, message)
         return
       }
-      if (repayment.amountMode === 'total' && !isRegularPaymentDate(repayment.date, store.config)) {
+      if (repayment.amountMode === 'totalWithFee' && !isRegularPaymentDate(repayment.date, store.config)) {
         const message = 'Общую сумму можно включить только в дату регулярного платежа'
         setImportStatus({ kind: 'error', text: message })
         openEarly(repayment, message)
@@ -170,18 +185,17 @@ function App() {
     guardCalculatedExport(() => download(kind))
   }, [download, guardCalculatedExport])
 
-  const accentStyle = store.useCustomAccentColor ? ({ '--green': store.customAccentColor } as CSSProperties) : undefined
-
-  return <div className="app-shell" data-theme={store.theme} data-ui-font={store.appFontSize} data-schedule-font={store.scheduleFontSize} style={accentStyle}>
+  return <div ref={shellRef} className="app-shell" data-theme={store.theme} data-ui-font={store.appFontSize} data-schedule-font={store.scheduleFontSize}>
     <aside className={mobileNav ? 'sidebar open' : 'sidebar'}>
       <div className="brand"><div className="brand-mark"><Landmark size={22}/></div><div><b>Кредитный калькулятор</b><span>версия {APP_VERSION}</span></div><button className="icon-btn close-nav" aria-label="Закрыть меню" onClick={() => setMobileNav(false)}><X/></button></div>
-      <nav>{nav.map(([id, Icon, label]) => <button key={id} className={section === id ? 'active' : ''} onClick={() => { setSection(id); setMobileNav(false) }}><Icon size={18}/><span>{label}</span>{id === 'early' && store.repayments.length > 0 && <em>{store.repayments.length}</em>}</button>)}</nav>
+      <nav>{nav.map(([id, Icon, label]) => <button key={id} className={section === id ? 'active' : ''} aria-current={section === id ? 'page' : undefined} onClick={() => { setSection(id); setMobileNav(false) }}><Icon size={18}/><span>{label}</span>{id === 'early' && store.repayments.length > 0 && <em>{store.repayments.length}</em>}</button>)}</nav>
       <div className="sidebar-note"><ShieldCheck size={20}/><div><b>Расчёт локально</b><span>Ваши данные не покидают устройство</span></div></div>
     </aside>
     <main>
       <header><button className="icon-btn menu-btn" aria-label="Открыть меню" onClick={() => setMobileNav(true)}><Menu/></button><div className="header-title"><p>Финансовый план · v{APP_VERSION}</p><h1>{section === 'overview' ? 'Ваш кредит' : nav.find(x => x[0] === section)?.[2]}</h1></div><LoanSwitcher loans={store.loans} activeLoanId={store.activeLoanId} switchLoan={store.switchLoan} createLoan={store.createLoan} renameLoan={store.renameLoan} removeLoan={store.removeLoan}/><button className="icon-btn theme-toggle" onClick={toggleNightTheme} title={store.theme === 'night' ? 'Вернуть светлую тему' : 'Включить ночной режим'} aria-label={store.theme === 'night' ? 'Вернуть светлую тему' : 'Включить ночной режим'}>{store.theme === 'night' ? <Sun/> : <Moon/>}</button><FontControls fontSize={store.appFontSize} setFontSize={store.setAppFontSize}/><div className="header-actions"><span className={storageStatus.kind === 'saved' ? 'status-dot' : 'status-dot warning'}><i/> {storageStatus.kind === 'failed' ? 'Сохранение не удалось' : storageStatus.kind === 'nearQuota' ? 'Мало места' : 'Данные сохранены'}</span><button className="ghost print-action" onClick={printCalculated} disabled={isStale} title={isStale ? STALE_EXPORT_MESSAGE : undefined}><Printer size={16}/> Печать</button><button className="primary add-payment-action" onClick={() => openEarly()}><Plus size={17}/> Досрочный платёж</button></div></header>
       <div className="content">
-        {storageWarning && <div className="alert">{storageWarning}</div>}
+        {storageWarning && <div className="alert alert-with-actions"><span>{storageWarning}</span><button className="ghost compact" onClick={() => download('json')}>Скачать JSON</button>{storageStatus.kind === 'failed' && <button className="ghost compact" onClick={store.retryStorageSave}>Повторить</button>}</div>}
+        {store.storageRecoveryReport.length > 0 && <div className="alert alert-with-actions"><span>{store.storageRecoveryReport.join(' · ')}</span><button className="ghost compact" onClick={store.clearStorageRecoveryReport}>Скрыть</button></div>}
         {isStale && <div className="alert">Пересчитываем график. На экране пока показан предыдущий согласованный расчёт.</div>}
         {errors.length > 0 && <div className="alert">{errors.join(' · ')}</div>}
         <Suspense fallback={<SectionLoading/>}>
@@ -197,7 +211,7 @@ function App() {
         </Suspense>
       </div>
     </main>
-    {isStale ? <StalePrintReport/> : comparison && selected && <PrintReport config={calculationSnapshot.config} displayDecimals={calculationSnapshot.displayDecimals} repayments={allRepayments} comparison={comparison} selected={selected}/>}
+    {isStale ? <StalePrintReport/> : comparison && selected && <PrintReport config={calculationSnapshot.config} displayDecimals={calculationSnapshot.displayDecimals} repayments={allRepayments} repaymentRules={calculationSnapshot.repaymentRules} gracePeriods={calculationSnapshot.gracePeriods} comparison={comparison} selected={selected}/>}
     {sharedCalculation ? <SharedCalculationModal data={sharedCalculation} createNew={createLoanFromSharedCalculation} replaceCurrent={replaceActiveWithSharedCalculation} decline={declineSharedCalculation}/> :
       showOnboarding ? <OnboardingModal close={finishOnboarding} showExample={() => { store.loadExampleLoan(); finishOnboarding(); setSection('overview') }} startSettings={() => { finishOnboarding(); setSection('settings') }}/> :
         showWhatsNew ? <WhatsNewModal close={closeWhatsNew} openChanges={() => { closeWhatsNew(); setSection('changes') }}/> :

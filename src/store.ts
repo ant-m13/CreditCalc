@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { createJSONStorage, persist } from 'zustand/middleware'
 import { addMonths, format, parseISO } from 'date-fns'
-import { isRegularPaymentDate, nextPaymentDate, nextSameDaySequence, sortRateChanges, sortRepaymentsByApplicationOrder, type EarlyRepayment, type GracePeriod, type LoanConfig, type RateChange } from './loanEngine'
+import { isRegularPaymentDate, nextPaymentDate, nextSameDaySequence, sortRateChanges, sortRepaymentsByApplicationOrder, validateScenario, type EarlyRepayment, type GracePeriod, type LoanConfig, type RateChange } from './loanEngine'
 import { createDefaultConfig, defaultConfig } from './loanDefaults'
 import type { LoanBackupData } from './importExport'
 import { assertLoanCandidateValid } from './loanCandidate'
@@ -24,7 +24,7 @@ const notifyStorageStatus = (kind: StorageStatusKind, message: string) => {
 
 const notifyStorageError = (error: unknown) => {
   const message = error instanceof Error ? error.message : 'Локальное хранилище недоступно'
-  notifyStorageStatus('failed', message)
+  notifyStorageStatus('failed', `Последние изменения не сохранены в localStorage: ${message}`)
   if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent(STORAGE_ERROR_EVENT, { detail: { message } }))
 }
 
@@ -105,6 +105,8 @@ interface LoanState extends LoanData {
   setCustomAccentColor: (color: string) => void
   setUseCustomAccentColor: (enabled: boolean) => void
   resetCustomAccentColor: () => void
+  retryStorageSave: () => void
+  clearStorageRecoveryReport: () => void
   switchLoan: (id: string) => void
   createLoan: (name?: string) => void
   renameLoan: (id: string, name: string) => void
@@ -112,6 +114,7 @@ interface LoanState extends LoanData {
   loadExampleLoan: () => void
   addLoanFromData: (data: LoanImportData) => void
   replaceData: (data: LoanImportData) => void
+  storageRecoveryReport: string[]
 }
 
 const advancePaymentPeriods = (startDate: string, config: LoanConfig, periods: number) => {
@@ -157,14 +160,24 @@ const graceTypes = ['full', 'interestOnly', 'reduced', 'custom'] as const
 const scenarioIds = ['base', 'reduceTerm', 'reducePayment', 'combined'] as const
 const termUnits = ['months', 'years'] as const
 const fontSizes = ['normal', 'large', 'xlarge'] as const
+const amountModes = ['extra', 'totalWithFee'] as const
 export const MAX_LOANS = 100
 const normalizeTheme = (value: unknown): ThemeName => typeof value === 'string' && themeNames.includes(value as ThemeName) ? value as ThemeName : 'emerald'
 const normalizeAccentColor = (value: unknown): string => typeof value === 'string' && /^#[0-9a-fA-F]{6}$/.test(value) ? value : defaultAccentColor
 const oneOf = <T extends string>(value: unknown, values: readonly T[], fallback: T): T => typeof value === 'string' && values.includes(value as T) ? value as T : fallback
+const normalizeAmountMode = (value: unknown, isRegularDate: boolean): typeof amountModes[number] => {
+  if (value === undefined) return isRegularDate ? 'totalWithFee' : 'extra'
+  if (value === 'total') return 'totalWithFee'
+  return oneOf(value, amountModes, 'extra')
+}
 const finiteNumber = (value: unknown, fallback: number, min = 0, max = Number.POSITIVE_INFINITY) => typeof value === 'number' && Number.isFinite(value) ? Math.min(max, Math.max(min, value)) : fallback
 const optionalFiniteNumber = (value: unknown, min = 0, max = Number.POSITIVE_INFINITY) => typeof value === 'number' && Number.isFinite(value) ? Math.min(max, Math.max(min, value)) : undefined
 const isObject = (value: unknown): value is Record<string, unknown> => Boolean(value) && typeof value === 'object' && !Array.isArray(value)
 const nextMonthDate = (date: string) => format(addMonths(parseISO(date), 1), 'yyyy-MM-dd')
+const firstPaymentAfterIssue = (config: LoanConfig) => {
+  const candidate = nextPaymentDate(config.issueDate, config)
+  return candidate > config.issueDate ? candidate : nextMonthDate(config.issueDate)
+}
 const normalizeText = (value: unknown, fallback = '') => {
   const text = typeof value === 'string' ? value.trim() : fallback
   return text.slice(0, MAX_TEXT_FIELD_LENGTH)
@@ -276,8 +289,8 @@ const normalizeRepayments = (value: unknown, config: LoanConfig): EarlyRepayment
     if (!isObject(item) || typeof item.id !== 'string' || !isISODate(item.date)) return []
     const amount = optionalFiniteNumber(item.amount, 0)
     if (amount === undefined) return []
-    const requestedAmountMode = item.amountMode === undefined ? 'total' : oneOf(item.amountMode, ['extra', 'total'] as const, 'extra')
-    const amountMode = requestedAmountMode === 'total' && isRegularPaymentDate(item.date, config) ? 'total' : 'extra'
+    const requestedAmountMode = normalizeAmountMode(item.amountMode, isRegularPaymentDate(item.date, config))
+    const amountMode = requestedAmountMode === 'totalWithFee' && isRegularPaymentDate(item.date, config) ? 'totalWithFee' : 'extra'
     const sequenceCandidate = typeof item.sameDaySequence === 'number' && Number.isInteger(item.sameDaySequence) && item.sameDaySequence >= 0 ? item.sameDaySequence : index
     return [{
       id: item.id,
@@ -290,7 +303,7 @@ const normalizeRepayments = (value: unknown, config: LoanConfig): EarlyRepayment
       ...(typeof item.sourceRuleId === 'string' && item.sourceRuleId.trim() ? { sourceRuleId: item.sourceRuleId } : {}),
       strategy: oneOf(item.strategy, repaymentStrategies, 'reduceTerm'),
       source: oneOf(item.source, repaymentSources, 'own'),
-      sameDayOrder: amountMode === 'total' ? 'regularFirst' : oneOf(item.sameDayOrder, sameDayOrders, 'regularFirst'),
+      sameDayOrder: amountMode === 'totalWithFee' ? 'regularFirst' : oneOf(item.sameDayOrder, sameDayOrders, 'regularFirst'),
       interestFirst: typeof item.interestFirst === 'boolean' ? item.interestFirst : true,
       ...(optionalText(item.comment) !== undefined ? { comment: optionalText(item.comment) } : {})
     }]
@@ -411,6 +424,14 @@ const assertRepaymentPlanValid = (config: LoanConfig, repayments: EarlyRepayment
   assertLoanCandidateValid(config, repayments, rules, gracePeriods)
 }
 
+const normalizeConfigPatch = (current: LoanConfig, patch: Partial<LoanConfig>): LoanConfig => {
+  const next = { ...current, ...patch }
+  if (isISODate(next.issueDate) && isISODate(next.firstPaymentDate) && next.firstPaymentDate <= next.issueDate) {
+    next.firstPaymentDate = firstPaymentAfterIssue(next)
+  }
+  return next
+}
+
 const withRepaymentSequence = (repayments: EarlyRepayment[], repayment: EarlyRepayment) => ({
   ...repayment,
   operationSource: repayment.operationSource ?? 'manual',
@@ -477,19 +498,45 @@ export const normalizePersistedState = (persisted: unknown): Partial<LoanState> 
     seenLoanIds.add(nextId)
     return nextId
   }
-  const loans = rawLoans.length
-    ? rawLoans.map((loan, index) => loanFromData(loan, typeof loan.name === 'string' ? loan.name : `Кредит ${index + 1}`, uniqueLoanId(loan.id))).slice(0, MAX_LOANS)
-    : [loanFromData(state, 'Мой кредит', 'loan-default')]
+  const storageRecoveryReport: string[] = []
+  const recoverLoan = (loan: Partial<LoanProfile | LoanData>, name: string, id: string) => {
+    try {
+      const normalized = loanFromData(loan, name, id)
+      const errors = validateScenario(normalized.config, normalized.repayments, normalized.gracePeriods)
+      if (errors.length) throw new Error(errors[0])
+      if (normalized.repayments.length > 0 || normalized.repaymentRules.length > 0 || normalized.gracePeriods.length > 0) {
+        assertRepaymentPlanValid(normalized.config, normalized.repayments, normalized.repaymentRules, normalized.gracePeriods)
+      }
+      return normalized
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'неизвестная ошибка'
+      storageRecoveryReport.push(`Кредит «${name}» помещён в карантин: ${message}`)
+      return null
+    }
+  }
+  const recoveredLoans = rawLoans.length
+    ? rawLoans.flatMap((loan, index) => {
+      const normalized = recoverLoan(loan, typeof loan.name === 'string' ? loan.name : `Кредит ${index + 1}`, uniqueLoanId(loan.id))
+      return normalized ? [normalized] : []
+    }).slice(0, MAX_LOANS)
+    : []
+  const fallbackLoan = () => {
+    const normalized = recoverLoan(state, 'Мой кредит', 'loan-default')
+    return normalized ?? loanFromData(defaultLoanData(), 'Мой кредит', 'loan-default')
+  }
+  const loans = recoveredLoans.length ? recoveredLoans : [fallbackLoan()]
+  if (!recoveredLoans.length && rawLoans.length) storageRecoveryReport.push('Все повреждённые кредиты отклонены, создан новый пустой расчёт.')
   const activeLoanId = typeof state.activeLoanId === 'string' && loans.some(loan => loan.id === state.activeLoanId) ? state.activeLoanId : loans[0].id
   const active = loans.find(loan => loan.id === activeLoanId) ?? loans[0]
-  return { loans, activeLoanId, ...publicData(active) }
+  return { loans, activeLoanId, ...publicData(active), storageRecoveryReport }
 }
 
 export const useLoanStore = create<LoanState>()(persist((set) => ({
   ...publicData(initialLoan),
   loans: [initialLoan],
   activeLoanId: initialLoan.id,
-  updateConfig: (patch) => set(s => syncActive(s, { config: { ...s.config, ...patch } })),
+  storageRecoveryReport: [],
+  updateConfig: (patch) => set(s => syncActive(s, { config: normalizeConfigPatch(s.config, patch) })),
   updateInterest: (patch) => set(s => syncActive(s, { config: { ...s.config, interest: { ...s.config.interest, ...patch } } })),
   addRepayment: (repayment) => set(s => {
     if (s.repayments.length >= MAX_EARLY_REPAYMENTS) throw new Error(`Можно добавить не более ${MAX_EARLY_REPAYMENTS} разовых платежей`)
@@ -544,6 +591,8 @@ export const useLoanStore = create<LoanState>()(persist((set) => ({
   setCustomAccentColor: (customAccentColor) => set(s => syncActive(s, { customAccentColor: normalizeAccentColor(customAccentColor), useCustomAccentColor: true })),
   setUseCustomAccentColor: (useCustomAccentColor) => set(s => syncActive(s, { useCustomAccentColor })),
   resetCustomAccentColor: () => set(s => syncActive(s, { customAccentColor: defaultAccentColor, useCustomAccentColor: false })),
+  retryStorageSave: () => set(s => ({ activeLoanId: s.activeLoanId, loans: s.loans })),
+  clearStorageRecoveryReport: () => set({ storageRecoveryReport: [] }),
   switchLoan: (id) => set(s => switchToLoan(s, id)),
   createLoan: (name = 'Новый кредит') => set(s => {
     assertCanAddLoan(s.loans.length)
@@ -581,7 +630,7 @@ export const useLoanStore = create<LoanState>()(persist((set) => ({
 }), {
   name: 'ipoteka-calculator-v1',
   storage: createJSONStorage(() => safeLocalStorage),
-  version: 9,
+  version: 10,
   migrate: normalizePersistedState,
   merge: (persisted, current) => ({ ...current, ...normalizePersistedState(persisted) })
 }))

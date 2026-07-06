@@ -68,3 +68,6 @@ export const extendedPaymentPeriods = (config: LoanConfig, gracePeriods: GracePe
 
 export const scheduledPaymentDates = (config: LoanConfig, gracePeriods: GracePeriod[] = [], calendar?: PreparedPaymentCalendar) =>
   (calendar ?? preparePaymentCalendar(config, gracePeriods)).dates
+
+export const contractualFinalPaymentDate = (config: LoanConfig, gracePeriods: GracePeriod[] = [], calendar?: PreparedPaymentCalendar) =>
+  scheduledPaymentDates(config, gracePeriods, calendar).at(-1) ?? config.firstPaymentDate

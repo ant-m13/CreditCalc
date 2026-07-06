@@ -15,3 +15,7 @@ If advisories are unavailable, open a GitHub issue with a minimal description an
 ## Data Handling
 
 CreditCalc runs entirely in the browser. It does not send loan data to a server, but exported JSON files and shared calculation links contain the source parameters of a calculation. Treat them as private financial data.
+
+## Browser Hardening
+
+The static build ships a restrictive CSP meta tag for GitHub Pages: scripts, styles, images, workers and connections are limited to the application origin, and development-only `ws:` / localhost endpoints are not allowed in production HTML. `frame-ancestors` must be configured as an HTTP response header by the hosting provider, because browsers ignore it in meta CSP.

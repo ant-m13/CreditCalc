@@ -6,13 +6,23 @@ interface PackageMetadata {
   version?: string
 }
 
+const productionCsp = "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; base-uri 'self'; form-action 'none'; object-src 'none'"
+
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, '.', '')
   const pkg = packageJson as PackageMetadata
 
   return {
     base: env.VITE_BASE_PATH || '/',
-    plugins: [react()],
+    plugins: [
+      react(),
+      {
+        name: 'credit-calculator-production-csp',
+        apply: 'build',
+        transformIndexHtml: (html) =>
+          html.replace('<meta name="theme-color"', `<meta http-equiv="Content-Security-Policy" content="${productionCsp}"/><meta name="theme-color"`)
+      }
+    ],
     define: {
       __APP_VERSION__: JSON.stringify(pkg.version ?? '0.0.0'),
       __BUILD_DATE__: JSON.stringify(new Date().toISOString()),

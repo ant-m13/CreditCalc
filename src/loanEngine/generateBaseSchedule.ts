@@ -9,10 +9,13 @@ import { MAX_EARLY_REPAYMENTS, MAX_GRACE_PERIODS, MAX_SCHEDULE_ROWS } from './li
 import { createRateTimeline } from './rateChanges'
 import { money, num } from './rounding'
 import { sortRepaymentsByApplicationOrder } from './repaymentOrder'
-import type { EarlyRepayment, GracePeriod, LoanConfig, PaymentScheduleItem, RepaymentStrategy, ScheduleEventType } from './types'
+import type { EarlyRepayment, GracePeriod, LoanConfig, PaymentScheduleItem, RepaymentApplicationOutcome, RepaymentStrategy, ScheduleEventType } from './types'
 import { validateScenario } from './validation'
 
 interface Options { earlyRepayments?: EarlyRepayment[]; gracePeriods?: GracePeriod[]; forcedStrategy?: RepaymentStrategy; paymentCalendar?: PreparedPaymentCalendar }
+
+const isTotalWithFeeMode = (repayment: EarlyRepayment) =>
+  repayment.amountMode === 'totalWithFee' || (repayment.amountMode as string | undefined) === 'total'
 
 /**
  * Builds an event-based schedule. An early repayment between two regular due
@@ -168,16 +171,30 @@ export function generateBaseSchedule(config: LoanConfig, options: Options = {}):
       rounding: config.rounding,
       operationOrder: order
     })
+    const auditDays = (segments: ReturnType<typeof accrueSegments>, fallback: number) =>
+      segments.length > 0 ? segments.reduce((sum, segment) => sum + segment.days, 0) : fallback
 
     const applyEarly = (early: EarlyRepayment, interestDue: Decimal, remainingPeriods: number, amountOverride?: Decimal.Value, afterCurrentPayment = false) => {
       const strategy = options.forcedStrategy ?? early.strategy
       const earlyAmount = Decimal.max(0, amountOverride ?? early.amount)
       if (balance.lte(0) && interestDue.lte(0)) {
+        const outcome: RepaymentApplicationOutcome = {
+          repaymentId: early.id,
+          date: early.date,
+          requestedAmount: num(new Decimal(early.amount), config.rounding),
+          appliedAmount: 0,
+          appliedInterest: 0,
+          appliedPrincipal: 0,
+          fee: 0,
+          unusedAmount: num(new Decimal(early.amount), config.rounding),
+          reason: 'debtClosed'
+        }
         return {
           paidInterest: new Decimal(0),
           paidPrincipal: new Decimal(0),
           interestLeft: new Decimal(0),
           fee: new Decimal(0),
+          outcome,
           event: { label: 'Операция пропущена · долг уже закрыт', type: 'earlyIgnored' as const },
           paymentRecalculated: false,
           fullyClosedByEarlyRepayment: false,
@@ -193,6 +210,8 @@ export function generateBaseSchedule(config: LoanConfig, options: Options = {}):
       const paidPrincipal = Decimal.min(balance, available)
       balance = Decimal.max(0, balance.minus(paidPrincipal))
       const fullyClosed = balance.isZero() && interestLeft.lte(0)
+      const appliedAmount = paidInterest.add(paidPrincipal)
+      const unusedAmount = Decimal.max(0, earlyAmount.minus(fee).minus(appliedAmount))
       if (strategy === 'reducePayment' && balance.gt(0) && config.paymentType === 'annuity') {
         payment = hasTermReduction
           ? money(Decimal.max(0, payment.minus(calculateAnnuityPayment(paidPrincipal, annualRateAtEvent, Math.max(1, remainingPeriods), periodsPerYear(config.frequency), config.rounding))), config.rounding)
@@ -211,6 +230,17 @@ export function generateBaseSchedule(config: LoanConfig, options: Options = {}):
         paidPrincipal,
         interestLeft,
         fee,
+        outcome: {
+          repaymentId: early.id,
+          date: early.date,
+          requestedAmount: num(new Decimal(early.amount), config.rounding),
+          appliedAmount: num(appliedAmount, config.rounding),
+          appliedInterest: num(paidInterest, config.rounding),
+          appliedPrincipal: num(paidPrincipal, config.rounding),
+          fee: num(fee, config.rounding),
+          unusedAmount: num(unusedAmount, config.rounding),
+          reason: unusedAmount.gt(0) ? 'partiallyApplied' as const : 'applied' as const
+        },
         event: eventInfo(strategy, fullyClosed),
         paymentRecalculated: strategy === 'reducePayment' && balance.gt(0),
         fullyClosedByEarlyRepayment: fullyClosed,
@@ -244,6 +274,7 @@ export function generateBaseSchedule(config: LoanConfig, options: Options = {}):
       let paymentRecalculated = appendPendingRateChange(eventLabels, eventTypes)
       let fullyClosedByEarlyRepayment = false
       const comments: string[] = []
+      const repaymentOutcomes: RepaymentApplicationOutcome[] = []
 
       for (const early of sameDate) {
         const applied = applyEarly(early, interestDue, remainingPeriodsBeforeCurrentPayment(regularIndex))
@@ -255,6 +286,7 @@ export function generateBaseSchedule(config: LoanConfig, options: Options = {}):
         appendEvent(eventLabels, eventTypes, applied.event.label, applied.event.type)
         paymentRecalculated = paymentRecalculated || applied.paymentRecalculated
         fullyClosedByEarlyRepayment = fullyClosedByEarlyRepayment || applied.fullyClosedByEarlyRepayment
+        repaymentOutcomes.push(applied.outcome)
         if (applied.comment) comments.push(applied.comment)
       }
       if (interestDue.gt(0)) deferredInterest = deferredInterest.add(interestDue)
@@ -272,8 +304,9 @@ export function generateBaseSchedule(config: LoanConfig, options: Options = {}):
 
       cumulativeInterest = cumulativeInterest.add(chargedInterest)
       const cashFlowTotal = earlyTotal.add(fees)
+      const rowDays = auditDays(auditInterestSegments, periodDays(rowStart, eventDate, includeEventDay, excludeStartDate()))
       pushScheduleRow({
-        number: ++rowNumber, date: eventDate, days: periodDays(rowStart, eventDate, includeEventDay, excludeStartDate()),
+        number: ++rowNumber, date: eventDate, days: rowDays,
         openingBalance: num(opening, config.rounding), payment: 0, interest: num(chargedInterest, config.rounding), principal: num(earlyPrincipal, config.rounding),
         earlyPayment: num(earlyTotal, config.rounding), closingBalance: num(balance, config.rounding),
         interestAccrued: num(chargedInterest, config.rounding), interestPaid: num(earlyInterest, config.rounding), principalPaid: num(earlyPrincipal, config.rounding),
@@ -281,7 +314,8 @@ export function generateBaseSchedule(config: LoanConfig, options: Options = {}):
         cumulativeInterest: num(cumulativeInterest, config.rounding), cumulativeSavings: 0, fee: num(fees, config.rounding),
         comment: comments.join('; '), event: eventLabels.join('; '),
         eventTypes, paymentRecalculated, fullyClosedByEarlyRepayment, isRegularPayment: false, isGracePayment: false,
-        audit: audit(rowStart, eventDate, includeEventDay, opening, 'Досрочное погашение между регулярными платежами', auditInterestSegments)
+        audit: audit(rowStart, eventDate, includeEventDay, opening, 'Досрочное погашение между регулярными платежами', auditInterestSegments),
+        repaymentOutcomes
       })
     }
 
@@ -310,6 +344,7 @@ export function generateBaseSchedule(config: LoanConfig, options: Options = {}):
     let paymentRecalculated = appendPendingRateChange(eventLabels, eventTypes)
     let fullyClosedByEarlyRepayment = false
     const comments: string[] = []
+    const repaymentOutcomes: RepaymentApplicationOutcome[] = []
     const sameDay: EarlyRepayment[] = []
     while (repaymentIndex < repayments.length && repayments[repaymentIndex].date === paymentDate) sameDay.push(repayments[repaymentIndex++])
     const earlyFirst = sameDay.filter(r => r.sameDayOrder === 'earlyFirst')
@@ -325,6 +360,7 @@ export function generateBaseSchedule(config: LoanConfig, options: Options = {}):
       appendEvent(eventLabels, eventTypes, applied.event.label, applied.event.type)
       paymentRecalculated = paymentRecalculated || applied.paymentRecalculated
       fullyClosedByEarlyRepayment = fullyClosedByEarlyRepayment || applied.fullyClosedByEarlyRepayment
+      repaymentOutcomes.push(applied.outcome)
       if (applied.comment) comments.push(applied.comment)
     }
 
@@ -365,10 +401,10 @@ export function generateBaseSchedule(config: LoanConfig, options: Options = {}):
       // Older saved bank rows have no amountMode. Treat them as the total paid
       // on that date; explicit "extra" records preserve the previous behavior.
       let effectiveAmount: Decimal | undefined
-      if (early.amountMode !== 'extra') {
+      if (isTotalWithFeeMode(early) || early.amountMode === undefined) {
         const totalAmount = new Decimal(early.amount)
         if (totalAmount.lt(regularPayment)) {
-          throw new Error(`Досрочный платёж ${early.date}: общая сумма по телу и процентам без комиссий должна быть не меньше обязательного платежа ${num(regularPayment, config.rounding)}`)
+          throw new Error(`Досрочный платёж ${early.date}: общая сумма списания с учётом комиссии должна быть не меньше обязательного платежа ${num(regularPayment, config.rounding)}`)
         }
         effectiveAmount = totalAmount.minus(regularPayment)
       }
@@ -381,6 +417,7 @@ export function generateBaseSchedule(config: LoanConfig, options: Options = {}):
       appendEvent(eventLabels, eventTypes, applied.event.label, applied.event.type)
       paymentRecalculated = paymentRecalculated || applied.paymentRecalculated
       fullyClosedByEarlyRepayment = fullyClosedByEarlyRepayment || applied.fullyClosedByEarlyRepayment
+      repaymentOutcomes.push(applied.outcome)
       if (applied.comment) comments.push(applied.comment)
     }
 
@@ -426,8 +463,9 @@ export function generateBaseSchedule(config: LoanConfig, options: Options = {}):
     const cashFlowTotal = regularPayment.add(earlyTotal).add(feePaid)
     const isGracePayment = eventTypes.some(type => type === 'graceFull' || type === 'graceInterestOnly' || type === 'graceSpecialPayment')
     const isRegularPayment = regularPayment.gt(0) && !isGracePayment && !eventTypes.some(type => type === 'firstInterestOnly' || type === 'deferredInterestPayment' || type === 'finalBalloon')
+    const rowDays = auditDays(auditInterestSegments, days)
     pushScheduleRow({
-      number: ++rowNumber, date: paymentDate, days, openingBalance: num(opening, config.rounding), payment: num(regularPayment, config.rounding),
+      number: ++rowNumber, date: paymentDate, days: rowDays, openingBalance: num(opening, config.rounding), payment: num(regularPayment, config.rounding),
       interest: num(chargedInterest, config.rounding), principal: num(principalPart.add(earlyPrincipal), config.rounding), earlyPayment: num(earlyTotal, config.rounding),
       closingBalance: num(balance, config.rounding), cumulativeInterest: num(cumulativeInterest, config.rounding), cumulativeSavings: 0,
       interestAccrued: num(chargedInterest, config.rounding), interestPaid: num(interestPaid, config.rounding), principalPaid: num(principalPaid, config.rounding),
@@ -435,7 +473,8 @@ export function generateBaseSchedule(config: LoanConfig, options: Options = {}):
       fee: num(feePaid, config.rounding),
       comment: comments.join('; '), event: eventLabels.join('; '),
       eventTypes, paymentRecalculated, fullyClosedByEarlyRepayment, isRegularPayment, isGracePayment,
-      audit: audit(rowStart, paymentDate, includeFinalDay, opening, sameDay.length ? `${earlyFirst.length ? 'сначала досрочные платежи; ' : ''}регулярный платёж; ${regularFirst.length ? 'затем досрочные платежи' : 'досрочных платежей в дату платежа нет'}` : 'Регулярный платёж', auditInterestSegments)
+      audit: audit(rowStart, paymentDate, includeFinalDay, opening, sameDay.length ? `${earlyFirst.length ? 'сначала досрочные платежи; ' : ''}регулярный платёж; ${regularFirst.length ? 'затем досрочные платежи' : 'досрочных платежей в дату платежа нет'}` : 'Регулярный платёж', auditInterestSegments),
+      repaymentOutcomes
     })
     const nextAnnualRate = rateTimeline.rateAt(paymentDate, currentAnnualRate)
     if (nextAnnualRate !== currentAnnualRate) {
@@ -452,6 +491,51 @@ export function generateBaseSchedule(config: LoanConfig, options: Options = {}):
   }
   if (balance.gt(0) || deferredInterest.gt(0)) {
     throw new Error(`График не закрывает кредит в допустимое количество строк (${MAX_SCHEDULE_ROWS})`)
+  }
+  while (repaymentIndex < repayments.length) {
+    const eventDate = repayments[repaymentIndex].date
+    const sameDate: EarlyRepayment[] = []
+    while (repaymentIndex < repayments.length && repayments[repaymentIndex].date === eventDate) sameDate.push(repayments[repaymentIndex++])
+    const repaymentOutcomes: RepaymentApplicationOutcome[] = sameDate.map(early => ({
+      repaymentId: early.id,
+      date: early.date,
+      requestedAmount: num(new Decimal(early.amount), config.rounding),
+      appliedAmount: 0,
+      appliedInterest: 0,
+      appliedPrincipal: 0,
+      fee: 0,
+      unusedAmount: num(new Decimal(early.amount), config.rounding),
+      reason: 'debtClosed'
+    }))
+    pushScheduleRow({
+      number: ++rowNumber,
+      date: eventDate,
+      days: 0,
+      openingBalance: 0,
+      payment: 0,
+      interest: 0,
+      principal: 0,
+      earlyPayment: 0,
+      interestAccrued: 0,
+      interestPaid: 0,
+      principalPaid: 0,
+      feePaid: 0,
+      deferredInterestOpening: 0,
+      deferredInterestClosing: 0,
+      cashFlowTotal: 0,
+      closingBalance: 0,
+      cumulativeInterest: num(cumulativeInterest, config.rounding),
+      cumulativeSavings: 0,
+      fee: 0,
+      comment: sameDate.map(early => early.comment ? `${early.comment} · пропущено: долг уже закрыт` : 'Пропущено: долг уже закрыт').join('; '),
+      event: 'Операция пропущена · долг уже закрыт',
+      eventTypes: ['earlyIgnored'],
+      paymentRecalculated: false,
+      fullyClosedByEarlyRepayment: false,
+      isRegularPayment: false,
+      isGracePayment: false,
+      repaymentOutcomes
+    })
   }
   return schedule
 }

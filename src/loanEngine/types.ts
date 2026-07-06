@@ -5,6 +5,7 @@ export type EarlySource = 'own' | 'subsidy' | 'insurance' | 'other'
 export type DayCountBasis = '365' | '366' | '360' | 'actual365' | 'actualActual'
 export type RoundingMode = 'kopecks' | 'rubles' | 'bank'
 export type RateChangeMode = 'nextPeriod' | 'exactDate'
+export type EarlyRepaymentAmountMode = 'extra' | 'totalWithFee'
 export type ScheduleEventType =
   | 'loanIssued'
   | 'earlyReduceTerm'
@@ -73,7 +74,7 @@ export interface EarlyRepayment {
   date: string
   amount: number
   enabled?: boolean
-  amountMode?: 'extra' | 'total'
+  amountMode?: EarlyRepaymentAmountMode
   sameDaySequence?: number
   operationSource?: 'manual' | 'rule'
   sourceRuleId?: string
@@ -82,6 +83,18 @@ export interface EarlyRepayment {
   sameDayOrder: 'regularFirst' | 'earlyFirst'
   interestFirst: boolean
   comment?: string
+}
+
+export interface RepaymentApplicationOutcome {
+  repaymentId: string
+  date: string
+  requestedAmount: number
+  appliedAmount: number
+  appliedInterest: number
+  appliedPrincipal: number
+  fee: number
+  unusedAmount: number
+  reason: 'applied' | 'partiallyApplied' | 'debtClosed'
 }
 
 export interface GracePeriod {
@@ -139,6 +152,7 @@ export interface PaymentScheduleItem {
     rounding: RoundingMode
     operationOrder: string
   }
+  repaymentOutcomes?: RepaymentApplicationOutcome[]
 }
 
 export interface ScenarioResult {
@@ -152,8 +166,10 @@ export interface ScenarioResult {
   overpayment: number
   closingDate: string
   termMonths: number
+  termDays: number
   interestSavings: number
   monthsSaved: number
+  daysSaved: number
 }
 
 export interface ComparisonResult {

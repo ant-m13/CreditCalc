@@ -55,7 +55,8 @@ const resetStore = () => {
   useLoanStore.setState({
     ...activeLoan,
     loans: [activeLoan],
-    activeLoanId: activeLoan.id
+    activeLoanId: activeLoan.id,
+    storageRecoveryReport: []
   })
 }
 
@@ -186,8 +187,8 @@ describe('App smoke tests', () => {
     const user = userEvent.setup()
     const activeLoan = loan()
     activeLoan.repayments = [
-      { id: 'total-active', date: defaultConfig.firstPaymentDate, amount: 120000, amountMode: 'total', strategy: 'reduceTerm', source: 'own', sameDayOrder: 'regularFirst', interestFirst: true, sameDaySequence: 0 },
-      { id: 'total-disabled', date: defaultConfig.firstPaymentDate, amount: 130000, amountMode: 'total', enabled: false, strategy: 'reducePayment', source: 'own', sameDayOrder: 'regularFirst', interestFirst: true, sameDaySequence: 1 }
+      { id: 'total-active', date: defaultConfig.firstPaymentDate, amount: 120000, amountMode: 'totalWithFee', strategy: 'reduceTerm', source: 'own', sameDayOrder: 'regularFirst', interestFirst: true, sameDaySequence: 0 },
+      { id: 'total-disabled', date: defaultConfig.firstPaymentDate, amount: 130000, amountMode: 'totalWithFee', enabled: false, strategy: 'reducePayment', source: 'own', sameDayOrder: 'regularFirst', interestFirst: true, sameDaySequence: 1 }
     ]
     useLoanStore.setState({ ...activeLoan, loans: [activeLoan], activeLoanId: activeLoan.id })
     render(<App />)

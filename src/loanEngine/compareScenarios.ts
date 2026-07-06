@@ -1,8 +1,9 @@
-import { differenceInCalendarMonths, parseISO } from 'date-fns'
+import { differenceInCalendarDays, differenceInCalendarMonths, parseISO } from 'date-fns'
 import { preparePaymentCalendar, type PreparedPaymentCalendar } from './dates'
 import { generateBaseSchedule } from './generateBaseSchedule'
 import type { ComparisonResult, EarlyRepayment, GracePeriod, LoanConfig, RepaymentStrategy, ScenarioResult } from './types'
 import { validateScenario } from './validation'
+import { periodDays } from './calculateInterest'
 
 function toResult(id: string, name: string, strategy: ScenarioResult['strategy'], schedule: ReturnType<typeof generateBaseSchedule>, config: LoanConfig, base?: ScenarioResult): ScenarioResult {
   const last = schedule.at(-1)
@@ -16,15 +17,46 @@ function toResult(id: string, name: string, strategy: ScenarioResult['strategy']
   const closedByEarlyRepayment = last?.closingBalance === 0 && (last.deferredInterestClosing ?? 0) === 0 && last.earlyPayment > 0
   const monthlyPayment = closedByEarlyRepayment ? 0 : paymentAfterRecalculation ?? schedule.find(isRegularPayment)?.payment ?? schedule.find(x => x.payment > 0)?.payment ?? 0
   const termMonths = Math.max(0, differenceInCalendarMonths(parseISO(closingDate), parseISO(config.issueDate)))
-  return { id, name, strategy, schedule, monthlyPayment, totalPaid, totalInterest, overpayment: Math.max(0, totalPaid - config.principal), closingDate, termMonths, interestSavings: base ? base.totalInterest - totalInterest : 0, monthsSaved: base ? Math.max(0, differenceInCalendarMonths(parseISO(base.closingDate), parseISO(closingDate))) : 0 }
+  const termDays = Math.max(0, differenceInCalendarDays(parseISO(closingDate), parseISO(config.issueDate)))
+  return {
+    id,
+    name,
+    strategy,
+    schedule,
+    monthlyPayment,
+    totalPaid,
+    totalInterest,
+    overpayment: Math.max(0, totalPaid - config.principal),
+    closingDate,
+    termMonths,
+    termDays,
+    interestSavings: base ? base.totalInterest - totalInterest : 0,
+    monthsSaved: base ? Math.max(0, differenceInCalendarMonths(parseISO(base.closingDate), parseISO(closingDate))) : 0,
+    daysSaved: base ? Math.max(0, differenceInCalendarDays(parseISO(base.closingDate), parseISO(closingDate))) : 0
+  }
 }
 
 function addCumulativeSavings(schedule: ReturnType<typeof generateBaseSchedule>, baseSchedule: ReturnType<typeof generateBaseSchedule>) {
-  const baseByDate = new Map(baseSchedule.map(row => [row.date, row.cumulativeInterest]))
-  let lastBaseInterest = 0
+  const baseInterestAt = (date: string) => {
+    let previous = baseSchedule[0]
+    for (const row of baseSchedule) {
+      if (row.date === date) return row.cumulativeInterest
+      if (row.date > date) {
+        if (!previous || !row.audit) return previous?.cumulativeInterest ?? 0
+        const accruedInsideRow = row.audit.interestSegments.reduce((sum, segment) => {
+          if (date < segment.from) return sum
+          const segmentEnd = date < segment.to ? date : segment.to
+          const elapsedDays = Math.min(segment.days, periodDays(segment.from, segmentEnd, true, false))
+          return sum + (segment.days > 0 ? segment.rawInterest * elapsedDays / segment.days : 0)
+        }, 0)
+        return Math.max(previous.cumulativeInterest, previous.cumulativeInterest + accruedInsideRow)
+      }
+      previous = row
+    }
+    return baseSchedule.at(-1)?.cumulativeInterest ?? 0
+  }
   return schedule.map(row => {
-    lastBaseInterest = baseByDate.get(row.date) ?? lastBaseInterest
-    return { ...row, cumulativeSavings: Math.max(0, lastBaseInterest - row.cumulativeInterest) }
+    return { ...row, cumulativeSavings: Math.max(0, baseInterestAt(row.date) - row.cumulativeInterest) }
   })
 }
 
@@ -46,7 +78,7 @@ export function compareScenarios(config: LoanConfig, repayments: EarlyRepayment[
   return {
     scenarios,
     bestSavings: [...scenarios].sort((a, b) => b.interestSavings - a.interestSavings)[0],
-    fastest: [...scenarios].sort((a, b) => a.termMonths - b.termMonths)[0],
+    fastest: [...scenarios].sort((a, b) => a.termDays - b.termDays || a.closingDate.localeCompare(b.closingDate))[0],
     lowestPayment: [...scenarios].filter(s => s.id !== 'base').sort((a, b) => a.monthlyPayment - b.monthlyPayment)[0]
   }
 }
