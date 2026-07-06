@@ -22,6 +22,7 @@ export function useModalDialog(onClose: () => void) {
 
   useEffect(() => {
     const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    const previousBodyOverflow = document.body.style.overflow
     const dialog = dialogRef.current
     const focusable = () => Array.from(dialog?.querySelectorAll<HTMLElement>(focusableSelector) ?? [])
       .filter(element => element.offsetParent !== null || element === document.activeElement)
@@ -41,7 +42,8 @@ export function useModalDialog(onClose: () => void) {
       if (parent === document.body) break
     }
 
-    window.setTimeout(() => {
+    document.body.style.overflow = 'hidden'
+    const focusTimer = window.setTimeout(() => {
       const first = dialog?.querySelector<HTMLElement>('[autofocus]') ?? focusable()[0] ?? dialog
       first?.focus()
     }, 0)
@@ -72,7 +74,9 @@ export function useModalDialog(onClose: () => void) {
 
     document.addEventListener('keydown', handleKeyDown)
     return () => {
+      window.clearTimeout(focusTimer)
       document.removeEventListener('keydown', handleKeyDown)
+      document.body.style.overflow = previousBodyOverflow
       for (const { element, ariaHidden, inert } of hiddenSiblings) {
         if (ariaHidden === null) element.removeAttribute('aria-hidden')
         else element.setAttribute('aria-hidden', ariaHidden)

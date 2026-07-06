@@ -1,9 +1,9 @@
 import { useCallback } from 'react'
 import type { LoanBackupData } from '../importExport'
 import type { PaymentScheduleItem } from '../loanEngine'
+import { buildLoanCalculationOrThrow } from '../loanCalculation'
 import { buildShareUrl, createLoanSnapshot, decodeSharedCalculation, encodeSharedCalculation, looksLikeSharedCalculationUrl, normalizeSharedCalculationPayload } from '../shareCalculation'
 import { loanToBackupData, type LoanProfile } from '../store'
-import { buildLoanCalculation } from './useLoanCalculation'
 import type { ImportStatus } from './useLoanImport'
 
 interface UseLoanExportOptions {
@@ -50,7 +50,7 @@ export function useLoanExport({ loans, activeLoanId, setImportStatus }: UseLoanE
     } else {
       let schedule: PaymentScheduleItem[]
       try {
-        schedule = buildLoanCalculation(loan).selected.schedule
+        schedule = buildLoanCalculationOrThrow(loan).selected.schedule
       } catch (error) {
         setImportStatus({ kind: 'error', text: error instanceof Error ? error.message : 'Не удалось построить график для экспорта' })
         return

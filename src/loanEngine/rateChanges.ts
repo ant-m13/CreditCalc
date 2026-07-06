@@ -11,12 +11,19 @@ export interface RateTimeline {
 export const createRateTimeline = (config: Pick<LoanConfig, 'annualRate' | 'rateChanges'>): RateTimeline => {
   const sortedChanges = sortRateChanges(config.rateChanges ?? [])
   const rateAt = (date: string, fallbackAnnualRate = config.annualRate) => {
-    let rate = fallbackAnnualRate
-    for (const change of sortedChanges) {
-      if (change.date <= date) rate = change.annualRate
-      else break
+    let low = 0
+    let high = sortedChanges.length - 1
+    let index = -1
+    while (low <= high) {
+      const middle = Math.floor((low + high) / 2)
+      if (sortedChanges[middle].date <= date) {
+        index = middle
+        low = middle + 1
+      } else {
+        high = middle - 1
+      }
     }
-    return rate
+    return index >= 0 ? sortedChanges[index].annualRate : fallbackAnnualRate
   }
   return { sortedChanges, rateAt }
 }

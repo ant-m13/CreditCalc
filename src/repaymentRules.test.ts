@@ -99,13 +99,20 @@ describe('правила досрочных платежей', () => {
   it('создаёт общий ежемесячный платёж на регулярных датах', () => {
     const items = expandRepaymentRules(defaultConfig, [rule({ type: 'monthlyTotalPayment', amount: 100000, startDate: '2026-08-15', endDate: '2026-10-15', sameDayOrder: 'earlyFirst' })])
     expect(items.map(item => item.date)).toEqual(['2026-08-15', '2026-09-15', '2026-10-15'])
-    expect(items[0]).toMatchObject({ amount: 100000, amountMode: 'total', sameDayOrder: 'regularFirst' })
+    expect(items[0]).toMatchObject({ amount: 100000, amountMode: 'totalWithFee', sameDayOrder: 'regularFirst' })
   })
 
   it('создаёт общий ежемесячный платёж на первой дате с платежом только по процентам', () => {
     const items = expandRepaymentRules(defaultConfig, [rule({ type: 'monthlyTotalPayment', amount: 100000, startDate: defaultConfig.firstPaymentDate, endDate: defaultConfig.firstPaymentDate })])
     expect(items.map(item => item.date)).toEqual([defaultConfig.firstPaymentDate])
-    expect(items[0]).toMatchObject({ amountMode: 'total', sameDayOrder: 'regularFirst' })
+    expect(items[0]).toMatchObject({ amountMode: 'totalWithFee', sameDayOrder: 'regularFirst' })
+  })
+
+  it('продолжает общий платёж на датах полной льготы', () => {
+    const grace: GracePeriod = { id: 'g-full', startDate: defaultConfig.firstPaymentDate, endDate: defaultConfig.firstPaymentDate, type: 'full', extendTerm: true, accrueInterest: false, capitalizeInterest: false }
+    const items = expandRepaymentRules(defaultConfig, [rule({ type: 'monthlyTotalPayment', amount: 100000, startDate: defaultConfig.firstPaymentDate, endDate: defaultConfig.firstPaymentDate })], [grace])
+    expect(items).toHaveLength(1)
+    expect(items[0]).toMatchObject({ date: defaultConfig.firstPaymentDate, amountMode: 'totalWithFee' })
   })
 
   it('создаёт общий ежемесячный платёж на продлённых датах после длинной льготы', () => {

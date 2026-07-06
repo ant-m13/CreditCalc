@@ -71,7 +71,7 @@ const pushRuleRepayment = (result: EarlyRepayment[], rule: RepaymentRule, date: 
     id: `rule-${rule.id}-${date}`,
     date,
     amount,
-    amountMode: rule.type === 'monthlyTotalPayment' ? 'total' : 'extra',
+    amountMode: rule.type === 'monthlyTotalPayment' ? 'totalWithFee' : 'extra',
     strategy: rule.strategy,
     source: rule.source,
     sameDayOrder: rule.type === 'monthlyTotalPayment' ? 'regularFirst' : rule.sameDayOrder,

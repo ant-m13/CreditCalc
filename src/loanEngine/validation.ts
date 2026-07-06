@@ -1,7 +1,7 @@
 import type { EarlyRepayment, GracePeriod, LoanConfig } from './types'
 import { differenceInCalendarDays, parseISO } from 'date-fns'
 import { MAX_CALENDAR_DAYS, MAX_CALENDAR_YEARS, MAX_EARLY_REPAYMENTS, MAX_GRACE_PERIODS, MAX_RATE_CHANGES, MAX_TERM_MONTHS } from './limits'
-import { isRegularPaymentDate } from './dates'
+import { contractualFinalPaymentDate, isRegularPaymentDate, preparePaymentCalendar, totalPaymentPeriods } from './dates'
 import { isISODate } from '../utils/dateValidation'
 
 const finite = (value: unknown) => typeof value === 'number' && Number.isFinite(value)
@@ -16,12 +16,27 @@ const balanceMoments = ['startOfDay', 'endOfDay'] as const
 const repaymentStrategies = ['reduceTerm', 'reducePayment', 'full', 'custom'] as const
 const repaymentSources = ['own', 'subsidy', 'insurance', 'other'] as const
 const sameDayOrders = ['regularFirst', 'earlyFirst'] as const
-const amountModes = ['extra', 'total'] as const
+const amountModes = ['extra', 'totalWithFee'] as const
+const legacyAmountModes = ['total'] as const
 const graceTypes = ['full', 'interestOnly', 'reduced', 'custom'] as const
+const currencies = ['RUB', 'USD', 'EUR', 'CNY'] as const
 
 const daysFromIssue = (issueDate: string, date: string) => differenceInCalendarDays(parseISO(date), parseISO(issueDate))
 const exceedsCalendarHorizon = (issueDate: string, date: string) => daysFromIssue(issueDate, date) > MAX_CALENDAR_DAYS
+const exceedsFourDigitCalendar = (date: string) => !/^\d{4}-\d{2}-\d{2}$/.test(date) || date > '9999-12-31'
 const horizonError = (label: string) => `${label} должна быть в пределах ${MAX_CALENDAR_YEARS} лет от даты выдачи`
+const isTotalWithFeeMode = (amountMode: unknown) => amountMode === 'totalWithFee' || amountMode === 'total'
+const contractCanExceedFourDigitCalendar = (config: LoanConfig) => {
+  if (!isISODate(config.firstPaymentDate) || !finite(config.termMonths)) return false
+  if (config.frequency === 'biweekly') {
+    const firstYear = Number(config.firstPaymentDate.slice(0, 4))
+    return firstYear >= 9996 && totalPaymentPeriods(config) * 14 > (10000 - firstYear) * 366
+  }
+  const [year, month] = config.firstPaymentDate.split('-').map(Number)
+  const periodMonths = config.frequency === 'quarterly' ? 3 : 1
+  const finalMonthIndex = year * 12 + (month - 1) + (totalPaymentPeriods(config) - 1) * periodMonths
+  return finalMonthIndex > 9999 * 12 + 11
+}
 
 export function validateLoan(config: LoanConfig) {
   const errors: string[] = []
@@ -31,6 +46,7 @@ export function validateLoan(config: LoanConfig) {
   if (typeof config.firstPaymentInterestOnly !== 'boolean') errors.push('Настройка первого платежа повреждена')
   if (!oneOf(config.paymentType, paymentTypes)) errors.push('Тип платежа повреждён')
   if (!oneOf(config.frequency, frequencies)) errors.push('Частота платежей повреждена')
+  if (!oneOf(config.currency, currencies)) errors.push('Валюта повреждена')
   if (!oneOf(config.rounding, roundingModes)) errors.push('Округление повреждено')
   if (!finite(config.termMonths) || !(config.termMonths > 0)) errors.push('Срок должен быть больше нуля')
   if (finite(config.termMonths) && !Number.isInteger(config.termMonths)) errors.push('Срок должен быть целым числом месяцев')
@@ -44,6 +60,16 @@ export function validateLoan(config: LoanConfig) {
   if (!isISODate(config.firstPaymentDate)) errors.push('Дата первого платежа должна быть корректной календарной датой')
   if (isISODate(config.issueDate) && isISODate(config.firstPaymentDate) && config.firstPaymentDate <= config.issueDate) errors.push('Первый платёж должен быть после даты выдачи')
   if (isISODate(config.issueDate) && isISODate(config.firstPaymentDate) && config.firstPaymentDate > config.issueDate && exceedsCalendarHorizon(config.issueDate, config.firstPaymentDate)) errors.push(horizonError('Дата первого платежа'))
+  if (isISODate(config.issueDate) && isISODate(config.firstPaymentDate) && config.firstPaymentDate > config.issueDate) {
+    try {
+      if (contractCanExceedFourDigitCalendar(config)) errors.push('Договорная дата закрытия должна оставаться в четырёхзначном календаре')
+      const finalDate = contractualFinalPaymentDate(config)
+      if (exceedsFourDigitCalendar(finalDate)) errors.push('Договорная дата закрытия должна оставаться в четырёхзначном календаре')
+      else if (exceedsCalendarHorizon(config.issueDate, finalDate)) errors.push(horizonError('Договорная дата закрытия'))
+    } catch (error) {
+      errors.push(error instanceof Error ? error.message : 'Не удалось проверить договорную дату закрытия')
+    }
+  }
   if (!config.interest || typeof config.interest !== 'object') {
     errors.push('Правила начисления процентов повреждены')
   } else {
@@ -84,7 +110,7 @@ export function validateScenario(config: LoanConfig, repayments: EarlyRepayment[
     const disabled = repayment.enabled === false || (finite(repayment.amount) && repayment.amount === 0)
     if (repayment.enabled !== undefined && typeof repayment.enabled !== 'boolean') errors.push(`Досрочный платёж №${index + 1}: признак активности повреждён`)
     if (!finite(repayment.amount) || repayment.amount < 0) errors.push(`Досрочный платёж №${index + 1}: сумма не может быть отрицательной`)
-    if (repayment.amountMode !== undefined && !oneOf(repayment.amountMode, amountModes)) errors.push(`Досрочный платёж №${index + 1}: режим суммы повреждён`)
+    if (repayment.amountMode !== undefined && !oneOf(repayment.amountMode, amountModes) && !oneOf(repayment.amountMode, legacyAmountModes)) errors.push(`Досрочный платёж №${index + 1}: режим суммы повреждён`)
     if (repayment.sameDaySequence !== undefined && (!Number.isInteger(repayment.sameDaySequence) || repayment.sameDaySequence < 0)) errors.push(`Досрочный платёж №${index + 1}: порядок применения повреждён`)
     if (!oneOf(repayment.strategy, repaymentStrategies)) errors.push(`Досрочный платёж №${index + 1}: стратегия повреждена`)
     if (!oneOf(repayment.source, repaymentSources)) errors.push(`Досрочный платёж №${index + 1}: источник повреждён`)
@@ -94,13 +120,13 @@ export function validateScenario(config: LoanConfig, repayments: EarlyRepayment[
     else if (isISODate(config.issueDate) && repayment.date < config.issueDate) errors.push(`Досрочный платёж №${index + 1}: дата раньше выдачи кредита`)
     else if (isISODate(config.issueDate) && exceedsCalendarHorizon(config.issueDate, repayment.date)) errors.push(horizonError(`Досрочный платёж №${index + 1}`))
     const isRegularDate = configDatesValid && isISODate(repayment.date) && isRegularPaymentDate(repayment.date, config)
-    const isTotalMode = repayment.amountMode === 'total' || (repayment.amountMode === undefined && isRegularDate)
-    if (!disabled && isTotalMode && repayment.sameDayOrder === 'earlyFirst') errors.push(`Досрочный платёж №${index + 1}: общая сумма по телу и процентам без комиссий может применяться только после регулярного платежа`)
-    if (!disabled && repayment.amountMode === 'total' && isISODate(repayment.date) && !isRegularDate) errors.push(`Досрочный платёж №${index + 1}: общую сумму по телу и процентам без комиссий можно указать только в дату регулярного платежа`)
+    const isTotalMode = isTotalWithFeeMode(repayment.amountMode) || (repayment.amountMode === undefined && isRegularDate)
+    if (!disabled && isTotalMode && repayment.sameDayOrder === 'earlyFirst') errors.push(`Досрочный платёж №${index + 1}: общая сумма списания с учётом комиссии может применяться только после регулярного платежа`)
+    if (!disabled && isTotalWithFeeMode(repayment.amountMode) && isISODate(repayment.date) && !isRegularDate) errors.push(`Досрочный платёж №${index + 1}: общую сумму списания с учётом комиссии можно указать только в дату регулярного платежа`)
     if (!disabled && isTotalMode && isRegularDate) totalRepaymentsByDate.set(repayment.date, (totalRepaymentsByDate.get(repayment.date) ?? 0) + 1)
   })
   totalRepaymentsByDate.forEach((count, date) => {
-    if (count > 1) errors.push(`На дату ${date} можно указать только одну общую сумму по телу и процентам без комиссий`)
+    if (count > 1) errors.push(`На дату ${date} можно указать только одну общую сумму списания с учётом комиссии`)
   })
   const sortedGrace = [...gracePeriods].sort((a, b) => a.startDate.localeCompare(b.startDate))
   sortedGrace.forEach((period, index) => {
@@ -117,5 +143,16 @@ export function validateScenario(config: LoanConfig, repayments: EarlyRepayment[
     if (period.paymentAmount !== undefined && (!finite(period.paymentAmount) || period.paymentAmount < 0)) errors.push(`Льготный период №${index + 1}: индивидуальный платёж должен быть неотрицательным`)
     if (index > 0 && isISODate(period.startDate) && isISODate(sortedGrace[index - 1].endDate) && period.startDate <= sortedGrace[index - 1].endDate) errors.push('Льготные периоды не должны пересекаться')
   })
+  if (errors.length === 0) {
+    try {
+      if (contractCanExceedFourDigitCalendar(config)) errors.push('Договорная дата закрытия должна оставаться в четырёхзначном календаре')
+      const paymentCalendar = preparePaymentCalendar(config, gracePeriods)
+      const finalDate = contractualFinalPaymentDate(config, gracePeriods, paymentCalendar)
+      if (exceedsFourDigitCalendar(finalDate)) errors.push('Договорная дата закрытия должна оставаться в четырёхзначном календаре')
+      else if (exceedsCalendarHorizon(config.issueDate, finalDate)) errors.push(horizonError('Договорная дата закрытия'))
+    } catch (error) {
+      errors.push(error instanceof Error ? error.message : 'Не удалось проверить договорную дату закрытия')
+    }
+  }
   return [...new Set(errors)]
 }

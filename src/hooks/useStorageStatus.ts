@@ -30,7 +30,10 @@ export function useStorageStatus(theme: Theme) {
   }, [])
 
   useEffect(() => {
-    const showLegacyWarning = () => setStorageStatus({ kind: 'failed', message: 'Браузер не дал сохранить данные локально. Экспортируйте расчёт в JSON, чтобы не потерять изменения.' })
+    const showLegacyWarning = (event: Event) => {
+      const detail = (event as CustomEvent<{ message?: string }>).detail
+      setStorageStatus({ kind: 'failed', message: detail?.message ? `Последние изменения не сохранены в localStorage: ${detail.message}` : 'Браузер не дал сохранить данные локально. Экспортируйте расчёт в JSON, чтобы не потерять изменения.' })
+    }
     const updateStatus = (event: Event) => {
       const detail = (event as CustomEvent<{ kind?: StorageStatusKind; message?: string }>).detail
       setStorageStatus({

@@ -89,9 +89,9 @@ describe('миграция локального хранилища', () => {
         },
         repayments: [
           { id: 'bad-date', date: '', amount: 1000, amountMode: 'extra', ...repaymentBase },
-          { id: 'legacy-total', date: '2030-02-01', amount: 4000, ...repaymentBase },
-          { id: 'total-regular', date: '2030-03-01', amount: 5000, amountMode: 'total', ...repaymentBase },
-          { id: 'total-nonregular', date: '2030-02-02', amount: 6000, amountMode: 'total', ...repaymentBase }
+          { id: 'legacy-total', date: '2030-02-01', amount: 100000, ...repaymentBase },
+          { id: 'total-regular', date: '2030-03-01', amount: 110000, amountMode: 'totalWithFee', ...repaymentBase },
+          { id: 'total-nonregular', date: '2030-02-02', amount: 6000, amountMode: 'totalWithFee', ...repaymentBase }
         ],
         repaymentRules: [
           { id: 'bad-rule', name: 'Плохое правило', type: 'monthlyFixed', startDate: '', endDate: '2030-12-01', amount: 1000, strategy: 'reduceTerm', source: 'own', sameDayOrder: 'regularFirst', interestFirst: true, skipMonths: [] },
@@ -118,9 +118,9 @@ describe('миграция локального хранилища', () => {
     expect(normalized.config.rateChangeMode).toBe(defaultConfig.rateChangeMode)
     expect(normalized.config.rateChanges).toEqual([{ id: 'good-rate', date: '2030-04-01', annualRate: 7.5 }])
     expect(normalized.repayments.map((item: any) => item.id)).toEqual(['legacy-total', 'total-nonregular', 'total-regular'])
-    expect(normalized.repayments[0]).toMatchObject({ amountMode: 'total', sameDayOrder: 'regularFirst' })
+    expect(normalized.repayments[0]).toMatchObject({ amountMode: 'totalWithFee', sameDayOrder: 'regularFirst' })
     expect(normalized.repayments[1]).toMatchObject({ amountMode: 'extra' })
-    expect(normalized.repayments[2]).toMatchObject({ amountMode: 'total', sameDayOrder: 'regularFirst' })
+    expect(normalized.repayments[2]).toMatchObject({ amountMode: 'totalWithFee', sameDayOrder: 'regularFirst' })
     expect(normalized.repaymentRules).toHaveLength(1)
     expect(normalized.repaymentRules[0]).toMatchObject({ id: 'good-rule', name: 'Регулярный платёж', skipMonths: ['2030-04'] })
     expect(normalized.gracePeriods).toHaveLength(1)
@@ -134,6 +134,33 @@ describe('миграция локального хранилища', () => {
     expect(normalized.loans).toHaveLength(100)
     expect(normalized.loans[0].id).toBe('valid')
     expect(normalized.activeLoanId).toBe('valid')
+  })
+
+  it('помещает нерассчитываемый восстановленный кредит в карантин с отчётом', () => {
+    const normalized = normalizePersistedState({
+      activeLoanId: 'broken-plan',
+      loans: [{
+        id: 'broken-plan',
+        name: 'Повреждённый план',
+        config: defaultConfig,
+        repayments: [],
+        repaymentRules: [],
+        gracePeriods: [
+          { id: 'g1', startDate: '2026-08-01', endDate: '2026-08-31', type: 'full', extendTerm: true, accrueInterest: true, capitalizeInterest: false },
+          { id: 'g2', startDate: '2026-08-15', endDate: '2026-09-15', type: 'interestOnly', extendTerm: true, accrueInterest: true, capitalizeInterest: false }
+        ],
+        selectedScenario: 'reduceTerm',
+        termUnit: 'months',
+        displayDecimals: 2,
+        appFontSize: 'normal',
+        scheduleFontSize: 'large',
+        theme: 'emerald'
+      }]
+    }) as any
+
+    expect(normalized.activeLoanId).toBe('loan-default')
+    expect(normalized.storageRecoveryReport.join(' ')).toContain('карантин')
+    expect(normalized.storageRecoveryReport.join(' ')).toContain('Льготные периоды')
   })
 
   it('перевыпускает повторяющиеся ID кредитов и вложенных записей', () => {
@@ -231,7 +258,7 @@ describe('миграция локального хранилища', () => {
     const normalized = normalizePersistedState({
       repayments: [...invalidRepayments, { id: 'tail-early', date: defaultConfig.firstPaymentDate, amount: 7777, amountMode: 'extra', ...repaymentBase }],
       repaymentRules: [...invalidRules, { ...rule(10_001), id: 'tail-rule', startDate: defaultConfig.firstPaymentDate, endDate: '2030-12-01' }],
-      gracePeriods: [...invalidGrace, { id: 'tail-grace', startDate: '2026-05-01', endDate: '2026-05-31', type: 'custom', paymentAmount: 1234, extendTerm: true, accrueInterest: true, capitalizeInterest: false }]
+        gracePeriods: [...invalidGrace, { id: 'tail-grace', startDate: '2026-08-01', endDate: '2026-08-31', type: 'custom', paymentAmount: 1234, extendTerm: true, accrueInterest: true, capitalizeInterest: false }]
     }) as any
 
     expect(normalized.repayments).toHaveLength(1)
@@ -254,6 +281,13 @@ describe('миграция локального хранилища', () => {
 })
 
 describe('лимиты store до мутации', () => {
+  it('не оставляет дату первого платежа раньше или в день выдачи при изменении параметров', () => {
+    setStoreLoan(loanProfile())
+    useLoanStore.getState().updateConfig({ issueDate: '2026-08-01' })
+
+    expect(useLoanStore.getState().config.firstPaymentDate > useLoanStore.getState().config.issueDate).toBe(true)
+  })
+
   it('не создаёт 101-й кредит', () => {
     const loans = Array.from({ length: MAX_LOANS }, (_, index) => loanProfile({ id: `loan-${index}`, name: `Кредит ${index}` }))
     const normalized = normalizePersistedState({ loans, activeLoanId: loans[0].id }) as Partial<ReturnType<typeof useLoanStore.getState>>
@@ -286,15 +320,15 @@ describe('лимиты store до мутации', () => {
   })
 
   it('не сохраняет total rule, конфликтующее с ручной total-операцией', () => {
-    setStoreLoan(loanProfile({ repayments: [{ ...repayment(1), amount: 100000, amountMode: 'total', sameDayOrder: 'regularFirst' }] }))
+    setStoreLoan(loanProfile({ repayments: [{ ...repayment(1), amount: 100000, amountMode: 'totalWithFee', sameDayOrder: 'regularFirst' }] }))
     const totalRule = { ...rule(1), type: 'monthlyTotalPayment' as const, amount: 110000, startDate: defaultConfig.firstPaymentDate, endDate: defaultConfig.firstPaymentDate }
     expect(() => useLoanStore.getState().addRepaymentRule(totalRule)).toThrow('только одну общую сумму')
     expect(useLoanStore.getState().repaymentRules).toHaveLength(0)
   })
 
   it('не сохраняет ручную total-операцию, конфликтующую с существующей', () => {
-    const activeTotal = { ...repayment(1), amount: 100000, amountMode: 'total' as const, sameDayOrder: 'regularFirst' as const, sameDaySequence: 0 }
-    const disabledTotal = { ...repayment(2), id: 'disabled-total', amount: 110000, amountMode: 'total' as const, enabled: false, sameDayOrder: 'regularFirst' as const, sameDaySequence: 1 }
+    const activeTotal = { ...repayment(1), amount: 100000, amountMode: 'totalWithFee' as const, sameDayOrder: 'regularFirst' as const, sameDaySequence: 0 }
+    const disabledTotal = { ...repayment(2), id: 'disabled-total', amount: 110000, amountMode: 'totalWithFee' as const, enabled: false, sameDayOrder: 'regularFirst' as const, sameDaySequence: 1 }
     setStoreLoan(loanProfile({ repayments: [activeTotal, disabledTotal] }))
 
     expect(() => useLoanStore.getState().updateRepayment({ ...disabledTotal, enabled: true })).toThrow('только одну общую сумму')
@@ -350,7 +384,7 @@ describe('лимиты store до мутации', () => {
 
     expect(() => useLoanStore.getState().replaceData({
       config: defaultConfig,
-      repayments: [{ ...repayment(2), amount: 1, amountMode: 'total', sameDayOrder: 'regularFirst' }],
+      repayments: [{ ...repayment(2), amount: 1, amountMode: 'totalWithFee', sameDayOrder: 'regularFirst' }],
       repaymentRules: [],
       gracePeriods: [],
       selectedScenario: 'combined',

@@ -124,7 +124,7 @@ describe('импорт резервной копии', () => {
   })
 
   it('восстанавливает временно отключенные досрочные платежи и правила', () => {
-    const disabledRepayment = { ...repayment, enabled: false, amountMode: 'total', sameDayOrder: 'earlyFirst' }
+    const disabledRepayment = { ...repayment, enabled: false, amountMode: 'totalWithFee', sameDayOrder: 'earlyFirst' }
     const disabledRule = { id: 'rule-off', name: 'Пауза', type: 'monthlyFixed', startDate: '2026-08-15', endDate: '2026-12-15', amount: 20000, enabled: false, strategy: 'reduceTerm', source: 'own', sameDayOrder: 'regularFirst', interestFirst: true, skipMonths: [] }
     const result = parseLoanBackup(JSON.stringify({ config: defaultConfig, repayments: [disabledRepayment], repaymentRules: [disabledRule], gracePeriods: [], selectedScenario: 'combined' }))
     expect(result.repayments[0]).toMatchObject({ amount: 8704.99, enabled: false })
@@ -168,21 +168,21 @@ describe('импорт резервной копии', () => {
   })
 
   it('отклоняет общую сумму строки банка с порядком earlyFirst', () => {
-    expect(() => parseLoanBackup(JSON.stringify({ config: defaultConfig, repayments: [{ ...repayment, amountMode: 'total', sameDayOrder: 'earlyFirst' }], gracePeriods: [] }))).toThrow('общая сумма')
+    expect(() => parseLoanBackup(JSON.stringify({ config: defaultConfig, repayments: [{ ...repayment, amountMode: 'totalWithFee', sameDayOrder: 'earlyFirst' }], gracePeriods: [] }))).toThrow('общая сумма')
   })
 
   it('отклоняет общую сумму строки банка не в дату регулярного платежа', () => {
     const config = { ...defaultConfig, issueDate: '2026-01-01', firstPaymentDate: '2026-01-26', paymentDay: 26 }
-    expect(() => parseLoanBackup(JSON.stringify({ config, repayments: [{ ...repayment, date: '2026-01-27', amountMode: 'total', sameDayOrder: 'regularFirst' }], gracePeriods: [] }))).toThrow('дату регулярного платежа')
+    expect(() => parseLoanBackup(JSON.stringify({ config, repayments: [{ ...repayment, date: '2026-01-27', amountMode: 'totalWithFee', sameDayOrder: 'regularFirst' }], gracePeriods: [] }))).toThrow('дату регулярного платежа')
   })
 
   it('нормализует legacy amountMode до preview и не допускает две общие суммы на дату', () => {
     const config = { ...defaultConfig, issueDate: '2026-01-01', firstPaymentDate: '2026-01-26', paymentDay: 26 }
     const legacy = parseLoanBackup(JSON.stringify({ config, repayments: [{ ...repayment, date: '2026-01-26', amount: 100000, amountMode: undefined }], gracePeriods: [] }))
-    expect(legacy.repayments[0]).toMatchObject({ amountMode: 'total', sameDayOrder: 'regularFirst' })
+    expect(legacy.repayments[0]).toMatchObject({ amountMode: 'totalWithFee', sameDayOrder: 'regularFirst' })
     expect(() => parseLoanBackup(JSON.stringify({ config, repayments: [
-      { ...repayment, id: 'total-1', date: '2026-01-26', amountMode: 'total', sameDayOrder: 'regularFirst' },
-      { ...repayment, id: 'total-2', date: '2026-01-26', amountMode: 'total', sameDayOrder: 'regularFirst' }
+      { ...repayment, id: 'total-1', date: '2026-01-26', amountMode: 'totalWithFee', sameDayOrder: 'regularFirst' },
+      { ...repayment, id: 'total-2', date: '2026-01-26', amountMode: 'totalWithFee', sameDayOrder: 'regularFirst' }
     ], gracePeriods: [] }))).toThrow('дублирующийся ID: 2026-01-26')
   })
 

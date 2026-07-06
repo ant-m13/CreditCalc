@@ -148,7 +148,7 @@ describe('loan engine', () => {
   it('не начисляет комиссию за total operation после закрывающего регулярного платежа', () => {
     const closingConfig: LoanConfig = { ...config, principal: 100_000, annualRate: 0, termMonths: 1, issueDate: '2024-01-01', firstPaymentDate: '2024-02-01', paymentDay: 1, firstPaymentInterestOnly: false, earlyRepaymentFeePercent: 10 }
     const schedule = generateBaseSchedule(closingConfig, {
-      earlyRepayments: [early({ id: 'ignored-total', date: '2024-02-01', amount: 150_000, amountMode: 'total', strategy: 'reduceTerm', sameDaySequence: 0, sameDayOrder: 'regularFirst' })]
+      earlyRepayments: [early({ id: 'ignored-total', date: '2024-02-01', amount: 150_000, amountMode: 'totalWithFee', strategy: 'reduceTerm', sameDaySequence: 0, sameDayOrder: 'regularFirst' })]
     })
     const row = schedule.find(item => item.date === '2024-02-01')!
 
@@ -158,6 +158,18 @@ describe('loan engine', () => {
     expect(row.feePaid).toBe(0)
     expect(row.cashFlowTotal).toBe(100000)
     expect(row.eventTypes).toContain('earlyIgnored')
+  })
+
+  it('показывает операции после даты закрытия как пропущенные outcome-строки', () => {
+    const closingConfig: LoanConfig = { ...config, principal: 100_000, annualRate: 0, termMonths: 1, issueDate: '2024-01-01', firstPaymentDate: '2024-02-01', paymentDay: 1, firstPaymentInterestOnly: false }
+    const schedule = generateBaseSchedule(closingConfig, {
+      earlyRepayments: [early({ id: 'late-after-close', date: '2024-03-01', amount: 50_000, strategy: 'reduceTerm' })]
+    })
+    const row = schedule.find(item => item.date === '2024-03-01')!
+
+    expect(row.eventTypes).toEqual(['earlyIgnored'])
+    expect(row.earlyPayment).toBe(0)
+    expect(row.repaymentOutcomes).toEqual([expect.objectContaining({ repaymentId: 'late-after-close', requestedAmount: 50_000, appliedAmount: 0, unusedAmount: 50_000, reason: 'debtClosed' })])
   })
   it('не закрывает кредит, если основной долг погашен, но остались отложенные проценты', () => {
     const c = { ...config, principal: 1_000_000, termMonths: 12, firstPaymentDate: '2024-02-01', paymentDay: 1 }
@@ -212,6 +224,7 @@ describe('loan engine', () => {
     expect(endDaySegment).toMatchObject({ from: '2024-01-15', to: '2024-01-15', days: 1, balance: 300_000 })
     expect(endDaySegment.rawInterest).toBeCloseTo(300_000 * 0.10 / 365, 6)
     expect(row.interest).toBeCloseTo((365_000 * 0.10 * 13 / 365) + (300_000 * 0.10 / 365), 2)
+    expect(row.days).toBe(row.audit!.interestSegments.reduce((sum, segment) => sum + segment.days, 0))
   })
 
   it('совпадает с банковским графиком после всех досрочных платежей', () => {
@@ -221,8 +234,8 @@ describe('loan engine', () => {
       early({id:'b2',date:'2026-01-26',amount:8704.99,amountMode:'extra'}),
       early({id:'b3',date:'2026-02-26',amount:35528.86,amountMode:'extra'}),
       early({id:'b4',date:'2026-03-27',amount:12342.60,amountMode:'extra'}),
-      early({id:'b5',date:'2026-04-26',amount:53350.43,amountMode:'total'}),
-      early({id:'b6',date:'2026-05-26',amount:75182.14,amountMode:'total'}),
+      early({id:'b5',date:'2026-04-26',amount:53350.43,amountMode:'totalWithFee'}),
+      early({id:'b6',date:'2026-05-26',amount:75182.14,amountMode:'totalWithFee'}),
       early({id:'b7',date:'2026-06-26',amount:36153.56,amountMode:'extra'})
     ]
     const s=generateBaseSchedule(bank,{earlyRepayments:bankEarly})
@@ -333,7 +346,7 @@ describe('loan engine', () => {
     const bank:LoanConfig={...config,principal:2375000,annualRate:8.1,issueDate:'2020-11-21',firstPaymentDate:'2020-12-21',firstPaymentInterestOnly:false,termMonths:240,paymentDay:21,interest:{...config.interest,method:'daily',dayCountBasis:'actualActual',includePaymentDate:true,periodStart:'exclusive',balanceMoment:'startOfDay'}}
     const repayments: EarlyRepayment[] = [
       early({id:'mix-1',date:'2026-03-22',amount:11944,strategy:'reduceTerm'}),
-      early({id:'mix-2',date:'2026-04-21',amount:26069.87,amountMode:'total',strategy:'reduceTerm'}),
+      early({id:'mix-2',date:'2026-04-21',amount:26069.87,amountMode:'totalWithFee',strategy:'reduceTerm'}),
       early({id:'mix-3',date:'2026-05-21',amount:26073.59,strategy:'reduceTerm'}),
       early({id:'mix-4',date:'2026-05-21',amount:10,strategy:'reducePayment'})
     ]
@@ -525,6 +538,14 @@ describe('loan engine', () => {
     const reduced=result.scenarios.find(s=>s.id==='reducePayment')!
     expect(reduced.monthlyPayment).toBeLessThan(result.scenarios[0].monthlyPayment)
     expect(reduced.schedule.some(x=>x.cumulativeSavings>0)).toBe(true)
+  })
+
+  it('считает срок и выигрыш в днях', () => {
+    const result = compareScenarios({ ...config, frequency: 'biweekly', termMonths: 24, issueDate: '2024-01-01', firstPaymentDate: '2024-01-15', paymentDay: 15 }, [early({ date: '2024-03-11', amount: 500_000 })])
+    const reduced = result.scenarios.find(s => s.id === 'reduceTerm')!
+    expect(reduced.termDays).toBeGreaterThan(0)
+    expect(reduced.daysSaved).toBeGreaterThanOrEqual(reduced.monthsSaved * 28)
+    expect(result.fastest.termDays).toBe(Math.min(...result.scenarios.map(s => s.termDays)))
   })
 
   it('выражает длительность квартального графика в месяцах, а не периодах', () => {
@@ -848,9 +869,9 @@ describe('early repayment amount modes', () => {
     expect(row?.earlyPayment).toBe(100_000);
   });
 
-  it('amountMode: "total" — включает регулярный платёж', () => {
+  it('amountMode: "totalWithFee" — включает регулярный платёж', () => {
     const s = generateBaseSchedule(config, {
-      earlyRepayments: [early({ amountMode: 'total', amount: 200_000 })],
+      earlyRepayments: [early({ amountMode: 'totalWithFee', amount: 200_000 })],
     });
     const row = s.find(r => r.date === '2024-08-15');
     const regularPayment = row?.payment || 0;
@@ -858,9 +879,19 @@ describe('early repayment amount modes', () => {
     expect(earlyPart + regularPayment).toBeCloseTo(200_000, 2);
   });
 
-  it('amountMode: "total" не включает комиссии в введённую сумму', () => {
+  it('amountMode: "totalWithFee" включает комиссию досрочного погашения в введённую сумму', () => {
+    const s = generateBaseSchedule({ ...config, earlyRepaymentFeePercent: 10 }, {
+      earlyRepayments: [early({ amountMode: 'totalWithFee', amount: 200_000 })],
+    });
+    const row = s.find(r => r.date === '2024-08-15')!;
+    expect(row.cashFlowTotal).toBeCloseTo(200_000, 2);
+    expect(row.payment + row.earlyPayment).toBeLessThan(200_000);
+    expect(row.feePaid).toBeGreaterThan(0);
+  });
+
+  it('amountMode: "totalWithFee" не включает ежемесячную комиссию в введённую сумму', () => {
     const s = generateBaseSchedule({ ...config, monthlyFee: 1000 }, {
-      earlyRepayments: [early({ amountMode: 'total', amount: 200_000 })],
+      earlyRepayments: [early({ amountMode: 'totalWithFee', amount: 200_000 })],
     });
     const row = s.find(r => r.date === '2024-08-15')!;
     expect(row.payment + row.earlyPayment).toBeCloseTo(200_000, 2);
@@ -868,23 +899,23 @@ describe('early repayment amount modes', () => {
     expect(row.cashFlowTotal).toBeCloseTo(201_000, 2);
   });
 
-  it('amountMode: "total" доступен только в дату регулярного платежа', () => {
+  it('amountMode: "totalWithFee" доступен только в дату регулярного платежа', () => {
     expect(() => generateBaseSchedule(config, {
-      earlyRepayments: [early({ date: '2024-08-16', amountMode: 'total', amount: 200_000 })],
+      earlyRepayments: [early({ date: '2024-08-16', amountMode: 'totalWithFee', amount: 200_000 })],
     })).toThrow('дату регулярного платежа')
   })
 
-  it('amountMode: "total" должен быть не меньше обязательного платежа', () => {
+  it('amountMode: "totalWithFee" должен быть не меньше обязательного платежа', () => {
     expect(() => generateBaseSchedule(config, {
-      earlyRepayments: [early({ amountMode: 'total', amount: 1 })],
+      earlyRepayments: [early({ amountMode: 'totalWithFee', amount: 1 })],
     })).toThrow('не меньше обязательного платежа')
   })
 
-  it('amountMode: "total" разрешён только один раз на дату', () => {
+  it('amountMode: "totalWithFee" разрешён только один раз на дату', () => {
     expect(() => generateBaseSchedule(config, {
       earlyRepayments: [
-        early({ id: 't1', amountMode: 'total', amount: 200_000 }),
-        early({ id: 't2', amountMode: 'total', amount: 250_000 }),
+        early({ id: 't1', amountMode: 'totalWithFee', amount: 200_000 }),
+        early({ id: 't2', amountMode: 'totalWithFee', amount: 250_000 }),
       ],
     })).toThrow('только одну общую сумму')
   })
@@ -933,6 +964,11 @@ describe('edge cases', () => {
     expect(() => generateBaseSchedule({ ...config, issueDate: '1000-01-01', firstPaymentDate: '9999-12-31' })).toThrow('120 лет')
   })
 
+  it('отклоняет договорную дату закрытия за пределами четырёхзначного календаря', () => {
+    const errors = validateScenario({ ...config, issueDate: '9999-01-01', firstPaymentDate: '9999-02-01', termMonths: 12, paymentDay: 1 }, [], [])
+    expect(errors.some(error => error.includes('четырёхзначном календаре'))).toBe(true)
+  })
+
   it('комиссия за досрочное погашение выше 100% — ошибка валидации', () => expect(() => generateBaseSchedule({ ...config, earlyRepaymentFeePercent: 150 })).toThrow('0 до 100'))
 
   it('валидатор отклоняет пустые даты досрочных платежей и льготных периодов', () => {
@@ -942,7 +978,7 @@ describe('edge cases', () => {
   })
 
   it('валидатор не падает, если дата первого платежа повреждена при существующей досрочке', () => {
-    const errors = validateScenario({ ...config, firstPaymentDate: '' }, [early({ amountMode: 'total' })], [])
+    const errors = validateScenario({ ...config, firstPaymentDate: '' }, [early({ amountMode: 'totalWithFee' })], [])
     expect(errors.some(error => error.includes('Дата первого платежа'))).toBe(true)
     expect(errors.some(error => error.includes('дату регулярного платежа'))).toBe(true)
   })

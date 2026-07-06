@@ -1,9 +1,9 @@
-import { useDeferredValue, useMemo } from 'react'
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import { addMonths, format, parseISO } from 'date-fns'
 import { ru } from 'date-fns/locale'
-import { compareScenarios, preparePaymentCalendar, sortRepaymentsByApplicationOrder, validateScenario, type EarlyRepayment, type GracePeriod, type LoanConfig, type PaymentScheduleItem } from '../loanEngine'
-import { expandRepaymentRules, type RepaymentRule } from '../repaymentRules'
-import type { LoanProfile } from '../store'
+import type { EarlyRepayment, GracePeriod, LoanConfig, PaymentScheduleItem } from '../loanEngine'
+import type { RepaymentRule } from '../repaymentRules'
+import { buildLoanCalculation, type LoanCalculationResult } from '../loanCalculation'
 import { isISODate } from '../utils/dateValidation'
 
 export interface LoanCalculationInput {
@@ -16,13 +16,13 @@ export interface LoanCalculationInput {
   loanId?: string
 }
 
-export const buildLoanCalculation = (loan: LoanProfile) => {
-  const paymentCalendar = preparePaymentCalendar(loan.config, loan.gracePeriods)
-  const generated = expandRepaymentRules(loan.config, loan.repaymentRules, loan.gracePeriods, paymentCalendar)
-  const repayments = sortRepaymentsByApplicationOrder([...loan.repayments, ...generated])
-  const comparison = compareScenarios(loan.config, repayments, loan.gracePeriods, paymentCalendar)
-  const selected = comparison.scenarios.find(s => s.id === loan.selectedScenario) ?? comparison.scenarios[1]
-  return { generated, repayments, comparison, selected }
+const emptyResult: LoanCalculationResult = {
+  generatedRepayments: [],
+  allRepayments: [],
+  errors: [],
+  comparison: null,
+  selected: null,
+  base: null
 }
 
 export function useLoanCalculation({ config, repayments, repaymentRules, gracePeriods, selectedScenario, displayDecimals, loanId }: LoanCalculationInput) {
@@ -32,70 +32,49 @@ export function useLoanCalculation({ config, repayments, repaymentRules, gracePe
   )
   const calculationSnapshot = useDeferredValue(liveSnapshot)
   const isStale = calculationSnapshot !== liveSnapshot
-  const calculationConfig = calculationSnapshot.config
-  const calculationRepayments = calculationSnapshot.repayments
-  const calculationRepaymentRules = calculationSnapshot.repaymentRules
-  const calculationGracePeriods = calculationSnapshot.gracePeriods
 
-  const validationErrors = useMemo(
-    () => validateScenario(calculationConfig, calculationRepayments, calculationGracePeriods),
-    [calculationConfig, calculationRepayments, calculationGracePeriods]
+  const syncResult = useMemo(
+    () => typeof Worker === 'undefined' ? buildLoanCalculation(calculationSnapshot) : null,
+    [calculationSnapshot]
   )
+  const [workerResult, setWorkerResult] = useState<LoanCalculationResult | null>(syncResult)
+  const [workerPending, setWorkerPending] = useState(false)
+  const workerRef = useRef<Worker | null>(null)
+  const revisionRef = useRef(0)
 
-  const paymentCalendarResult = useMemo(() => {
-    if (validationErrors.length > 0) return { calendar: null, error: null as string | null }
-    try {
-      return { calendar: preparePaymentCalendar(calculationConfig, calculationGracePeriods), error: null }
-    } catch (error) {
-      return { calendar: null, error: error instanceof Error ? error.message : 'Не удалось построить календарь платежей' }
+  useEffect(() => {
+    if (typeof Worker === 'undefined') {
+      setWorkerResult(syncResult)
+      setWorkerPending(false)
+      return
     }
-  }, [calculationConfig, calculationGracePeriods, validationErrors])
-
-  const generatedResult = useMemo(() => {
-    if (validationErrors.length > 0) return { items: [] as EarlyRepayment[], error: null as string | null }
-    if (!paymentCalendarResult.calendar) return { items: [] as EarlyRepayment[], error: paymentCalendarResult.error }
-    try {
-      return { items: expandRepaymentRules(calculationConfig, calculationRepaymentRules, calculationGracePeriods, paymentCalendarResult.calendar), error: null as string | null }
-    } catch (error) {
-      return { items: [] as EarlyRepayment[], error: error instanceof Error ? error.message : 'Не удалось создать операции по правилам досрочных платежей' }
+    workerRef.current ??= new Worker(new URL('../loanCalculation.worker.ts', import.meta.url), { type: 'module' })
+    const worker = workerRef.current
+    const revision = revisionRef.current + 1
+    revisionRef.current = revision
+    setWorkerPending(true)
+    worker.onmessage = (event: MessageEvent<{ revision: number; result: LoanCalculationResult }>) => {
+      if (event.data.revision !== revisionRef.current) return
+      setWorkerResult(event.data.result)
+      setWorkerPending(false)
     }
-  }, [calculationConfig, calculationRepaymentRules, calculationGracePeriods, validationErrors, paymentCalendarResult])
-
-  const generatedRepayments = generatedResult.items
-
-  const activeManualRepayments = useMemo(
-    () => calculationRepayments.filter(item => item.enabled !== false && item.amount > 0),
-    [calculationRepayments]
-  )
-
-  const allRepayments = useMemo(
-    () => sortRepaymentsByApplicationOrder([...activeManualRepayments, ...generatedRepayments]),
-    [activeManualRepayments, generatedRepayments]
-  )
-
-  const preliminaryErrors = useMemo(
-    () => generatedResult.error ? [...validationErrors, generatedResult.error] : validationErrors,
-    [validationErrors, generatedResult.error]
-  )
-
-  const comparisonResult = useMemo(() => {
-    if (preliminaryErrors.length > 0) return { comparison: null, error: null as string | null }
-    if (!paymentCalendarResult.calendar) return { comparison: null, error: paymentCalendarResult.error }
-    try {
-      return { comparison: compareScenarios(calculationConfig, allRepayments, calculationGracePeriods, paymentCalendarResult.calendar), error: null }
-    } catch (error) {
-      return { comparison: null, error: error instanceof Error ? error.message : 'Не удалось построить график платежей' }
+    worker.onerror = () => {
+      if (revision !== revisionRef.current) return
+      setWorkerResult(buildLoanCalculation(calculationSnapshot))
+      setWorkerPending(false)
     }
-  }, [calculationConfig, allRepayments, calculationGracePeriods, preliminaryErrors, paymentCalendarResult])
+    worker.postMessage({ revision, snapshot: calculationSnapshot })
+  }, [calculationSnapshot, syncResult])
 
-  const errors = useMemo(
-    () => comparisonResult.error ? [...preliminaryErrors, comparisonResult.error] : preliminaryErrors,
-    [preliminaryErrors, comparisonResult.error]
-  )
+  useEffect(() => () => workerRef.current?.terminate(), [])
 
-  const comparison = comparisonResult.comparison
-  const selected = comparison?.scenarios.find(s => s.id === calculationSnapshot.selectedScenario) ?? comparison?.scenarios[1] ?? null
-  const base = comparison?.scenarios[0] ?? null
+  const result = workerResult ?? syncResult ?? emptyResult
+  const generatedRepayments = result.generatedRepayments
+  const allRepayments = result.allRepayments
+  const errors = result.errors
+  const comparison = result.comparison
+  const selected = result.selected
+  const base = result.base
 
   const overviewChartData = useMemo(() => {
     if (!base || !selected) return []
@@ -136,6 +115,6 @@ export function useLoanCalculation({ config, repayments, repaymentRules, gracePe
     overviewChartData,
     defaultEarlyDate,
     calculationSnapshot,
-    isStale
+    isStale: isStale || workerPending
   }
 }
