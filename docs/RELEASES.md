@@ -98,16 +98,16 @@ pnpm build
 pnpm audit --prod
 ```
 
-5. Создать коммит и отправить `main`.
+5. Создать release-ветку, коммит и PR в `main`.
 
-После push workflow создаст тег и GitHub Release с архивом готового сайта.
+После merge release-ветки в `main` workflow создаст тег и GitHub Release с архивом готового сайта.
 
 ## Ручной релиз
 
 Если тег уже существует, можно вручную запустить `release-dist.yml` и указать тег, например:
 
 ```text
-v1.5.7
+v1.6.6
 ```
 
 Workflow соберёт проект именно из этого тега и обновит/создаст релиз с архивом `credit-calculator-dist.zip`.
