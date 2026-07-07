@@ -38,6 +38,18 @@ class DeferredWorker {
   }
 }
 
+class ConstructorThrowingWorker {
+  constructor() {
+    throw new Error('Module worker is blocked')
+  }
+}
+
+class PostMessageThrowingWorker extends DeferredWorker {
+  postMessage() {
+    throw new Error('postMessage is blocked')
+  }
+}
+
 const loanInput = (patch: Partial<LoanCalculationInput> = {}): LoanCalculationInput => ({
   config: defaultConfig,
   repayments: [],
@@ -94,5 +106,27 @@ describe('useLoanCalculation', () => {
     await act(async () => worker.resolve(1))
     await waitFor(() => expect(current().isStale).toBe(false))
     expect(current().calculationSnapshot.config.currency).toBe('USD')
+  })
+
+  it('falls back to sync calculation when module worker construction fails', async () => {
+    vi.stubGlobal('Worker', ConstructorThrowingWorker)
+
+    render(<Probe {...loanInput({ config: { ...defaultConfig, currency: 'USD' } })}/>)
+
+    await waitFor(() => expect(current().isStale).toBe(false))
+    expect(current().calculationSnapshot.config.currency).toBe('USD')
+    expect(current().selected).not.toBeNull()
+    expect(screen.getByTestId('snapshot-currency').textContent).toBe('USD')
+  })
+
+  it('falls back to sync calculation when worker postMessage fails', async () => {
+    vi.stubGlobal('Worker', PostMessageThrowingWorker)
+
+    render(<Probe {...loanInput({ config: { ...defaultConfig, currency: 'EUR' } })}/>)
+
+    await waitFor(() => expect(current().isStale).toBe(false))
+    expect(current().calculationSnapshot.config.currency).toBe('EUR')
+    expect(current().selected).not.toBeNull()
+    expect(PostMessageThrowingWorker.instances[0].terminate).toHaveBeenCalledTimes(1)
   })
 })

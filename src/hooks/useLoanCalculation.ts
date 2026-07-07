@@ -1,4 +1,4 @@
-import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import { addMonths, format, parseISO } from 'date-fns'
 import { ru } from 'date-fns/locale'
 import type { EarlyRepayment, GracePeriod, LoanConfig, PaymentScheduleItem } from '../loanEngine'
@@ -81,24 +81,42 @@ export function useLoanCalculation({ config, repayments, repaymentRules, gracePe
   const [workerEnvelope, setWorkerEnvelope] = useState<CalculationEnvelope | null>(syncEnvelope)
   const workerRef = useRef<Worker | null>(null)
 
+  const setSyncFallback = useCallback((revision: string, snapshot: CalculationSnapshot) => {
+    setWorkerEnvelope({ revision, snapshot, result: buildLoanCalculation(snapshot) })
+  }, [])
+
   useEffect(() => {
     if (typeof Worker === 'undefined') {
       setWorkerEnvelope(syncEnvelope)
       return
     }
-    workerRef.current ??= new Worker(new URL('../loanCalculation.worker.ts', import.meta.url), { type: 'module' })
-    const worker = workerRef.current
     const revision = requestedRevision
     const snapshot = calculationSnapshot
+    let worker = workerRef.current
+    if (!worker) {
+      try {
+        worker = new Worker(new URL('../loanCalculation.worker.ts', import.meta.url), { type: 'module' })
+        workerRef.current = worker
+      } catch {
+        setSyncFallback(revision, snapshot)
+        return
+      }
+    }
     worker.onmessage = (event: MessageEvent<{ revision: string; result: LoanCalculationResult }>) => {
       if (event.data.revision !== revision) return
       setWorkerEnvelope({ revision, snapshot, result: event.data.result })
     }
     worker.onerror = () => {
-      setWorkerEnvelope({ revision, snapshot, result: buildLoanCalculation(snapshot) })
+      setSyncFallback(revision, snapshot)
     }
-    worker.postMessage({ revision, snapshot })
-  }, [calculationSnapshot, requestedRevision, syncEnvelope])
+    try {
+      worker.postMessage({ revision, snapshot })
+    } catch {
+      worker.terminate()
+      workerRef.current = null
+      setSyncFallback(revision, snapshot)
+    }
+  }, [calculationSnapshot, requestedRevision, setSyncFallback, syncEnvelope])
 
   useEffect(() => () => workerRef.current?.terminate(), [])
 
