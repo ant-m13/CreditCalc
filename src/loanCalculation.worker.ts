@@ -1,7 +1,7 @@
 import { buildLoanCalculation, type LoanCalculationSource } from './loanCalculation'
 
 interface CalculationRequest {
-  revision: number
+  revision: string
   snapshot: LoanCalculationSource
 }
 

@@ -536,8 +536,16 @@ export const useLoanStore = create<LoanState>()(persist((set) => ({
   loans: [initialLoan],
   activeLoanId: initialLoan.id,
   storageRecoveryReport: [],
-  updateConfig: (patch) => set(s => syncActive(s, { config: normalizeConfigPatch(s.config, patch) })),
-  updateInterest: (patch) => set(s => syncActive(s, { config: { ...s.config, interest: { ...s.config.interest, ...patch } } })),
+  updateConfig: (patch) => set(s => {
+    const config = normalizeConfigPatch(s.config, patch)
+    assertRepaymentPlanValid(config, s.repayments, s.repaymentRules, s.gracePeriods)
+    return syncActive(s, { config })
+  }),
+  updateInterest: (patch) => set(s => {
+    const config = { ...s.config, interest: { ...s.config.interest, ...patch } }
+    assertRepaymentPlanValid(config, s.repayments, s.repaymentRules, s.gracePeriods)
+    return syncActive(s, { config })
+  }),
   addRepayment: (repayment) => set(s => {
     if (s.repayments.length >= MAX_EARLY_REPAYMENTS) throw new Error(`Можно добавить не более ${MAX_EARLY_REPAYMENTS} разовых платежей`)
     const repayments = sortRepayments([...s.repayments, withRepaymentSequence(s.repayments, repayment)])

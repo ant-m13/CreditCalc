@@ -25,6 +25,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Install Playwright browser
+        run: pnpm exec playwright install --with-deps chromium
+
       - name: Typecheck
         run: pnpm typecheck
 
@@ -38,3 +41,6 @@ jobs:
         run: pnpm build
         env:
           VITE_BASE_PATH: ./
+
+      - name: Run production browser E2E
+        run: pnpm test:e2e

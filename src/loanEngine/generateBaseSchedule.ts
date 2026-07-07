@@ -177,16 +177,22 @@ export function generateBaseSchedule(config: LoanConfig, options: Options = {}):
     const applyEarly = (early: EarlyRepayment, interestDue: Decimal, remainingPeriods: number, amountOverride?: Decimal.Value, afterCurrentPayment = false) => {
       const strategy = options.forcedStrategy ?? early.strategy
       const earlyAmount = Decimal.max(0, amountOverride ?? early.amount)
+      const requestedAmount = new Decimal(early.amount)
+      const regularPaymentApplied = Decimal.max(0, requestedAmount.minus(earlyAmount))
+      const regularOutcomePart = regularPaymentApplied.gt(0)
+        ? { regularPaymentApplied: num(regularPaymentApplied, config.rounding) }
+        : {}
       if (balance.lte(0) && interestDue.lte(0)) {
         const outcome: RepaymentApplicationOutcome = {
           repaymentId: early.id,
           date: early.date,
-          requestedAmount: num(new Decimal(early.amount), config.rounding),
+          requestedAmount: num(requestedAmount, config.rounding),
+          ...regularOutcomePart,
           appliedAmount: 0,
           appliedInterest: 0,
           appliedPrincipal: 0,
           fee: 0,
-          unusedAmount: num(new Decimal(early.amount), config.rounding),
+          unusedAmount: num(earlyAmount, config.rounding),
           reason: 'debtClosed'
         }
         return {
@@ -233,7 +239,8 @@ export function generateBaseSchedule(config: LoanConfig, options: Options = {}):
         outcome: {
           repaymentId: early.id,
           date: early.date,
-          requestedAmount: num(new Decimal(early.amount), config.rounding),
+          requestedAmount: num(requestedAmount, config.rounding),
+          ...regularOutcomePart,
           appliedAmount: num(appliedAmount, config.rounding),
           appliedInterest: num(paidInterest, config.rounding),
           appliedPrincipal: num(paidPrincipal, config.rounding),
@@ -492,11 +499,10 @@ export function generateBaseSchedule(config: LoanConfig, options: Options = {}):
   if (balance.gt(0) || deferredInterest.gt(0)) {
     throw new Error(`График не закрывает кредит в допустимое количество строк (${MAX_SCHEDULE_ROWS})`)
   }
+  const ignoredAfterCloseOutcomes: RepaymentApplicationOutcome[] = []
   while (repaymentIndex < repayments.length) {
-    const eventDate = repayments[repaymentIndex].date
-    const sameDate: EarlyRepayment[] = []
-    while (repaymentIndex < repayments.length && repayments[repaymentIndex].date === eventDate) sameDate.push(repayments[repaymentIndex++])
-    const repaymentOutcomes: RepaymentApplicationOutcome[] = sameDate.map(early => ({
+    const early = repayments[repaymentIndex++]
+    ignoredAfterCloseOutcomes.push({
       repaymentId: early.id,
       date: early.date,
       requestedAmount: num(new Decimal(early.amount), config.rounding),
@@ -506,36 +512,11 @@ export function generateBaseSchedule(config: LoanConfig, options: Options = {}):
       fee: 0,
       unusedAmount: num(new Decimal(early.amount), config.rounding),
       reason: 'debtClosed'
-    }))
-    pushScheduleRow({
-      number: ++rowNumber,
-      date: eventDate,
-      days: 0,
-      openingBalance: 0,
-      payment: 0,
-      interest: 0,
-      principal: 0,
-      earlyPayment: 0,
-      interestAccrued: 0,
-      interestPaid: 0,
-      principalPaid: 0,
-      feePaid: 0,
-      deferredInterestOpening: 0,
-      deferredInterestClosing: 0,
-      cashFlowTotal: 0,
-      closingBalance: 0,
-      cumulativeInterest: num(cumulativeInterest, config.rounding),
-      cumulativeSavings: 0,
-      fee: 0,
-      comment: sameDate.map(early => early.comment ? `${early.comment} · пропущено: долг уже закрыт` : 'Пропущено: долг уже закрыт').join('; '),
-      event: 'Операция пропущена · долг уже закрыт',
-      eventTypes: ['earlyIgnored'],
-      paymentRecalculated: false,
-      fullyClosedByEarlyRepayment: false,
-      isRegularPayment: false,
-      isGracePayment: false,
-      repaymentOutcomes
     })
+  }
+  const closingRow = schedule.at(-1)
+  if (closingRow && ignoredAfterCloseOutcomes.length > 0) {
+    closingRow.repaymentOutcomes = [...(closingRow.repaymentOutcomes ?? []), ...ignoredAfterCloseOutcomes]
   }
   return schedule
 }

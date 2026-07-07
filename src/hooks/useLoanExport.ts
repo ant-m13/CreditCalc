@@ -1,7 +1,6 @@
 import { useCallback } from 'react'
 import type { LoanBackupData } from '../importExport'
 import type { PaymentScheduleItem } from '../loanEngine'
-import { buildLoanCalculationOrThrow } from '../loanCalculation'
 import { buildShareUrl, createLoanSnapshot, decodeSharedCalculation, encodeSharedCalculation, looksLikeSharedCalculationUrl, normalizeSharedCalculationPayload } from '../shareCalculation'
 import { loanToBackupData, type LoanProfile } from '../store'
 import type { ImportStatus } from './useLoanImport'
@@ -9,6 +8,8 @@ import type { ImportStatus } from './useLoanImport'
 interface UseLoanExportOptions {
   loans: LoanProfile[]
   activeLoanId: string
+  calculatedSchedule: PaymentScheduleItem[] | null
+  calculatedExportsReady: boolean
   setImportStatus: (status: ImportStatus | null) => void
 }
 
@@ -32,7 +33,7 @@ const copyText = async (text: string) => {
 const escapeHtml = (value: unknown) =>
   String(value).replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]!))
 
-export function useLoanExport({ loans, activeLoanId, setImportStatus }: UseLoanExportOptions) {
+export function useLoanExport({ loans, activeLoanId, calculatedSchedule, calculatedExportsReady, setImportStatus }: UseLoanExportOptions) {
   const activeLoan = useCallback(() => loans.find(item => item.id === activeLoanId) ?? loans[0], [loans, activeLoanId])
   const print = useCallback(() => window.print(), [])
 
@@ -48,11 +49,13 @@ export function useLoanExport({ loans, activeLoanId, setImportStatus }: UseLoanE
       body = JSON.stringify({ ...createLoanSnapshot(loanToBackupData(loan)), exportedAt: new Date().toISOString() }, null, 2)
       type = 'application/json'
     } else {
-      let schedule: PaymentScheduleItem[]
-      try {
-        schedule = buildLoanCalculationOrThrow(loan).selected.schedule
-      } catch (error) {
-        setImportStatus({ kind: 'error', text: error instanceof Error ? error.message : 'Не удалось построить график для экспорта' })
+      if (!calculatedExportsReady) {
+        setImportStatus({ kind: 'error', text: 'Дождитесь окончания пересчёта, чтобы экспортировать актуальный график' })
+        return
+      }
+      const schedule = calculatedSchedule
+      if (!schedule) {
+        setImportStatus({ kind: 'error', text: 'Нет готового графика для экспорта' })
         return
       }
 
@@ -85,7 +88,7 @@ export function useLoanExport({ loans, activeLoanId, setImportStatus }: UseLoanE
     anchor.download = `credit-${safeName}.${ext}`
     anchor.click()
     URL.revokeObjectURL(anchor.href)
-  }, [activeLoan, setImportStatus])
+  }, [activeLoan, calculatedExportsReady, calculatedSchedule, setImportStatus])
 
   const copyShareLink = useCallback(async () => {
     try {

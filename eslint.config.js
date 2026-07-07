@@ -10,7 +10,7 @@ export default tseslint.config(
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {
-    files: ['src/**/*.{ts,tsx}', 'vite.config.ts'],
+    files: ['src/**/*.{ts,tsx}', 'vite.config.ts', 'playwright.config.ts', 'e2e/**/*.ts', 'scripts/**/*.mjs'],
     languageOptions: {
       ecmaVersion: 2022,
       globals: {
@@ -37,6 +37,12 @@ export default tseslint.config(
     },
     rules: {
       '@typescript-eslint/no-explicit-any': 'off'
+    }
+  },
+  {
+    files: ['playwright.config.ts', 'e2e/**/*.ts', 'scripts/**/*.mjs'],
+    languageOptions: {
+      globals: globals.node
     }
   }
 )

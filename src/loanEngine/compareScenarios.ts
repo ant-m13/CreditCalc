@@ -1,20 +1,25 @@
 import { differenceInCalendarDays, differenceInCalendarMonths, parseISO } from 'date-fns'
 import { preparePaymentCalendar, type PreparedPaymentCalendar } from './dates'
 import { generateBaseSchedule } from './generateBaseSchedule'
-import type { ComparisonResult, EarlyRepayment, GracePeriod, LoanConfig, RepaymentStrategy, ScenarioResult } from './types'
+import type { ComparisonResult, EarlyRepayment, GracePeriod, LoanConfig, PaymentScheduleItem, RepaymentStrategy, ScenarioResult } from './types'
 import { validateScenario } from './validation'
 import { periodDays } from './calculateInterest'
 
+const isIgnoredOnlyRow = (row: PaymentScheduleItem) => row.eventTypes.length > 0 && row.eventTypes.every(type => type === 'earlyIgnored')
+const isDebtClosedRow = (row: PaymentScheduleItem) => row.closingBalance === 0 && (row.deferredInterestClosing ?? 0) === 0
+const financialClosingRow = (schedule: PaymentScheduleItem[]) => [...schedule].reverse().find(row => isDebtClosedRow(row) && !isIgnoredOnlyRow(row))
+
 function toResult(id: string, name: string, strategy: ScenarioResult['strategy'], schedule: ReturnType<typeof generateBaseSchedule>, config: LoanConfig, base?: ScenarioResult): ScenarioResult {
   const last = schedule.at(-1)
+  const closingRow = financialClosingRow(schedule) ?? last
   const totalInterest = schedule.reduce((s, x) => s + x.interest, 0)
   const totalPaid = schedule.reduce((s, x) => s + (x.cashFlowTotal ?? x.payment + x.earlyPayment + x.fee), 0)
-  const closingDate = last?.date ?? config.issueDate
+  const closingDate = closingRow?.date ?? config.issueDate
   let recalculationIndex = -1
   schedule.forEach((row, index) => { if (row.paymentRecalculated) recalculationIndex = index })
   const isRegularPayment = (row: (typeof schedule)[number]) => row.isRegularPayment
   const paymentAfterRecalculation = recalculationIndex >= 0 ? schedule.slice(recalculationIndex + 1).find(isRegularPayment)?.payment : undefined
-  const closedByEarlyRepayment = last?.closingBalance === 0 && (last.deferredInterestClosing ?? 0) === 0 && last.earlyPayment > 0
+  const closedByEarlyRepayment = Boolean(closingRow && isDebtClosedRow(closingRow) && (closingRow.earlyPayment > 0 || closingRow.fullyClosedByEarlyRepayment))
   const monthlyPayment = closedByEarlyRepayment ? 0 : paymentAfterRecalculation ?? schedule.find(isRegularPayment)?.payment ?? schedule.find(x => x.payment > 0)?.payment ?? 0
   const termMonths = Math.max(0, differenceInCalendarMonths(parseISO(closingDate), parseISO(config.issueDate)))
   const termDays = Math.max(0, differenceInCalendarDays(parseISO(closingDate), parseISO(config.issueDate)))

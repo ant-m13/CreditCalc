@@ -288,6 +288,31 @@ describe('лимиты store до мутации', () => {
     expect(useLoanStore.getState().config.firstPaymentDate > useLoanStore.getState().config.issueDate).toBe(true)
   })
 
+  it('отклоняет перенос даты выдачи после существующего досрочного платежа', () => {
+    const config = { ...defaultConfig, issueDate: '2026-07-01', firstPaymentDate: '2026-08-15', paymentDay: 15 }
+    const early = { ...repayment(1), date: '2026-08-01' }
+    setStoreLoan(loanProfile({ config, repayments: [early] }))
+
+    expect(() => useLoanStore.getState().updateConfig({ issueDate: '2026-09-01' })).toThrow('дата раньше выдачи')
+    expect(useLoanStore.getState().config).toEqual(config)
+    expect(useLoanStore.getState().loans[0].config).toEqual(config)
+    expect(useLoanStore.getState().repayments).toEqual([early])
+  })
+
+  it('не переводит totalWithFee в extra при изменении календаря платежей', () => {
+    const config = { ...defaultConfig, issueDate: '2026-06-23', firstPaymentDate: '2026-07-15', paymentDay: 15, frequency: 'monthly' as const }
+    const totalPayment = { ...repayment(1), date: '2026-08-15', amount: 500000, amountMode: 'totalWithFee' as const, sameDayOrder: 'regularFirst' as const }
+    const activeLoan = loanProfile({ config, repayments: [totalPayment] })
+    setStoreLoan(activeLoan)
+
+    expect(() => useLoanStore.getState().updateConfig({ frequency: 'quarterly' })).toThrow('дату регулярного платежа')
+    expect(useLoanStore.getState().config).toEqual(config)
+    expect(useLoanStore.getState().repayments[0]).toMatchObject({ amountMode: 'totalWithFee' })
+
+    const recovered = normalizePersistedState({ loans: useLoanStore.getState().loans, activeLoanId: activeLoan.id }) as any
+    expect(recovered.repayments[0]).toMatchObject({ amountMode: 'totalWithFee' })
+  })
+
   it('не создаёт 101-й кредит', () => {
     const loans = Array.from({ length: MAX_LOANS }, (_, index) => loanProfile({ id: `loan-${index}`, name: `Кредит ${index}` }))
     const normalized = normalizePersistedState({ loans, activeLoanId: loans[0].id }) as Partial<ReturnType<typeof useLoanStore.getState>>

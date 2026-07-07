@@ -1,4 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
+import { flushSync } from 'react-dom'
 import { ArrowDownToLine, CalendarDays, CircleHelp, History, Landmark, Menu, Moon, Plus, Printer, ReceiptText, Settings2, ShieldCheck, Sun, Trash2, TrendingDown, X } from 'lucide-react'
 import { compareScenarios, isRegularPaymentDate, preparePaymentCalendar, validateScenario, type EarlyRepayment, type GracePeriod } from './loanEngine'
 import { useLoanStore } from './store'
@@ -36,6 +37,7 @@ function App() {
   const [earlyError, setEarlyError] = useState('')
   const [showGrace, setShowGrace] = useState(false)
   const [mobileNav, setMobileNav] = useState(false)
+  const [printReportVisible, setPrintReportVisible] = useState(false)
   const [rows, setRows] = useState(18)
   const shellRef = useRef<HTMLDivElement>(null)
   const resetRows = useCallback(() => setRows(18), [])
@@ -79,6 +81,8 @@ function App() {
   } = useLoanExport({
     loans: store.loans,
     activeLoanId: store.activeLoanId,
+    calculatedSchedule: selected?.schedule ?? null,
+    calculatedExportsReady: !isStale,
     setImportStatus
   })
   const {
@@ -110,6 +114,7 @@ function App() {
     setEditingEarly(null)
     setEarlyError('')
     setShowGrace(false)
+    setPrintReportVisible(false)
     resetRows()
   }, [store.activeLoanId, resetRows])
 
@@ -169,6 +174,21 @@ function App() {
     store.updateRepayment({ ...repayment, enabled: nextEnabled })
   }
   const toggleNightTheme = () => store.setTheme(store.theme === 'night' ? lastLightTheme : 'night')
+  const showPrintReport = useCallback(() => {
+    flushSync(() => setPrintReportVisible(true))
+  }, [])
+  const hidePrintReport = useCallback(() => setPrintReportVisible(false), [])
+  useEffect(() => {
+    const beforePrint = () => {
+      if (isStale || (comparison && selected)) showPrintReport()
+    }
+    window.addEventListener('beforeprint', beforePrint)
+    window.addEventListener('afterprint', hidePrintReport)
+    return () => {
+      window.removeEventListener('beforeprint', beforePrint)
+      window.removeEventListener('afterprint', hidePrintReport)
+    }
+  }, [comparison, hidePrintReport, isStale, selected, showPrintReport])
   const guardCalculatedExport = useCallback((action: () => void) => {
     if (isStale) {
       setImportStatus({ kind: 'error', text: STALE_EXPORT_MESSAGE })
@@ -176,7 +196,10 @@ function App() {
     }
     action()
   }, [isStale, setImportStatus])
-  const printCalculated = useCallback(() => guardCalculatedExport(print), [guardCalculatedExport, print])
+  const printCalculated = useCallback(() => guardCalculatedExport(() => {
+    showPrintReport()
+    print()
+  }), [guardCalculatedExport, print, showPrintReport])
   const downloadExport = useCallback((kind: 'csv' | 'json' | 'xls') => {
     if (kind === 'json') {
       download(kind)
@@ -211,7 +234,7 @@ function App() {
         </Suspense>
       </div>
     </main>
-    {isStale ? <StalePrintReport/> : comparison && selected && <PrintReport config={calculationSnapshot.config} displayDecimals={calculationSnapshot.displayDecimals} repayments={allRepayments} repaymentRules={calculationSnapshot.repaymentRules} gracePeriods={calculationSnapshot.gracePeriods} comparison={comparison} selected={selected}/>}
+    {printReportVisible && (isStale ? <StalePrintReport/> : comparison && selected && <PrintReport config={calculationSnapshot.config} displayDecimals={calculationSnapshot.displayDecimals} repayments={calculationSnapshot.repayments} repaymentRules={calculationSnapshot.repaymentRules} gracePeriods={calculationSnapshot.gracePeriods} comparison={comparison} selected={selected}/>)}
     {sharedCalculation ? <SharedCalculationModal data={sharedCalculation} createNew={createLoanFromSharedCalculation} replaceCurrent={replaceActiveWithSharedCalculation} decline={declineSharedCalculation}/> :
       showOnboarding ? <OnboardingModal close={finishOnboarding} showExample={() => { store.loadExampleLoan(); finishOnboarding(); setSection('overview') }} startSettings={() => { finishOnboarding(); setSection('settings') }}/> :
         showWhatsNew ? <WhatsNewModal close={closeWhatsNew} openChanges={() => { closeWhatsNew(); setSection('changes') }}/> :

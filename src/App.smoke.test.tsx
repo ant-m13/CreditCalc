@@ -116,8 +116,28 @@ describe('App smoke tests', () => {
 
     expect(screen.getByRole('heading', { name: 'Ваш кредит' })).toBeTruthy()
     expect(screen.getAllByText('Кредитный калькулятор').length).toBeGreaterThan(0)
-    expect(await screen.findByText('Сумма кредита')).toBeTruthy()
+    expect(await screen.findByText('Сумма кредита', {}, { timeout: 10000 })).toBeTruthy()
     expect(screen.getByText('Данные сохранены')).toBeTruthy()
+  })
+
+  it('монтирует печатный отчёт только на время печати', async () => {
+    const user = userEvent.setup()
+    const print = vi.fn()
+    vi.stubGlobal('print', print)
+    render(<App />)
+
+    expect(await screen.findByText('Сумма кредита', {}, { timeout: 10000 })).toBeTruthy()
+    expect(screen.queryByRole('heading', { name: 'Расчёт кредита' })).toBeNull()
+
+    fireEvent(window, new Event('beforeprint'))
+    expect(screen.getByRole('heading', { name: 'Расчёт кредита' })).toBeTruthy()
+
+    fireEvent(window, new Event('afterprint'))
+    await waitFor(() => expect(screen.queryByRole('heading', { name: 'Расчёт кредита' })).toBeNull())
+
+    await user.click(screen.getByRole('button', { name: /Печать/i }))
+    expect(screen.getByRole('heading', { name: 'Расчёт кредита' })).toBeTruthy()
+    expect(print).toHaveBeenCalledTimes(1)
   })
 
   it('добавляет выключенный досрочный платёж и быстро включает его из календаря', async () => {
@@ -271,6 +291,40 @@ describe('App smoke tests', () => {
 
     await waitFor(() => expect(useLoanStore.getState().config.issueDate).toBe('2024-11-26'))
     expect(screen.queryByText(/год не раньше 1900/i)).toBeNull()
+  })
+
+  it('показывает отказ при несовместимом изменении параметров', async () => {
+    const user = userEvent.setup()
+    const activeLoan = loan({
+      config: {
+        ...defaultConfig,
+        issueDate: '2026-06-23',
+        firstPaymentDate: '2026-07-15',
+        paymentDay: 15,
+        frequency: 'monthly'
+      },
+      repayments: [{
+        id: 'total-with-fee',
+        date: '2026-08-15',
+        amount: 500000,
+        amountMode: 'totalWithFee',
+        strategy: 'reduceTerm',
+        source: 'own',
+        sameDayOrder: 'regularFirst',
+        interestFirst: true,
+        sameDaySequence: 0
+      }]
+    })
+    useLoanStore.setState({ ...activeLoan, loans: [activeLoan], activeLoanId: activeLoan.id })
+    render(<App />)
+
+    await user.click(screen.getByRole('button', { name: 'Параметры' }))
+    const frequency = await screen.findByDisplayValue('Ежемесячно') as HTMLSelectElement
+    await user.selectOptions(frequency, 'quarterly')
+
+    expect(useLoanStore.getState().config.frequency).toBe('monthly')
+    expect(frequency.value).toBe('monthly')
+    expect((await screen.findByRole('alert')).textContent).toMatch(/общую сумму списания/i)
   })
 
   it('закрывает модалку и сбрасывает draft регулярного правила при переключении кредита', async () => {

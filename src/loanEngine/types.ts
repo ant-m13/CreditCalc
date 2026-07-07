@@ -89,6 +89,7 @@ export interface RepaymentApplicationOutcome {
   repaymentId: string
   date: string
   requestedAmount: number
+  regularPaymentApplied?: number
   appliedAmount: number
   appliedInterest: number
   appliedPrincipal: number
