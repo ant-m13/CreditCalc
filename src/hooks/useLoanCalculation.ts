@@ -1,20 +1,12 @@
-import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import { addMonths, format, parseISO } from 'date-fns'
 import { ru } from 'date-fns/locale'
-import type { EarlyRepayment, GracePeriod, LoanConfig, PaymentScheduleItem } from '../loanEngine'
-import type { RepaymentRule } from '../repaymentRules'
-import { buildLoanCalculation, type LoanCalculationResult } from '../loanCalculation'
+import type { PaymentScheduleItem } from '../loanEngine'
+import type { LoanCalculationResult } from '../loanCalculation'
+import { calculateLoanSynchronously, canUseLoanCalculationWorker, LoanCalculationRunner, type LoanCalculationEnvelope, type LoanCalculationSnapshot } from '../loanCalculationRunner'
 import { isISODate } from '../utils/dateValidation'
 
-export interface LoanCalculationInput {
-  config: LoanConfig
-  repayments: EarlyRepayment[]
-  repaymentRules: RepaymentRule[]
-  gracePeriods: GracePeriod[]
-  selectedScenario: string
-  displayDecimals: 0 | 2
-  loanId?: string
-}
+export type LoanCalculationInput = Omit<LoanCalculationSnapshot, 'revision'>
 
 const emptyResult: LoanCalculationResult = {
   generatedRepayments: [],
@@ -23,16 +15,6 @@ const emptyResult: LoanCalculationResult = {
   comparison: null,
   selected: null,
   base: null
-}
-
-interface CalculationSnapshot extends LoanCalculationInput {
-  revision: string
-}
-
-interface CalculationEnvelope {
-  revision: string
-  snapshot: CalculationSnapshot
-  result: LoanCalculationResult
 }
 
 const objectRevisions = new WeakMap<object, number>()
@@ -64,7 +46,7 @@ export function useLoanCalculation({ config, repayments, repaymentRules, gracePe
     () => snapshotRevision({ config, repayments, repaymentRules, gracePeriods, selectedScenario, displayDecimals, loanId }),
     [config, repayments, repaymentRules, gracePeriods, selectedScenario, displayDecimals, loanId]
   )
-  const liveSnapshot = useMemo(
+  const liveSnapshot = useMemo<LoanCalculationSnapshot>(
     () => ({ revision: liveRevision, config, repayments, repaymentRules, gracePeriods, selectedScenario, displayDecimals, loanId }),
     [liveRevision, config, repayments, repaymentRules, gracePeriods, selectedScenario, displayDecimals, loanId]
   )
@@ -72,53 +54,23 @@ export function useLoanCalculation({ config, repayments, repaymentRules, gracePe
   const requestedRevision = calculationSnapshot.revision
   const deferredStale = calculationSnapshot.revision !== liveSnapshot.revision
 
-  const syncEnvelope = useMemo<CalculationEnvelope | null>(
-    () => typeof Worker === 'undefined'
-      ? { revision: requestedRevision, snapshot: calculationSnapshot, result: buildLoanCalculation(calculationSnapshot) }
-      : null,
-    [calculationSnapshot, requestedRevision]
+  const syncEnvelope = useMemo<LoanCalculationEnvelope | null>(
+    () => canUseLoanCalculationWorker() ? null : calculateLoanSynchronously(calculationSnapshot),
+    [calculationSnapshot]
   )
-  const [workerEnvelope, setWorkerEnvelope] = useState<CalculationEnvelope | null>(syncEnvelope)
-  const workerRef = useRef<Worker | null>(null)
-
-  const setSyncFallback = useCallback((revision: string, snapshot: CalculationSnapshot) => {
-    setWorkerEnvelope({ revision, snapshot, result: buildLoanCalculation(snapshot) })
-  }, [])
+  const [workerEnvelope, setWorkerEnvelope] = useState<LoanCalculationEnvelope | null>(syncEnvelope)
+  const calculationRunnerRef = useRef<LoanCalculationRunner | null>(null)
 
   useEffect(() => {
-    if (typeof Worker === 'undefined') {
+    if (!canUseLoanCalculationWorker()) {
       setWorkerEnvelope(syncEnvelope)
       return
     }
-    const revision = requestedRevision
-    const snapshot = calculationSnapshot
-    let worker = workerRef.current
-    if (!worker) {
-      try {
-        worker = new Worker(new URL('../loanCalculation.worker.ts', import.meta.url), { type: 'module' })
-        workerRef.current = worker
-      } catch {
-        setSyncFallback(revision, snapshot)
-        return
-      }
-    }
-    worker.onmessage = (event: MessageEvent<{ revision: string; result: LoanCalculationResult }>) => {
-      if (event.data.revision !== revision) return
-      setWorkerEnvelope({ revision, snapshot, result: event.data.result })
-    }
-    worker.onerror = () => {
-      setSyncFallback(revision, snapshot)
-    }
-    try {
-      worker.postMessage({ revision, snapshot })
-    } catch {
-      worker.terminate()
-      workerRef.current = null
-      setSyncFallback(revision, snapshot)
-    }
-  }, [calculationSnapshot, requestedRevision, setSyncFallback, syncEnvelope])
+    calculationRunnerRef.current ??= new LoanCalculationRunner()
+    calculationRunnerRef.current.calculate(calculationSnapshot, setWorkerEnvelope)
+  }, [calculationSnapshot, syncEnvelope])
 
-  useEffect(() => () => workerRef.current?.terminate(), [])
+  useEffect(() => () => calculationRunnerRef.current?.dispose(), [])
 
   const envelope = syncEnvelope ?? workerEnvelope
   const resultIsCurrent = envelope?.revision === requestedRevision
