@@ -112,9 +112,30 @@ describe('ссылка на расчёт', () => {
     expect(() => parseLoanSnapshot({ ...snapshot(), version: 2 })).toThrow('Версия ссылки')
   })
 
-  it('отклоняет payload с недопустимым enum', async () => {
-    const bad = { ...snapshot(), config: { ...config, paymentType: 'strange' } }
-    await expect(decodeSharedCalculation(await encodeSharedCalculation(bad as never))).rejects.toThrow('неизвестный тип')
+  it('нормализует устаревший payload ссылки с неизвестными полями расчёта', async () => {
+    const legacy = {
+      ...snapshot(),
+      config: {
+        ...config,
+        firstPaymentInterestOnly: 'yes',
+        paymentType: 'strange',
+        frequency: 'monthly-old',
+        rounding: 'coins',
+        interest: {
+          method: 'legacy',
+          dayCountBasis: 'actual360',
+          includePaymentDate: 'no',
+          periodStart: 'middle',
+          balanceMoment: 'paymentTime'
+        }
+      }
+    }
+    const decoded = await decodeSharedCalculation(await encodeSharedCalculation(legacy as never))
+    expect(decoded.config.firstPaymentInterestOnly).toBe(defaultConfig.firstPaymentInterestOnly)
+    expect(decoded.config.paymentType).toBe(defaultConfig.paymentType)
+    expect(decoded.config.frequency).toBe(defaultConfig.frequency)
+    expect(decoded.config.rounding).toBe(defaultConfig.rounding)
+    expect(decoded.config.interest).toEqual(defaultConfig.interest)
   })
 
   it('отклоняет слишком большой payload', async () => {

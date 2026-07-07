@@ -38,11 +38,40 @@ describe('импорт резервной копии', () => {
       earlyRepaymentFeePercent: defaultConfig.earlyRepaymentFeePercent
     }
     const result = parseLoanBackup(JSON.stringify({ config: legacyConfig, repayments: [], scenario: { id: 'reduceTerm', schedule: [] } }))
+    expect(result.config.firstPaymentInterestOnly).toBe(defaultConfig.firstPaymentInterestOnly)
     expect(result.config.paymentType).toBe(defaultConfig.paymentType)
     expect(result.config.frequency).toBe(defaultConfig.frequency)
     expect(result.config.rounding).toBe(defaultConfig.rounding)
     expect(result.config.rateChanges).toEqual([])
     expect(result.config.rateChangeMode).toBe(defaultConfig.rateChangeMode)
+    expect(result.config.interest).toEqual(defaultConfig.interest)
+  })
+
+  it('нормализует устаревшие поля расчёта к значениям по умолчанию', () => {
+    const result = parseLoanBackup(JSON.stringify({
+      config: {
+        ...defaultConfig,
+        firstPaymentInterestOnly: 'yes',
+        paymentType: 'legacy-annuity',
+        frequency: 'monthly-old',
+        rounding: null,
+        interest: {
+          method: 'classic',
+          dayCountBasis: 'actual360',
+          includePaymentDate: 'no',
+          periodStart: 'middle',
+          balanceMoment: 'paymentTime'
+        }
+      },
+      repayments: [],
+      gracePeriods: [],
+      selectedScenario: 'combined'
+    }))
+
+    expect(result.config.firstPaymentInterestOnly).toBe(defaultConfig.firstPaymentInterestOnly)
+    expect(result.config.paymentType).toBe(defaultConfig.paymentType)
+    expect(result.config.frequency).toBe(defaultConfig.frequency)
+    expect(result.config.rounding).toBe(defaultConfig.rounding)
     expect(result.config.interest).toEqual(defaultConfig.interest)
   })
 

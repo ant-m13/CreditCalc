@@ -29,7 +29,16 @@ const integer = (value: unknown, minimum = 0) => finite(value, minimum) && Numbe
 const positive = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value) && value > 0
 const hexColor = (value: unknown): value is string => typeof value === 'string' && /^#[0-9a-fA-F]{6}$/.test(value)
 const currencies = ['RUB', 'USD', 'EUR', 'CNY'] as const
+const paymentTypes = ['annuity', 'differentiated'] as const
+const frequencies = ['monthly', 'biweekly', 'quarterly'] as const
+const roundingModes = ['kopecks', 'rubles', 'bank'] as const
+const interestMethods = ['annuity', 'daily'] as const
+const dayCountBases = ['365', '366', '360', 'actual365', 'actualActual'] as const
+const periodStarts = ['inclusive', 'exclusive'] as const
+const balanceMoments = ['startOfDay', 'endOfDay'] as const
 const scenarioIds = ['base', 'reduceTerm', 'reducePayment', 'combined'] as const
+const oneOfOrDefault = <T extends string>(value: unknown, values: readonly T[], fallback: T): T => oneOf(value, values) ? value : fallback
+const booleanOrDefault = (value: unknown, fallback: boolean) => typeof value === 'boolean' ? value : fallback
 const normalizeAmountMode = (value: unknown, isRegularDate: boolean) => {
   if (value === undefined) return isRegularDate ? 'totalWithFee' : 'extra'
   if (value === 'total') return 'totalWithFee'
@@ -78,14 +87,28 @@ export function parseLoanBackupObject(raw: unknown): LoanBackupData {
 
   const source = raw.config
   const interest = isObject(source.interest) ? source.interest : {}
-  const config = { ...defaultConfig, ...source, interest: { ...defaultConfig.interest, ...interest } } as LoanConfig
+  const config = {
+    ...defaultConfig,
+    ...source,
+    firstPaymentInterestOnly: booleanOrDefault(source.firstPaymentInterestOnly, defaultConfig.firstPaymentInterestOnly),
+    paymentType: oneOfOrDefault(source.paymentType, paymentTypes, defaultConfig.paymentType),
+    frequency: oneOfOrDefault(source.frequency, frequencies, defaultConfig.frequency),
+    rounding: oneOfOrDefault(source.rounding, roundingModes, defaultConfig.rounding),
+    interest: {
+      ...defaultConfig.interest,
+      ...interest,
+      method: oneOfOrDefault(interest.method, interestMethods, defaultConfig.interest.method),
+      dayCountBasis: oneOfOrDefault(interest.dayCountBasis, dayCountBases, defaultConfig.interest.dayCountBasis),
+      includePaymentDate: booleanOrDefault(interest.includePaymentDate, defaultConfig.interest.includePaymentDate),
+      periodStart: oneOfOrDefault(interest.periodStart, periodStarts, defaultConfig.interest.periodStart),
+      balanceMoment: oneOfOrDefault(interest.balanceMoment, balanceMoments, defaultConfig.interest.balanceMoment)
+    }
+  } as LoanConfig
   if (!positive(config.principal) || !finite(config.annualRate) || config.annualRate > 100 || !integer(config.termMonths, 1) || config.termMonths > MAX_TERM_MONTHS || !integer(config.paymentDay, 1) || config.paymentDay > 31 || !finite(config.closeThreshold) || !finite(config.oneTimeFee) || !finite(config.monthlyFee) || !finite(config.earlyRepaymentFeePercent) || config.earlyRepaymentFeePercent > 100) throw new Error('Параметры кредита содержат недопустимые числа')
   if (!isISODate(config.issueDate) || !isISODate(config.firstPaymentDate)) throw new Error('Проверьте даты выдачи и первого платежа')
   if (config.firstPaymentDate <= config.issueDate) throw new Error('Первый платёж должен быть после даты выдачи')
   if (!oneOf(config.currency, currencies)) throw new Error('Файл содержит неподдерживаемую валюту')
-  if (typeof config.firstPaymentInterestOnly !== 'boolean' || !oneOf(config.paymentType, ['annuity', 'differentiated']) || !oneOf(config.frequency, ['monthly', 'biweekly', 'quarterly']) || !oneOf(config.rounding, ['kopecks', 'rubles', 'bank'])) throw new Error('Файл содержит неизвестный тип расчёта')
   if (!oneOf(config.rateChangeMode, ['nextPeriod', 'exactDate'])) throw new Error('Файл содержит неизвестный режим изменения ставки')
-  if (typeof config.interest.includePaymentDate !== 'boolean' || !oneOf(config.interest.method, ['annuity', 'daily']) || !oneOf(config.interest.dayCountBasis, ['365', '366', '360', 'actual365', 'actualActual']) || !oneOf(config.interest.periodStart, ['inclusive', 'exclusive']) || !oneOf(config.interest.balanceMoment, ['startOfDay', 'endOfDay'])) throw new Error('Файл содержит неизвестное правило начисления процентов')
 
   const rateChangesRaw = source.rateChanges === undefined ? [] : source.rateChanges
   if (!Array.isArray(rateChangesRaw)) throw new Error('История ставок повреждена')
