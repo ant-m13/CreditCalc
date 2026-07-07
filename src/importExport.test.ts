@@ -160,6 +160,16 @@ describe('импорт резервной копии', () => {
     expect(result.repaymentRules[0]).toMatchObject({ amount: 20000, enabled: false })
   })
 
+  it('восстанавливает правила с нулевой суммой или процентом', () => {
+    const zeroAmountRule = { id: 'rule-zero-amount', name: 'Пауза', type: 'monthlyFixed', startDate: '2026-08-15', endDate: '2026-12-15', amount: 0, strategy: 'reduceTerm', source: 'own', sameDayOrder: 'regularFirst', interestFirst: true, skipMonths: [] }
+    const zeroPercentRule = { id: 'rule-zero-percent', name: 'Пауза процента', type: 'paymentPercent', startDate: '2026-08-15', endDate: '2026-12-15', percent: 0, strategy: 'reducePayment', source: 'own', sameDayOrder: 'regularFirst', interestFirst: true, skipMonths: [] }
+    const result = parseLoanBackup(JSON.stringify({ config: defaultConfig, repayments: [], repaymentRules: [zeroAmountRule, zeroPercentRule], gracePeriods: [], selectedScenario: 'combined' }))
+
+    expect(result.repaymentRules).toHaveLength(2)
+    expect(result.repaymentRules[0]).toMatchObject({ id: 'rule-zero-amount', amount: 0 })
+    expect(result.repaymentRules[1]).toMatchObject({ id: 'rule-zero-percent', percent: 0 })
+  })
+
   it('отклоняет импорт с количеством правил сверх лимита', () => {
     const rules = Array.from({ length: MAX_REPAYMENT_RULES + 1 }, (_, index) => ({ id: `rule-${index}`, name: 'Ежемесячно', type: 'monthlyFixed', startDate: '2026-02-26', endDate: '2026-12-26', amount: 20000, strategy: 'reduceTerm', source: 'own', sameDayOrder: 'regularFirst', interestFirst: true, skipMonths: [] }))
     expect(() => parseLoanBackup(JSON.stringify({ config: defaultConfig, repayments: [], repaymentRules: rules, gracePeriods: [], selectedScenario: 'combined' }))).toThrow('Слишком много правил')

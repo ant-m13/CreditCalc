@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { createJSONStorage, persist } from 'zustand/middleware'
 import { addMonths, format, parseISO } from 'date-fns'
-import { isRegularPaymentDate, nextPaymentDate, nextSameDaySequence, sortRateChanges, sortRepaymentsByApplicationOrder, validateScenario, type EarlyRepayment, type GracePeriod, type LoanConfig, type RateChange } from './loanEngine'
+import { nextPaymentDate, nextSameDaySequence, repaymentAmountModeContext, sortRateChanges, sortRepaymentsByApplicationOrder, validateScenario, type EarlyRepayment, type GracePeriod, type LoanConfig, type RateChange } from './loanEngine'
 import { createDefaultConfig, defaultConfig } from './loanDefaults'
 import type { LoanBackupData } from './importExport'
 import { assertLoanCandidateValid } from './loanCandidate'
@@ -160,16 +160,10 @@ const graceTypes = ['full', 'interestOnly', 'reduced', 'custom'] as const
 const scenarioIds = ['base', 'reduceTerm', 'reducePayment', 'combined'] as const
 const termUnits = ['months', 'years'] as const
 const fontSizes = ['normal', 'large', 'xlarge'] as const
-const amountModes = ['extra', 'totalWithFee'] as const
 export const MAX_LOANS = 100
 const normalizeTheme = (value: unknown): ThemeName => typeof value === 'string' && themeNames.includes(value as ThemeName) ? value as ThemeName : 'emerald'
 const normalizeAccentColor = (value: unknown): string => typeof value === 'string' && /^#[0-9a-fA-F]{6}$/.test(value) ? value : defaultAccentColor
 const oneOf = <T extends string>(value: unknown, values: readonly T[], fallback: T): T => typeof value === 'string' && values.includes(value as T) ? value as T : fallback
-const normalizeAmountMode = (value: unknown, isRegularDate: boolean): typeof amountModes[number] => {
-  if (value === undefined) return isRegularDate ? 'totalWithFee' : 'extra'
-  if (value === 'total') return 'totalWithFee'
-  return oneOf(value, amountModes, 'extra')
-}
 const finiteNumber = (value: unknown, fallback: number, min = 0, max = Number.POSITIVE_INFINITY) => typeof value === 'number' && Number.isFinite(value) ? Math.min(max, Math.max(min, value)) : fallback
 const optionalFiniteNumber = (value: unknown, min = 0, max = Number.POSITIVE_INFINITY) => typeof value === 'number' && Number.isFinite(value) ? Math.min(max, Math.max(min, value)) : undefined
 const isObject = (value: unknown): value is Record<string, unknown> => Boolean(value) && typeof value === 'object' && !Array.isArray(value)
@@ -289,8 +283,15 @@ const normalizeRepayments = (value: unknown, config: LoanConfig): EarlyRepayment
     if (!isObject(item) || typeof item.id !== 'string' || !isISODate(item.date)) return []
     const amount = optionalFiniteNumber(item.amount, 0)
     if (amount === undefined) return []
-    const requestedAmountMode = normalizeAmountMode(item.amountMode, isRegularPaymentDate(item.date, config))
-    const amountMode = requestedAmountMode === 'totalWithFee' && isRegularPaymentDate(item.date, config) ? 'totalWithFee' : 'extra'
+    const context = repaymentAmountModeContext({
+      amount,
+      amountMode: item.amountMode,
+      date: item.date,
+      enabled: item.enabled,
+      sameDayOrder: item.sameDayOrder
+    }, config)
+    const requestedAmountMode = context.normalizedAmountMode ?? 'extra'
+    const amountMode = requestedAmountMode === 'totalWithFee' && context.isRegularDate ? 'totalWithFee' : 'extra'
     const sequenceCandidate = typeof item.sameDaySequence === 'number' && Number.isInteger(item.sameDaySequence) && item.sameDaySequence >= 0 ? item.sameDaySequence : index
     return [{
       id: item.id,

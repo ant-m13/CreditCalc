@@ -7,15 +7,13 @@ import { extendedPaymentPeriods, iso, nextPaymentDate, preparePaymentCalendar, t
 import { activeGrace } from './gracePeriod'
 import { MAX_EARLY_REPAYMENTS, MAX_GRACE_PERIODS, MAX_SCHEDULE_ROWS } from './limits'
 import { createRateTimeline } from './rateChanges'
+import { isTotalWithFeeAmountMode } from './repaymentAmountMode'
 import { money, num } from './rounding'
 import { sortRepaymentsByApplicationOrder } from './repaymentOrder'
 import type { EarlyRepayment, GracePeriod, LoanConfig, PaymentScheduleItem, RepaymentApplicationOutcome, RepaymentStrategy, ScheduleEventType } from './types'
 import { validateScenario } from './validation'
 
 interface Options { earlyRepayments?: EarlyRepayment[]; gracePeriods?: GracePeriod[]; forcedStrategy?: RepaymentStrategy; paymentCalendar?: PreparedPaymentCalendar }
-
-const isTotalWithFeeMode = (repayment: EarlyRepayment) =>
-  repayment.amountMode === 'totalWithFee' || (repayment.amountMode as string | undefined) === 'total'
 
 /**
  * Builds an event-based schedule. An early repayment between two regular due
@@ -398,7 +396,7 @@ export function generateBaseSchedule(config: LoanConfig, options: Options = {}):
       // Older saved bank rows have no amountMode. Treat them as the total paid
       // on that date; explicit "extra" records preserve the previous behavior.
       let effectiveAmount: Decimal | undefined
-      if (isTotalWithFeeMode(early) || early.amountMode === undefined) {
+      if (isTotalWithFeeAmountMode(early.amountMode) || early.amountMode === undefined) {
         const totalAmount = new Decimal(early.amount)
         if (totalAmount.lt(regularPayment)) {
           throw new Error(`Досрочный платёж ${early.date}: общая сумма списания с учётом комиссии должна быть не меньше обязательного платежа ${num(regularPayment, config.rounding)}`)

@@ -3,7 +3,7 @@ import { validateScenario } from './loanEngine'
 import { MAX_EARLY_REPAYMENTS, MAX_RATE_CHANGES, MAX_REPAYMENT_RULES } from './loanEngine/limits'
 import { defaultConfig, MAX_LOANS, normalizePersistedState, useLoanStore, type LoanProfile } from './store'
 import type { EarlyRepayment } from './loanEngine'
-import type { RepaymentRule } from './repaymentRules'
+import { expandRepaymentRules, type RepaymentRule } from './repaymentRules'
 
 const repaymentBase = {
   strategy: 'reduceTerm',
@@ -217,6 +217,21 @@ describe('миграция локального хранилища', () => {
     expect(normalized.repaymentRules[0]).toMatchObject({ amount: 1000, enabled: false })
   })
 
+  it('сохраняет правила с нулевой суммой или процентом как временно замороженные', () => {
+    setStoreLoan(loanProfile())
+    const zeroAmountRule = { ...rule(1), amount: 0 }
+    const zeroPercentRule = { ...rule(2), type: 'paymentPercent' as const, amount: undefined, percent: 0 }
+
+    useLoanStore.getState().addRepaymentRule(zeroAmountRule)
+    useLoanStore.getState().addRepaymentRule(zeroPercentRule)
+
+    const rules = useLoanStore.getState().repaymentRules
+    expect(rules).toHaveLength(2)
+    expect(rules[0]).toMatchObject({ id: 'rule-1', amount: 0 })
+    expect(rules[1]).toMatchObject({ id: 'rule-2', percent: 0 })
+    expect(expandRepaymentRules(defaultConfig, rules)).toEqual([])
+  })
+
   it('нормализует правило общего ежемесячного платежа', () => {
     const normalized = normalizePersistedState({
       repaymentRules: [{
@@ -349,6 +364,16 @@ describe('лимиты store до мутации', () => {
     const totalRule = { ...rule(1), type: 'monthlyTotalPayment' as const, amount: 110000, startDate: defaultConfig.firstPaymentDate, endDate: defaultConfig.firstPaymentDate }
     expect(() => useLoanStore.getState().addRepaymentRule(totalRule)).toThrow('только одну общую сумму')
     expect(useLoanStore.getState().repaymentRules).toHaveLength(0)
+  })
+
+  it('сохраняет нулевое total rule рядом с ручной общей суммой', () => {
+    setStoreLoan(loanProfile({ repayments: [{ ...repayment(1), amount: 100000, amountMode: 'totalWithFee', sameDayOrder: 'regularFirst' }] }))
+    const frozenTotalRule = { ...rule(1), type: 'monthlyTotalPayment' as const, amount: 0, startDate: defaultConfig.firstPaymentDate, endDate: defaultConfig.firstPaymentDate }
+
+    useLoanStore.getState().addRepaymentRule(frozenTotalRule)
+
+    expect(useLoanStore.getState().repaymentRules).toHaveLength(1)
+    expect(expandRepaymentRules(defaultConfig, useLoanStore.getState().repaymentRules)).toEqual([])
   })
 
   it('не сохраняет ручную total-операцию, конфликтующую с существующей', () => {
