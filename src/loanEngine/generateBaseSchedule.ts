@@ -177,16 +177,22 @@ export function generateBaseSchedule(config: LoanConfig, options: Options = {}):
     const applyEarly = (early: EarlyRepayment, interestDue: Decimal, remainingPeriods: number, amountOverride?: Decimal.Value, afterCurrentPayment = false) => {
       const strategy = options.forcedStrategy ?? early.strategy
       const earlyAmount = Decimal.max(0, amountOverride ?? early.amount)
+      const requestedAmount = new Decimal(early.amount)
+      const regularPaymentApplied = Decimal.max(0, requestedAmount.minus(earlyAmount))
+      const regularOutcomePart = regularPaymentApplied.gt(0)
+        ? { regularPaymentApplied: num(regularPaymentApplied, config.rounding) }
+        : {}
       if (balance.lte(0) && interestDue.lte(0)) {
         const outcome: RepaymentApplicationOutcome = {
           repaymentId: early.id,
           date: early.date,
-          requestedAmount: num(new Decimal(early.amount), config.rounding),
+          requestedAmount: num(requestedAmount, config.rounding),
+          ...regularOutcomePart,
           appliedAmount: 0,
           appliedInterest: 0,
           appliedPrincipal: 0,
           fee: 0,
-          unusedAmount: num(new Decimal(early.amount), config.rounding),
+          unusedAmount: num(earlyAmount, config.rounding),
           reason: 'debtClosed'
         }
         return {
@@ -233,7 +239,8 @@ export function generateBaseSchedule(config: LoanConfig, options: Options = {}):
         outcome: {
           repaymentId: early.id,
           date: early.date,
-          requestedAmount: num(new Decimal(early.amount), config.rounding),
+          requestedAmount: num(requestedAmount, config.rounding),
+          ...regularOutcomePart,
           appliedAmount: num(appliedAmount, config.rounding),
           appliedInterest: num(paidInterest, config.rounding),
           appliedPrincipal: num(paidPrincipal, config.rounding),

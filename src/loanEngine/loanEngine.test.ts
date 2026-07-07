@@ -906,6 +906,20 @@ describe('early repayment amount modes', () => {
     expect(row.feePaid).toBeGreaterThan(0);
   });
 
+  it('amountMode: "totalWithFee" раскладывает outcome на регулярный платёж, досрочную часть, комиссию и остаток', () => {
+    const s = generateBaseSchedule({ ...config, earlyRepaymentFeePercent: 10 }, {
+      earlyRepayments: [early({ amountMode: 'totalWithFee', amount: 200_000 })],
+    })
+    const row = s.find(r => r.date === '2024-08-15')!
+    const outcome = row.repaymentOutcomes?.[0]
+
+    expect(outcome).toMatchObject({ requestedAmount: 200_000, regularPaymentApplied: row.payment })
+    expect(outcome!.requestedAmount).toBeCloseTo(
+      (outcome!.regularPaymentApplied ?? 0) + outcome!.appliedAmount + outcome!.fee + outcome!.unusedAmount,
+      2
+    )
+  })
+
   it('amountMode: "totalWithFee" не включает ежемесячную комиссию в введённую сумму', () => {
     const s = generateBaseSchedule({ ...config, monthlyFee: 1000 }, {
       earlyRepayments: [early({ amountMode: 'totalWithFee', amount: 200_000 })],
