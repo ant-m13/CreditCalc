@@ -35,7 +35,7 @@ export function generateBaseSchedule(config: LoanConfig, options: Options = {}):
   const configuredPeriods = totalPaymentPeriods(config)
   const maxPeriods = configuredPeriods + extendedPaymentPeriods(config, gracePeriods, paymentCalendar)
   const rateTimeline = createRateTimeline(config)
-  let effectiveFinalRegularIndex = maxPeriods
+  let currentRemainingPeriods = maxPeriods
   let balance = money(config.principal, config.rounding)
   let principalPerPeriod = money(new Decimal(balance).div(Math.max(1, configuredPeriods)), config.rounding)
   let currentAnnualRate = config.annualRate
@@ -47,7 +47,6 @@ export function generateBaseSchedule(config: LoanConfig, options: Options = {}):
   let deferredInterest = new Decimal(0)
   let repaymentIndex = 0
   let rowNumber = 1
-  let hasTermReduction = false
   let pendingRateChange: number | null = null
   const schedule: PaymentScheduleItem[] = [{
     number: 1,
@@ -107,8 +106,8 @@ export function generateBaseSchedule(config: LoanConfig, options: Options = {}):
       : { label: 'Полное погашение · недостаточно средств', type: 'earlyFullInsufficient' as const }
     return { label: 'Комбинированный пересчёт', type: 'earlyCombined' as const }
   }
-  const remainingPeriodsBeforeCurrentPayment = (regularIndex: number) => Math.max(1, effectiveFinalRegularIndex - regularIndex + 1)
-  const remainingPeriodsAfterCurrentPayment = (regularIndex: number) => Math.max(0, effectiveFinalRegularIndex - regularIndex)
+  const remainingPeriodsBeforeCurrentPayment = () => Math.max(1, currentRemainingPeriods)
+  const remainingPeriodsAfterCurrentPayment = () => Math.max(0, currentRemainingPeriods - 1)
   const effectiveAnnualRate = (date: string) =>
     config.rateChangeMode === 'exactDate' ? rateTimeline.rateAt(date, currentAnnualRate) : currentAnnualRate
   const estimateRemainingPeriods = (fallback: number, annualRate = currentAnnualRate) => {
@@ -127,13 +126,9 @@ export function generateBaseSchedule(config: LoanConfig, options: Options = {}):
     if (!Number.isFinite(exactPeriods) || exactPeriods <= 0) return fallbackPeriods
     return Math.min(fallbackPeriods, Math.max(1, Math.ceil(exactPeriods)))
   }
-  const updateEffectiveTerm = (regularIndex: number, remainingPeriods: number, afterCurrentPayment: boolean, annualRate = currentAnnualRate) => {
+  const updateEffectiveTerm = (remainingPeriods: number, afterCurrentPayment: boolean, annualRate = currentAnnualRate) => {
     const periods = estimateRemainingPeriods(remainingPeriods, annualRate)
-    if (periods <= 0) {
-      effectiveFinalRegularIndex = Math.min(effectiveFinalRegularIndex, regularIndex)
-      return
-    }
-    effectiveFinalRegularIndex = afterCurrentPayment ? regularIndex + periods : regularIndex + periods - 1
+    currentRemainingPeriods = afterCurrentPayment ? periods + 1 : periods
   }
 
   const iterationLimit = Math.min(MAX_SCHEDULE_ROWS - 1, Math.max(maxPeriods + 240, 360))
@@ -219,17 +214,12 @@ export function generateBaseSchedule(config: LoanConfig, options: Options = {}):
       const appliedAmount = paidInterest.add(paidPrincipal)
       const unusedAmount = Decimal.max(0, earlyAmount.minus(fee).minus(appliedAmount))
       if (strategy === 'reducePayment' && balance.gt(0) && config.paymentType === 'annuity') {
-        payment = hasTermReduction
-          ? money(Decimal.max(0, payment.minus(calculateAnnuityPayment(paidPrincipal, annualRateAtEvent, Math.max(1, remainingPeriods), periodsPerYear(config.frequency), config.rounding))), config.rounding)
-          : calculateAnnuityPayment(balance, annualRateAtEvent, Math.max(1, remainingPeriods), periodsPerYear(config.frequency), config.rounding)
+        payment = calculateAnnuityPayment(balance, annualRateAtEvent, Math.max(1, remainingPeriods), periodsPerYear(config.frequency), config.rounding)
       } else if (strategy === 'reducePayment' && balance.gt(0)) {
-        principalPerPeriod = hasTermReduction
-          ? money(Decimal.max(0, principalPerPeriod.minus(money(paidPrincipal.div(Math.max(1, remainingPeriods)), config.rounding))), config.rounding)
-          : money(balance.div(Math.max(1, remainingPeriods)), config.rounding)
+        principalPerPeriod = money(balance.div(Math.max(1, remainingPeriods)), config.rounding)
       }
       if (strategy === 'reduceTerm' && paidPrincipal.gt(0)) {
-        hasTermReduction = true
-        updateEffectiveTerm(regularIndex, remainingPeriods, afterCurrentPayment, annualRateAtEvent)
+        updateEffectiveTerm(remainingPeriods, afterCurrentPayment, annualRateAtEvent)
       }
       return {
         paidInterest,
@@ -284,7 +274,7 @@ export function generateBaseSchedule(config: LoanConfig, options: Options = {}):
       const repaymentOutcomes: RepaymentApplicationOutcome[] = []
 
       for (const early of sameDate) {
-        const applied = applyEarly(early, interestDue, remainingPeriodsBeforeCurrentPayment(regularIndex))
+        const applied = applyEarly(early, interestDue, remainingPeriodsBeforeCurrentPayment())
         interestDue = applied.interestLeft
         earlyTotal = earlyTotal.add(applied.paidInterest).add(applied.paidPrincipal)
         earlyPrincipal = earlyPrincipal.add(applied.paidPrincipal)
@@ -358,7 +348,7 @@ export function generateBaseSchedule(config: LoanConfig, options: Options = {}):
     const regularFirst = sameDay.filter(r => r.sameDayOrder === 'regularFirst')
 
     for (const early of earlyFirst) {
-      const applied = applyEarly(early, interestDue, remainingPeriodsBeforeCurrentPayment(regularIndex))
+      const applied = applyEarly(early, interestDue, remainingPeriodsBeforeCurrentPayment())
       interestDue = applied.interestLeft
       earlyTotal = earlyTotal.add(applied.paidInterest).add(applied.paidPrincipal)
       earlyPrincipal = earlyPrincipal.add(applied.paidPrincipal)
@@ -415,7 +405,7 @@ export function generateBaseSchedule(config: LoanConfig, options: Options = {}):
         }
         effectiveAmount = totalAmount.minus(regularPayment)
       }
-      const applied = applyEarly(early, interestDue, remainingPeriodsAfterCurrentPayment(regularIndex), effectiveAmount, true)
+      const applied = applyEarly(early, interestDue, remainingPeriodsAfterCurrentPayment(), effectiveAmount, true)
       interestDue = applied.interestLeft
       earlyTotal = earlyTotal.add(applied.paidInterest).add(applied.paidPrincipal)
       earlyPrincipal = earlyPrincipal.add(applied.paidPrincipal)
@@ -428,7 +418,7 @@ export function generateBaseSchedule(config: LoanConfig, options: Options = {}):
       if (applied.comment) comments.push(applied.comment)
     }
 
-    if (regularIndex >= maxPeriods && (balance.gt(0) || interestDue.gt(0) || deferredInterest.gt(0))) {
+    if ((regularIndex >= maxPeriods || currentRemainingPeriods <= 1) && (balance.gt(0) || interestDue.gt(0) || deferredInterest.gt(0))) {
       const finalInterest = interestDue.add(deferredInterest)
       if (finalInterest.gt(0)) {
         paidInterestRegular = paidInterestRegular.add(finalInterest)
@@ -441,7 +431,7 @@ export function generateBaseSchedule(config: LoanConfig, options: Options = {}):
         regularPayment = regularPayment.add(balance)
         balance = new Decimal(0)
       }
-      appendEvent(eventLabels, eventTypes, 'Финальный платёж по договорной дате', 'finalBalloon')
+      appendEvent(eventLabels, eventTypes, regularIndex >= maxPeriods ? 'Финальный платёж по договорной дате' : 'Финальный платёж по актуальному сроку', 'finalBalloon')
     }
 
     if (interestDue.gt(0)) deferredInterest = deferredInterest.add(interestDue)
@@ -489,10 +479,11 @@ export function generateBaseSchedule(config: LoanConfig, options: Options = {}):
       if (balance.gt(0)) {
         pendingRateChange = currentAnnualRate
         if (config.paymentType === 'annuity') {
-          payment = calculateAnnuityPayment(balance, currentAnnualRate, Math.max(1, remainingPeriodsAfterCurrentPayment(regularIndex)), periodsPerYear(config.frequency), config.rounding)
+          payment = calculateAnnuityPayment(balance, currentAnnualRate, Math.max(1, remainingPeriodsAfterCurrentPayment()), periodsPerYear(config.frequency), config.rounding)
         }
       }
     }
+    currentRemainingPeriods = Math.max(0, currentRemainingPeriods - 1)
     previousPaymentDate = paymentDate
     paymentDate = nextPaymentDate(paymentDate, config)
   }
