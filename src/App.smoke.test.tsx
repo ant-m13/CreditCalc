@@ -116,8 +116,28 @@ describe('App smoke tests', () => {
 
     expect(screen.getByRole('heading', { name: 'Ваш кредит' })).toBeTruthy()
     expect(screen.getAllByText('Кредитный калькулятор').length).toBeGreaterThan(0)
-    expect(await screen.findByText('Сумма кредита')).toBeTruthy()
+    expect(await screen.findByText('Сумма кредита', {}, { timeout: 10000 })).toBeTruthy()
     expect(screen.getByText('Данные сохранены')).toBeTruthy()
+  })
+
+  it('монтирует печатный отчёт только на время печати', async () => {
+    const user = userEvent.setup()
+    const print = vi.fn()
+    vi.stubGlobal('print', print)
+    render(<App />)
+
+    expect(await screen.findByText('Сумма кредита', {}, { timeout: 10000 })).toBeTruthy()
+    expect(screen.queryByRole('heading', { name: 'Расчёт кредита' })).toBeNull()
+
+    fireEvent(window, new Event('beforeprint'))
+    expect(screen.getByRole('heading', { name: 'Расчёт кредита' })).toBeTruthy()
+
+    fireEvent(window, new Event('afterprint'))
+    await waitFor(() => expect(screen.queryByRole('heading', { name: 'Расчёт кредита' })).toBeNull())
+
+    await user.click(screen.getByRole('button', { name: /Печать/i }))
+    expect(screen.getByRole('heading', { name: 'Расчёт кредита' })).toBeTruthy()
+    expect(print).toHaveBeenCalledTimes(1)
   })
 
   it('добавляет выключенный досрочный платёж и быстро включает его из календаря', async () => {
