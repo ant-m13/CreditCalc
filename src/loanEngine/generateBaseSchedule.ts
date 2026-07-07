@@ -492,11 +492,10 @@ export function generateBaseSchedule(config: LoanConfig, options: Options = {}):
   if (balance.gt(0) || deferredInterest.gt(0)) {
     throw new Error(`График не закрывает кредит в допустимое количество строк (${MAX_SCHEDULE_ROWS})`)
   }
+  const ignoredAfterCloseOutcomes: RepaymentApplicationOutcome[] = []
   while (repaymentIndex < repayments.length) {
-    const eventDate = repayments[repaymentIndex].date
-    const sameDate: EarlyRepayment[] = []
-    while (repaymentIndex < repayments.length && repayments[repaymentIndex].date === eventDate) sameDate.push(repayments[repaymentIndex++])
-    const repaymentOutcomes: RepaymentApplicationOutcome[] = sameDate.map(early => ({
+    const early = repayments[repaymentIndex++]
+    ignoredAfterCloseOutcomes.push({
       repaymentId: early.id,
       date: early.date,
       requestedAmount: num(new Decimal(early.amount), config.rounding),
@@ -506,36 +505,11 @@ export function generateBaseSchedule(config: LoanConfig, options: Options = {}):
       fee: 0,
       unusedAmount: num(new Decimal(early.amount), config.rounding),
       reason: 'debtClosed'
-    }))
-    pushScheduleRow({
-      number: ++rowNumber,
-      date: eventDate,
-      days: 0,
-      openingBalance: 0,
-      payment: 0,
-      interest: 0,
-      principal: 0,
-      earlyPayment: 0,
-      interestAccrued: 0,
-      interestPaid: 0,
-      principalPaid: 0,
-      feePaid: 0,
-      deferredInterestOpening: 0,
-      deferredInterestClosing: 0,
-      cashFlowTotal: 0,
-      closingBalance: 0,
-      cumulativeInterest: num(cumulativeInterest, config.rounding),
-      cumulativeSavings: 0,
-      fee: 0,
-      comment: sameDate.map(early => early.comment ? `${early.comment} · пропущено: долг уже закрыт` : 'Пропущено: долг уже закрыт').join('; '),
-      event: 'Операция пропущена · долг уже закрыт',
-      eventTypes: ['earlyIgnored'],
-      paymentRecalculated: false,
-      fullyClosedByEarlyRepayment: false,
-      isRegularPayment: false,
-      isGracePayment: false,
-      repaymentOutcomes
     })
+  }
+  const closingRow = schedule.at(-1)
+  if (closingRow && ignoredAfterCloseOutcomes.length > 0) {
+    closingRow.repaymentOutcomes = [...(closingRow.repaymentOutcomes ?? []), ...ignoredAfterCloseOutcomes]
   }
   return schedule
 }

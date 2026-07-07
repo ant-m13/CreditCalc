@@ -80,8 +80,8 @@ export function useLoanCalculation({ config, repayments, repaymentRules, gracePe
     if (!base || !selected) return []
     const baseStep = Math.max(1, Math.floor(base.schedule.length / 48))
     const dates = new Set(base.schedule.filter((_, index) => index % baseStep === 0).map(row => row.date))
-    if (base.schedule.at(-1)) dates.add(base.schedule.at(-1)!.date)
-    if (selected.schedule.at(-1)) dates.add(selected.schedule.at(-1)!.date)
+    dates.add(base.closingDate)
+    dates.add(selected.closingDate)
 
     const balanceAt = (schedule: PaymentScheduleItem[], date: string) => {
       let balance = schedule[0]?.closingBalance ?? 0
@@ -92,7 +92,7 @@ export function useLoanCalculation({ config, repayments, repaymentRules, gracePe
       return balance
     }
 
-    const selectedClosingDate = selected.schedule.at(-1)?.date ?? ''
+    const selectedClosingDate = selected.closingDate
     return [...dates].sort().map(date => ({
       date: format(parseISO(date), 'MMM yy', { locale: ru }),
       base: balanceAt(base.schedule, date),

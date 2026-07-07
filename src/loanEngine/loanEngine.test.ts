@@ -160,15 +160,15 @@ describe('loan engine', () => {
     expect(row.eventTypes).toContain('earlyIgnored')
   })
 
-  it('показывает операции после даты закрытия как пропущенные outcome-строки', () => {
+  it('сохраняет операции после даты закрытия в outcomes закрывающей строки', () => {
     const closingConfig: LoanConfig = { ...config, principal: 100_000, annualRate: 0, termMonths: 1, issueDate: '2024-01-01', firstPaymentDate: '2024-02-01', paymentDay: 1, firstPaymentInterestOnly: false }
     const schedule = generateBaseSchedule(closingConfig, {
       earlyRepayments: [early({ id: 'late-after-close', date: '2024-03-01', amount: 50_000, strategy: 'reduceTerm' })]
     })
-    const row = schedule.find(item => item.date === '2024-03-01')!
+    const row = schedule.at(-1)!
 
-    expect(row.eventTypes).toEqual(['earlyIgnored'])
-    expect(row.earlyPayment).toBe(0)
+    expect(row.date).toBe('2024-02-01')
+    expect(schedule.some(item => item.eventTypes.length > 0 && item.eventTypes.every(type => type === 'earlyIgnored'))).toBe(false)
     expect(row.repaymentOutcomes).toEqual([expect.objectContaining({ repaymentId: 'late-after-close', requestedAmount: 50_000, appliedAmount: 0, unusedAmount: 50_000, reason: 'debtClosed' })])
   })
   it('не закрывает кредит, если основной долг погашен, но остались отложенные проценты', () => {
@@ -495,6 +495,23 @@ describe('loan engine', () => {
     const result=compareScenarios(config,[early({date:'2024-03-15',amount:4_000_000,strategy:'full'})])
     const combined=result.scenarios.find(s=>s.id==='combined')!
     expect(combined.monthlyPayment).toBe(0)
+  })
+
+  it('не учитывает операции после закрытия в метриках срока', () => {
+    const closingConfig: LoanConfig = { ...config, principal: 100_000, annualRate: 0, termMonths: 24, issueDate: '2024-01-01', firstPaymentDate: '2024-02-01', paymentDay: 1, firstPaymentInterestOnly: false }
+    const close = early({ id: 'full-close', date: '2024-03-01', amount: 100_000, strategy: 'full' })
+    const future = early({ id: 'late-after-close', date: '2025-03-01', amount: 50_000, strategy: 'reduceTerm' })
+    const closedOnly = compareScenarios(closingConfig, [close]).scenarios.find(s => s.id === 'combined')!
+    const withFuture = compareScenarios(closingConfig, [close, future]).scenarios.find(s => s.id === 'combined')!
+
+    expect(withFuture.monthlyPayment).toBe(0)
+    expect(withFuture.closingDate).toBe(closedOnly.closingDate)
+    expect(withFuture.termDays).toBe(closedOnly.termDays)
+    expect(withFuture.daysSaved).toBe(closedOnly.daysSaved)
+    expect(withFuture.monthsSaved).toBe(closedOnly.monthsSaved)
+    expect(withFuture.schedule.at(-1)?.date).toBe(closedOnly.closingDate)
+    expect(withFuture.schedule.some(row => row.eventTypes.length > 0 && row.eventTypes.every(type => type === 'earlyIgnored'))).toBe(false)
+    expect(withFuture.schedule.at(-1)?.repaymentOutcomes).toEqual(expect.arrayContaining([expect.objectContaining({ repaymentId: 'late-after-close', date: '2025-03-01', appliedAmount: 0, unusedAmount: 50_000, reason: 'debtClosed' })]))
   })
 
   it('сохраняет пересчёт платежа, если в ту же дату есть другая стратегия', () => {
