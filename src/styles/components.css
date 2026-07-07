@@ -9,6 +9,7 @@
 .rate-settings-panel{grid-area:rate}
 .appearance-panel{grid-area:appearance;grid-column:auto}
 .settings-layout .panel-head{padding-bottom:14px;border-bottom:1px solid #e4ece9}
+.settings-error{grid-column:1/-1;margin-bottom:0}
 .loan-settings-panel .form-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
 .interest-settings-panel .form-grid,.fees-settings-panel .form-grid{grid-template-columns:1fr}
 .appearance-panel .form-grid{grid-template-columns:repeat(3,minmax(0,1fr))}

@@ -273,6 +273,40 @@ describe('App smoke tests', () => {
     expect(screen.queryByText(/год не раньше 1900/i)).toBeNull()
   })
 
+  it('показывает отказ при несовместимом изменении параметров', async () => {
+    const user = userEvent.setup()
+    const activeLoan = loan({
+      config: {
+        ...defaultConfig,
+        issueDate: '2026-06-23',
+        firstPaymentDate: '2026-07-15',
+        paymentDay: 15,
+        frequency: 'monthly'
+      },
+      repayments: [{
+        id: 'total-with-fee',
+        date: '2026-08-15',
+        amount: 500000,
+        amountMode: 'totalWithFee',
+        strategy: 'reduceTerm',
+        source: 'own',
+        sameDayOrder: 'regularFirst',
+        interestFirst: true,
+        sameDaySequence: 0
+      }]
+    })
+    useLoanStore.setState({ ...activeLoan, loans: [activeLoan], activeLoanId: activeLoan.id })
+    render(<App />)
+
+    await user.click(screen.getByRole('button', { name: 'Параметры' }))
+    const frequency = await screen.findByDisplayValue('Ежемесячно') as HTMLSelectElement
+    await user.selectOptions(frequency, 'quarterly')
+
+    expect(useLoanStore.getState().config.frequency).toBe('monthly')
+    expect(frequency.value).toBe('monthly')
+    expect((await screen.findByRole('alert')).textContent).toMatch(/общую сумму списания/i)
+  })
+
   it('закрывает модалку и сбрасывает draft регулярного правила при переключении кредита', async () => {
     const user = userEvent.setup()
     const first = loan({ id: 'loan-a', name: 'Первый' })

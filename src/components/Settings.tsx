@@ -14,7 +14,7 @@ type SettingHelpProps = { text: string }
 type DateCommitInputProps = {
   value: string
   applyLabel: string
-  onCommit: (value: string) => void
+  onCommit: (value: string) => boolean | void
   validate?: (value: string) => string
 }
 
@@ -64,7 +64,7 @@ function DateCommitInput({ value, applyLabel, onCommit, validate }: DateCommitIn
   const error = changed ? dateDraftError(draft) || validate?.(draft) || '' : ''
   const canCommit = changed && !error
   const commit = () => {
-    if (canCommit) onCommit(draft)
+    if (canCommit && onCommit(draft) === false) setDraft(value)
   }
 
   return <>
@@ -94,12 +94,36 @@ export function Settings({
   const [newRateDate, setNewRateDate] = useState('')
   const [newRateAnnualRate, setNewRateAnnualRate] = useState(config.annualRate)
   const [rateError, setRateError] = useState('')
+  const [configError, setConfigError] = useState('')
   const rateChanges = config.rateChanges ?? []
   const configuredPeriods = config.frequency === 'biweekly' ? Math.max(1, Math.round(config.termMonths * 26 / 12)) : config.frequency === 'quarterly' ? Math.max(1, Math.round(config.termMonths / 3)) : config.termMonths
   let contractFinalDate = config.firstPaymentDate
   for (let index = 1; index < configuredPeriods && isISODate(contractFinalDate); index += 1) contractFinalDate = nextPaymentDate(contractFinalDate, config)
   const hasRateAfterContractEnd = isISODate(contractFinalDate) && rateChanges.some(change => isISODate(change.date) && change.date > contractFinalDate)
-  const updateRateChanges = (items: RateChange[]) => update({ rateChanges: sortRateChanges(items) })
+  useEffect(() => setConfigError(''), [config])
+  const commitConfig = (patch: Partial<LoanConfig>) => {
+    try {
+      update(patch)
+      setConfigError('')
+      return true
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Не удалось изменить параметры кредита'
+      setConfigError(`Изменение отклонено: ${message}`)
+      return false
+    }
+  }
+  const commitInterest = (patch: Partial<LoanConfig['interest']>) => {
+    try {
+      updateInterest(patch)
+      setConfigError('')
+      return true
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Не удалось изменить параметры начисления'
+      setConfigError(`Изменение отклонено: ${message}`)
+      return false
+    }
+  }
+  const updateRateChanges = (items: RateChange[]) => commitConfig({ rateChanges: sortRateChanges(items) })
   const addRateChange = () => {
     if (rateChanges.length >= MAX_RATE_CHANGES) {
       setRateError(`Можно добавить не более ${MAX_RATE_CHANGES} изменений ставки`)
@@ -117,31 +141,31 @@ export function Settings({
       setRateError('На эту дату уже есть изменение ставки')
       return
     }
-    updateRateChanges([...rateChanges, { id: createId('rate'), date: newRateDate, annualRate: newRateAnnualRate }])
+    if (!updateRateChanges([...rateChanges, { id: createId('rate'), date: newRateDate, annualRate: newRateAnnualRate }])) return
     setNewRateDate('')
     setRateError('')
   }
   const editRateChange = (id: string, patch: Partial<RateChange>) => {
     if (!rateChanges.some(item => item.id === id)) {
       setRateError('Изменение ставки уже не найдено в этом кредите')
-      return
+      return false
     }
     if (patch.date !== undefined) {
       if (!isISODate(patch.date)) {
         setRateError('Укажите корректную дату изменения ставки')
-        return
+        return false
       }
       if (patch.date <= config.issueDate) {
         setRateError('Дата изменения ставки должна быть после выдачи кредита')
-        return
+        return false
       }
       if (rateChanges.some(item => item.id !== id && item.date === patch.date)) {
         setRateError('На эту дату уже есть изменение ставки')
-        return
+        return false
       }
     }
     setRateError('')
-    updateRateChanges(rateChanges.map(item => item.id === id ? { ...item, ...patch } : item))
+    return updateRateChanges(rateChanges.map(item => item.id === id ? { ...item, ...patch } : item))
   }
   const removeRateChange = (id: string) => {
     if (!rateChanges.some(item => item.id === id)) {
@@ -152,48 +176,49 @@ export function Settings({
     updateRateChanges(rateChanges.filter(item => item.id !== id))
   }
   return <div className="settings-layout">
+    {configError && <div className="alert settings-error" role="alert">{configError}</div>}
     <section className="panel form-panel loan-settings-panel">
       <div className="panel-head"><div><h3>Параметры кредита</h3><p>Основные условия из кредитного договора</p></div></div>
       <div className="form-grid">
-        <div className="setting-item"><Field label="Сумма кредита" help="Начальный основной долг. От него считаются проценты, аннуитетный платеж, переплата и прогресс погашения."><NumberInput value={config.principal} min="1" onCommit={principal => update({ principal })}/></Field></div>
-        <div className="setting-item"><Field label="Годовая ставка" help="Процентная ставка банка. Влияет на начисленные проценты, долю тела в каждом платеже, переплату и срок после досрочных погашений."><div className="with-suffix"><NumberInput value={config.annualRate} min="0" max="100" step="0.1" onCommit={annualRate => update({ annualRate })}/><i>%</i></div></Field></div>
-        <div className="setting-item"><Field label="Дата выдачи" help="День выдачи кредита и старт первого процентного периода. От него зависит количество дней до первого платежа."><DateCommitInput value={config.issueDate} applyLabel="Применить дату выдачи" onCommit={issueDate => update({ issueDate })} validate={issueDate => isAfterDateHorizon(issueDate, config.firstPaymentDate) ? `Первый платёж должен быть в пределах ${MAX_DATE_SPAN_YEARS} лет от даты выдачи` : ''}/></Field></div>
-        <div className="setting-item"><Field label="Первый платёж" help="Первая плановая дата списания. Задает первый расчетный период и дальнейший календарь платежей."><DateCommitInput value={config.firstPaymentDate} applyLabel="Применить дату первого платежа" onCommit={firstPaymentDate => update({ firstPaymentDate })} validate={firstPaymentDate => isAfterDateHorizon(config.issueDate, firstPaymentDate) ? `Первый платёж должен быть в пределах ${MAX_DATE_SPAN_YEARS} лет от даты выдачи` : ''}/></Field></div>
-        <div className="setting-item"><label className="toggle-row"><div><b className="setting-title">Первый платёж только проценты<SettingHelp text="Если банк в первый платеж списывает только проценты, включите настройку. Тело кредита начнет гаситься со следующего планового платежа."/></b><span>Без погашения тела кредита</span></div><input type="checkbox" checked={config.firstPaymentInterestOnly} onChange={e => update({ firstPaymentInterestOnly: e.target.checked })}/></label></div>
-        <div className="setting-item"><Field label="Срок кредита" help="Договорной срок. Используется для расчета регулярного платежа и для сравнения, сколько месяцев экономят досрочные погашения."><div className="term-control"><NumberInput min="1" step={termUnit === 'years' ? .25 : 1} value={termUnit === 'years' ? Number((config.termMonths / 12).toFixed(2)) : config.termMonths} onCommit={value => update({ termMonths: Math.max(1, Math.round(value * (termUnit === 'years' ? 12 : 1))) })}/><select aria-label="Единица срока" value={termUnit} onChange={e => setTermUnit(e.target.value as 'months' | 'years')}><option value="months">месяцев</option><option value="years">лет</option></select></div></Field></div>
-        <div className="setting-item"><Field label="День платежа" help="День месяца для следующих платежей. Меняет длину процентных периодов и даты строк графика."><NumberInput min="1" max="31" step="1" value={config.paymentDay} onCommit={paymentDay => update({ paymentDay })}/></Field></div>
-        <div className="setting-item"><Field label="Тип платежа" help="Аннуитет держит платеж почти постоянным, дифференцированный гасит равную часть тела. Меняет весь график и эффект досрочных платежей."><select value={config.paymentType} onChange={e => update({ paymentType: e.target.value as LoanConfig['paymentType'] })}><option value="annuity">Аннуитетный</option><option value="differentiated">Дифференцированный</option></select></Field></div>
-        <div className="setting-item"><Field label="Периодичность" help="Частота регулярных платежей. Влияет на количество платежей в году, даты графика и расчет платежа."><select value={config.frequency} onChange={e => update({ frequency: e.target.value as LoanConfig['frequency'] })}><option value="monthly">Ежемесячно</option><option value="biweekly">Раз в 2 недели</option><option value="quarterly">Ежеквартально</option></select></Field></div>
-        <div className="setting-item"><Field label="Валюта" help="Меняет символ валюты в интерфейсе, отчете и экспорте. Математически суммы не конвертируются."><select value={config.currency} onChange={e => update({ currency: e.target.value as LoanConfig['currency'] })}><option value="RUB">Российский рубль (₽)</option><option value="USD">Доллар США ($)</option><option value="EUR">Евро (€)</option><option value="CNY">Китайский юань (¥)</option></select></Field></div>
+        <div className="setting-item"><Field label="Сумма кредита" help="Начальный основной долг. От него считаются проценты, аннуитетный платеж, переплата и прогресс погашения."><NumberInput value={config.principal} min="1" onCommit={principal => commitConfig({ principal })}/></Field></div>
+        <div className="setting-item"><Field label="Годовая ставка" help="Процентная ставка банка. Влияет на начисленные проценты, долю тела в каждом платеже, переплату и срок после досрочных погашений."><div className="with-suffix"><NumberInput value={config.annualRate} min="0" max="100" step="0.1" onCommit={annualRate => commitConfig({ annualRate })}/><i>%</i></div></Field></div>
+        <div className="setting-item"><Field label="Дата выдачи" help="День выдачи кредита и старт первого процентного периода. От него зависит количество дней до первого платежа."><DateCommitInput value={config.issueDate} applyLabel="Применить дату выдачи" onCommit={issueDate => commitConfig({ issueDate })} validate={issueDate => isAfterDateHorizon(issueDate, config.firstPaymentDate) ? `Первый платёж должен быть в пределах ${MAX_DATE_SPAN_YEARS} лет от даты выдачи` : ''}/></Field></div>
+        <div className="setting-item"><Field label="Первый платёж" help="Первая плановая дата списания. Задает первый расчетный период и дальнейший календарь платежей."><DateCommitInput value={config.firstPaymentDate} applyLabel="Применить дату первого платежа" onCommit={firstPaymentDate => commitConfig({ firstPaymentDate })} validate={firstPaymentDate => isAfterDateHorizon(config.issueDate, firstPaymentDate) ? `Первый платёж должен быть в пределах ${MAX_DATE_SPAN_YEARS} лет от даты выдачи` : ''}/></Field></div>
+        <div className="setting-item"><label className="toggle-row"><div><b className="setting-title">Первый платёж только проценты<SettingHelp text="Если банк в первый платеж списывает только проценты, включите настройку. Тело кредита начнет гаситься со следующего планового платежа."/></b><span>Без погашения тела кредита</span></div><input type="checkbox" checked={config.firstPaymentInterestOnly} onChange={e => commitConfig({ firstPaymentInterestOnly: e.target.checked })}/></label></div>
+        <div className="setting-item"><Field label="Срок кредита" help="Договорной срок. Используется для расчета регулярного платежа и для сравнения, сколько месяцев экономят досрочные погашения."><div className="term-control"><NumberInput min="1" step={termUnit === 'years' ? .25 : 1} value={termUnit === 'years' ? Number((config.termMonths / 12).toFixed(2)) : config.termMonths} onCommit={value => commitConfig({ termMonths: Math.max(1, Math.round(value * (termUnit === 'years' ? 12 : 1))) })}/><select aria-label="Единица срока" value={termUnit} onChange={e => setTermUnit(e.target.value as 'months' | 'years')}><option value="months">месяцев</option><option value="years">лет</option></select></div></Field></div>
+        <div className="setting-item"><Field label="День платежа" help="День месяца для следующих платежей. Меняет длину процентных периодов и даты строк графика."><NumberInput min="1" max="31" step="1" value={config.paymentDay} onCommit={paymentDay => commitConfig({ paymentDay })}/></Field></div>
+        <div className="setting-item"><Field label="Тип платежа" help="Аннуитет держит платеж почти постоянным, дифференцированный гасит равную часть тела. Меняет весь график и эффект досрочных платежей."><select value={config.paymentType} onChange={e => commitConfig({ paymentType: e.target.value as LoanConfig['paymentType'] })}><option value="annuity">Аннуитетный</option><option value="differentiated">Дифференцированный</option></select></Field></div>
+        <div className="setting-item"><Field label="Периодичность" help="Частота регулярных платежей. Влияет на количество платежей в году, даты графика и расчет платежа."><select value={config.frequency} onChange={e => commitConfig({ frequency: e.target.value as LoanConfig['frequency'] })}><option value="monthly">Ежемесячно</option><option value="biweekly">Раз в 2 недели</option><option value="quarterly">Ежеквартально</option></select></Field></div>
+        <div className="setting-item"><Field label="Валюта" help="Меняет символ валюты в интерфейсе, отчете и экспорте. Математически суммы не конвертируются."><select value={config.currency} onChange={e => commitConfig({ currency: e.target.value as LoanConfig['currency'] })}><option value="RUB">Российский рубль (₽)</option><option value="USD">Доллар США ($)</option><option value="EUR">Евро (€)</option><option value="CNY">Китайский юань (¥)</option></select></Field></div>
       </div>
     </section>
 
     <section className="panel form-panel interest-settings-panel">
       <div className="panel-head"><div><h3>Начисление процентов</h3><p>Настройте точное правило вашего банка</p></div></div>
       <div className="form-grid">
-        <div className="setting-item"><Field label="Метод" help="Выбирает формулу процентов. Фактические дни нужны для банковских графиков с разной длиной месяцев; номинальная ставка делит год на равные периоды."><select value={config.interest.method} onChange={e => updateInterest({ method: e.target.value as LoanConfig['interest']['method'] })}><option value="daily">По фактическим дням</option><option value="annuity">Номинальная ставка / период</option></select></Field></div>
-        <div className="setting-item"><Field label="База года" help="Знаменатель дневной ставки. Особенно заметен в високосные годы и при сверке процентов с банком."><select value={config.interest.dayCountBasis} onChange={e => updateInterest({ dayCountBasis: e.target.value as LoanConfig['interest']['dayCountBasis'] })}><option value="actualActual">Фактические дни / фактический год</option><option value="actual365">Фактические дни / 365 дней</option><option value="365">365 дней</option><option value="366">366 дней</option><option value="360">360 дней</option></select></Field></div>
-        <div className="setting-item"><Field label="Округление" help="Правило округления платежей и процентов. Может давать копеечные отличия в остатке и итоговой переплате."><select value={config.rounding} onChange={e => update({ rounding: e.target.value as LoanConfig['rounding'] })}><option value="kopecks">До копеек</option><option value="rubles">До рублей</option><option value="bank">Банковское</option></select></Field></div>
-        <div className="setting-item"><Field label="Порог закрытия" help="Если остаток тела стал меньше порога, приложение добавит его к ближайшему платежу и закроет кредит."><div className="with-suffix"><NumberInput min="0" value={config.closeThreshold} onCommit={closeThreshold => update({ closeThreshold })}/><i>{currencySymbol(config.currency)}</i></div></Field></div>
-        <div className="setting-item"><label className="toggle-row"><div><b className="setting-title">Включать дату платежа<SettingHelp text="Определяет, начисляются ли проценты за сам день платежа. Влияет на проценты каждой строки и текущий долг между платежами."/></b><span>В расчёт процентного периода</span></div><input type="checkbox" checked={config.interest.includePaymentDate} onChange={e => updateInterest({ includePaymentDate: e.target.checked })}/></label></div>
-        <div className="setting-item"><Field label="Начало периода" help="Задает, включается ли дата прошлой операции в новый процентный период. Для многих банков подходит “со следующего дня”."><select value={config.interest.periodStart} onChange={e => updateInterest({ periodStart: e.target.value as LoanConfig['interest']['periodStart'] })}><option value="inclusive">С даты прошлой операции</option><option value="exclusive">Со следующего дня</option></select></Field></div>
-        <div className="setting-item"><Field label="Остаток для начисления" help="Определяет, на какой остаток начислять проценты в день платежа или досрочного погашения. Важно для банков, которые меняют остаток до или после начисления."><select value={config.interest.balanceMoment} onChange={e => updateInterest({ balanceMoment: e.target.value as LoanConfig['interest']['balanceMoment'] })}><option value="startOfDay">На начало дня</option><option value="endOfDay">На конец дня</option></select></Field></div>
+        <div className="setting-item"><Field label="Метод" help="Выбирает формулу процентов. Фактические дни нужны для банковских графиков с разной длиной месяцев; номинальная ставка делит год на равные периоды."><select value={config.interest.method} onChange={e => commitInterest({ method: e.target.value as LoanConfig['interest']['method'] })}><option value="daily">По фактическим дням</option><option value="annuity">Номинальная ставка / период</option></select></Field></div>
+        <div className="setting-item"><Field label="База года" help="Знаменатель дневной ставки. Особенно заметен в високосные годы и при сверке процентов с банком."><select value={config.interest.dayCountBasis} onChange={e => commitInterest({ dayCountBasis: e.target.value as LoanConfig['interest']['dayCountBasis'] })}><option value="actualActual">Фактические дни / фактический год</option><option value="actual365">Фактические дни / 365 дней</option><option value="365">365 дней</option><option value="366">366 дней</option><option value="360">360 дней</option></select></Field></div>
+        <div className="setting-item"><Field label="Округление" help="Правило округления платежей и процентов. Может давать копеечные отличия в остатке и итоговой переплате."><select value={config.rounding} onChange={e => commitConfig({ rounding: e.target.value as LoanConfig['rounding'] })}><option value="kopecks">До копеек</option><option value="rubles">До рублей</option><option value="bank">Банковское</option></select></Field></div>
+        <div className="setting-item"><Field label="Порог закрытия" help="Если остаток тела стал меньше порога, приложение добавит его к ближайшему платежу и закроет кредит."><div className="with-suffix"><NumberInput min="0" value={config.closeThreshold} onCommit={closeThreshold => commitConfig({ closeThreshold })}/><i>{currencySymbol(config.currency)}</i></div></Field></div>
+        <div className="setting-item"><label className="toggle-row"><div><b className="setting-title">Включать дату платежа<SettingHelp text="Определяет, начисляются ли проценты за сам день платежа. Влияет на проценты каждой строки и текущий долг между платежами."/></b><span>В расчёт процентного периода</span></div><input type="checkbox" checked={config.interest.includePaymentDate} onChange={e => commitInterest({ includePaymentDate: e.target.checked })}/></label></div>
+        <div className="setting-item"><Field label="Начало периода" help="Задает, включается ли дата прошлой операции в новый процентный период. Для многих банков подходит “со следующего дня”."><select value={config.interest.periodStart} onChange={e => commitInterest({ periodStart: e.target.value as LoanConfig['interest']['periodStart'] })}><option value="inclusive">С даты прошлой операции</option><option value="exclusive">Со следующего дня</option></select></Field></div>
+        <div className="setting-item"><Field label="Остаток для начисления" help="Определяет, на какой остаток начислять проценты в день платежа или досрочного погашения. Важно для банков, которые меняют остаток до или после начисления."><select value={config.interest.balanceMoment} onChange={e => commitInterest({ balanceMoment: e.target.value as LoanConfig['interest']['balanceMoment'] })}><option value="startOfDay">На начало дня</option><option value="endOfDay">На конец дня</option></select></Field></div>
       </div>
     </section>
 
     <section className="panel form-panel fees-settings-panel">
       <div className="panel-head"><div><h3>Комиссии</h3><p>Необязательные расходы по договору</p></div></div>
       <div className="form-grid">
-        <div className="setting-item"><Field label="Единовременная" help="Разовый расход при выдаче кредита. Попадает в денежный поток и переплату, но не увеличивает основной долг."><NumberInput min="0" value={config.oneTimeFee} onCommit={oneTimeFee => update({ oneTimeFee })}/></Field></div>
-        <div className="setting-item"><Field label="Ежемесячная" help="Дополнительная комиссия в каждой регулярной строке. Увеличивает общую сумму выплат и переплату."><NumberInput min="0" value={config.monthlyFee} onCommit={monthlyFee => update({ monthlyFee })}/></Field></div>
-        <div className="setting-item"><Field label="За досрочное погашение" help="Процент комиссии удерживается из суммы досрочного платежа. Чем выше комиссия, тем меньше денег идет в проценты и тело кредита."><div className="with-suffix"><NumberInput min="0" max="100" value={config.earlyRepaymentFeePercent} onCommit={earlyRepaymentFeePercent => update({ earlyRepaymentFeePercent: Math.min(100, Math.max(0, earlyRepaymentFeePercent)) })}/><i>%</i></div></Field></div>
+        <div className="setting-item"><Field label="Единовременная" help="Разовый расход при выдаче кредита. Попадает в денежный поток и переплату, но не увеличивает основной долг."><NumberInput min="0" value={config.oneTimeFee} onCommit={oneTimeFee => commitConfig({ oneTimeFee })}/></Field></div>
+        <div className="setting-item"><Field label="Ежемесячная" help="Дополнительная комиссия в каждой регулярной строке. Увеличивает общую сумму выплат и переплату."><NumberInput min="0" value={config.monthlyFee} onCommit={monthlyFee => commitConfig({ monthlyFee })}/></Field></div>
+        <div className="setting-item"><Field label="За досрочное погашение" help="Процент комиссии удерживается из суммы досрочного платежа. Чем выше комиссия, тем меньше денег идет в проценты и тело кредита."><div className="with-suffix"><NumberInput min="0" max="100" value={config.earlyRepaymentFeePercent} onCommit={earlyRepaymentFeePercent => commitConfig({ earlyRepaymentFeePercent: Math.min(100, Math.max(0, earlyRepaymentFeePercent)) })}/><i>%</i></div></Field></div>
       </div>
     </section>
 
     <section className="panel form-panel rate-settings-panel">
       <div className="panel-head"><div><h3>Изменение ставки</h3><p>История ставок для сверки с банковским графиком</p></div></div>
       <div className="rate-change-form">
-        <Field label="Режим применения" help="Со следующего периода ставка меняет весь следующий платёжный период. Точно с даты изменения разрезает процентный период на сегменты с разными ставками."><select value={config.rateChangeMode} onChange={e => update({ rateChangeMode: e.target.value as LoanConfig['rateChangeMode'] })}><option value="nextPeriod">Со следующего периода</option><option value="exactDate">Точно с даты изменения</option></select></Field>
+        <Field label="Режим применения" help="Со следующего периода ставка меняет весь следующий платёжный период. Точно с даты изменения разрезает процентный период на сегменты с разными ставками."><select value={config.rateChangeMode} onChange={e => commitConfig({ rateChangeMode: e.target.value as LoanConfig['rateChangeMode'] })}><option value="nextPeriod">Со следующего периода</option><option value="exactDate">Точно с даты изменения</option></select></Field>
         <Field label="Дата изменения" help="Дата, когда банк изменил ставку. Новая ставка начнет влиять со следующего платёжного периода."><input type="date" value={newRateDate} onChange={e => setNewRateDate(e.target.value)}/></Field>
         <Field label="Новая ставка" help="Годовая ставка, которая будет применяться после ближайшего планового платежа."><div className="with-suffix"><NumberInput value={newRateAnnualRate} min="0" max="100" step="0.1" onCommit={setNewRateAnnualRate}/><i>%</i></div></Field>
         <button className="primary rate-add-button" onClick={addRateChange}><Plus size={16}/>Добавить</button>

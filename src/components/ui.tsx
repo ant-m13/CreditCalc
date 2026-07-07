@@ -8,7 +8,7 @@ export function Field({ label, hint, help, children }: { label: React.ReactNode;
   return <label className="field"><span className="field-title">{label}{helpText && <details className="field-help" onClick={event => event.stopPropagation()}><summary aria-label={helpLabel}><CircleHelp size={13}/></summary><p>{helpText}</p></details>}</span>{children}</label>
 }
 
-export function NumberInput({ value, onCommit, ...props }: { value: number; onCommit: (value: number) => void } & Omit<React.InputHTMLAttributes<HTMLInputElement>, 'value' | 'onChange'>) {
+export function NumberInput({ value, onCommit, ...props }: { value: number; onCommit: (value: number) => boolean | void } & Omit<React.InputHTMLAttributes<HTMLInputElement>, 'value' | 'onChange'>) {
   const [draft, setDraft] = useState(String(value))
   useEffect(() => setDraft(String(value)), [value])
   const propNumber = (input: unknown) => {
@@ -39,7 +39,10 @@ export function NumberInput({ value, onCommit, ...props }: { value: number; onCo
       if (min !== undefined) normalized = Math.max(min, normalized)
       if (max !== undefined) normalized = Math.min(max, normalized)
     }
-    onCommit(normalized)
+    if (onCommit(normalized) === false) {
+      setDraft(String(value))
+      return
+    }
     setDraft(String(normalized))
   }
   return <input {...props} type="number" value={draft} onChange={event => setDraft(event.target.value)} onBlur={event => commit(event.currentTarget.value)} onKeyDown={event => {
