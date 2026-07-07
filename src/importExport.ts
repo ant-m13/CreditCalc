@@ -1,5 +1,5 @@
 import type { EarlyRepayment, GracePeriod, LoanConfig, RateChange } from './loanEngine'
-import { repaymentAmountModeContext, sortRateChanges } from './loanEngine'
+import { repaymentAmountModeContext, sortRateChanges, supportedCurrencies } from './loanEngine'
 import { defaultConfig } from './loanDefaults'
 import type { RepaymentRule } from './repaymentRules'
 import { assertLoanCandidateValid } from './loanCandidate'
@@ -28,7 +28,6 @@ const finite = (value: unknown, minimum = 0) => typeof value === 'number' && Num
 const integer = (value: unknown, minimum = 0) => finite(value, minimum) && Number.isInteger(value)
 const positive = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value) && value > 0
 const hexColor = (value: unknown): value is string => typeof value === 'string' && /^#[0-9a-fA-F]{6}$/.test(value)
-const currencies = ['RUB', 'USD', 'EUR', 'CNY'] as const
 const paymentTypes = ['annuity', 'differentiated'] as const
 const frequencies = ['monthly', 'biweekly', 'quarterly'] as const
 const roundingModes = ['kopecks', 'rubles', 'bank'] as const
@@ -80,12 +79,15 @@ export function parseLoanBackupObject(raw: unknown): LoanBackupData {
 
   const source = raw.config
   const interest = isObject(source.interest) ? source.interest : {}
+  const currency = source.currency === undefined ? defaultConfig.currency : oneOf(source.currency, supportedCurrencies) ? source.currency : null
+  if (currency === null) throw new Error('Файл содержит неподдерживаемую валюту')
   const config = {
     ...defaultConfig,
     ...source,
     firstPaymentInterestOnly: booleanOrDefault(source.firstPaymentInterestOnly, defaultConfig.firstPaymentInterestOnly),
     paymentType: oneOfOrDefault(source.paymentType, paymentTypes, defaultConfig.paymentType),
     frequency: oneOfOrDefault(source.frequency, frequencies, defaultConfig.frequency),
+    currency,
     rounding: oneOfOrDefault(source.rounding, roundingModes, defaultConfig.rounding),
     interest: {
       ...defaultConfig.interest,
@@ -100,7 +102,6 @@ export function parseLoanBackupObject(raw: unknown): LoanBackupData {
   if (!positive(config.principal) || !finite(config.annualRate) || config.annualRate > 100 || !integer(config.termMonths, 1) || config.termMonths > MAX_TERM_MONTHS || !integer(config.paymentDay, 1) || config.paymentDay > 31 || !finite(config.closeThreshold) || !finite(config.oneTimeFee) || !finite(config.monthlyFee) || !finite(config.earlyRepaymentFeePercent) || config.earlyRepaymentFeePercent > 100) throw new Error('Параметры кредита содержат недопустимые числа')
   if (!isISODate(config.issueDate) || !isISODate(config.firstPaymentDate)) throw new Error('Проверьте даты выдачи и первого платежа')
   if (config.firstPaymentDate <= config.issueDate) throw new Error('Первый платёж должен быть после даты выдачи')
-  if (!oneOf(config.currency, currencies)) throw new Error('Файл содержит неподдерживаемую валюту')
   if (!oneOf(config.rateChangeMode, ['nextPeriod', 'exactDate'])) throw new Error('Файл содержит неизвестный режим изменения ставки')
 
   const rateChangesRaw = source.rateChanges === undefined ? [] : source.rateChanges

@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { createJSONStorage, persist } from 'zustand/middleware'
 import { addMonths, format, parseISO } from 'date-fns'
-import { nextPaymentDate, nextSameDaySequence, repaymentAmountModeContext, sortRateChanges, sortRepaymentsByApplicationOrder, validateScenario, type EarlyRepayment, type GracePeriod, type LoanConfig, type RateChange } from './loanEngine'
+import { nextPaymentDate, nextSameDaySequence, repaymentAmountModeContext, sortRateChanges, sortRepaymentsByApplicationOrder, supportedCurrencies, validateScenario, type EarlyRepayment, type GracePeriod, type LoanConfig, type RateChange } from './loanEngine'
 import { createDefaultConfig, defaultConfig } from './loanDefaults'
 import type { LoanBackupData } from './importExport'
 import { assertLoanCandidateValid } from './loanCandidate'
@@ -143,7 +143,6 @@ const sortRules = (rules: RepaymentRule[]) =>
 
 const defaultAccentColor = '#0b9873'
 const themeNames: readonly ThemeName[] = ['emerald', 'ocean', 'violet', 'graphite', 'warm', 'night']
-const currencies = ['RUB', 'USD', 'EUR', 'CNY'] as const
 const paymentTypes = ['annuity', 'differentiated'] as const
 const frequencies = ['monthly', 'biweekly', 'quarterly'] as const
 const roundingModes = ['kopecks', 'rubles', 'bank'] as const
@@ -250,7 +249,7 @@ const normalizeConfig = (config: Partial<LoanConfig> | undefined): LoanConfig =>
     paymentDay: Math.round(finiteNumber(source.paymentDay, defaultConfig.paymentDay, 1, 31)),
     paymentType: oneOf(source.paymentType, paymentTypes, defaultConfig.paymentType),
     frequency: oneOf(source.frequency, frequencies, defaultConfig.frequency),
-    currency: oneOf(source.currency, currencies, defaultConfig.currency as typeof currencies[number]),
+    currency: oneOf(source.currency, supportedCurrencies, defaultConfig.currency),
     rounding: oneOf(source.rounding, roundingModes, defaultConfig.rounding),
     closeThreshold: finiteNumber(source.closeThreshold, defaultConfig.closeThreshold, 0),
     oneTimeFee: finiteNumber(source.oneTimeFee, defaultConfig.oneTimeFee, 0),

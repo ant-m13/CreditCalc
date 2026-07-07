@@ -1,4 +1,4 @@
-import type { EarlyRepayment, GracePeriod, LoanConfig } from './types'
+import { supportedCurrencies, type EarlyRepayment, type GracePeriod, type LoanConfig } from './types'
 import { differenceInCalendarDays, parseISO } from 'date-fns'
 import { MAX_CALENDAR_DAYS, MAX_CALENDAR_YEARS, MAX_EARLY_REPAYMENTS, MAX_GRACE_PERIODS, MAX_RATE_CHANGES, MAX_TERM_MONTHS } from './limits'
 import { contractualFinalPaymentDate, preparePaymentCalendar, totalPaymentPeriods } from './dates'
@@ -18,7 +18,6 @@ const repaymentStrategies = ['reduceTerm', 'reducePayment', 'full', 'custom'] as
 const repaymentSources = ['own', 'subsidy', 'insurance', 'other'] as const
 const sameDayOrders = ['regularFirst', 'earlyFirst'] as const
 const graceTypes = ['full', 'interestOnly', 'reduced', 'custom'] as const
-const currencies = ['RUB', 'USD', 'EUR', 'CNY'] as const
 
 const daysFromIssue = (issueDate: string, date: string) => differenceInCalendarDays(parseISO(date), parseISO(issueDate))
 const exceedsCalendarHorizon = (issueDate: string, date: string) => daysFromIssue(issueDate, date) > MAX_CALENDAR_DAYS
@@ -44,7 +43,7 @@ export function validateLoan(config: LoanConfig) {
   if (typeof config.firstPaymentInterestOnly !== 'boolean') errors.push('Настройка первого платежа повреждена')
   if (!oneOf(config.paymentType, paymentTypes)) errors.push('Тип платежа повреждён')
   if (!oneOf(config.frequency, frequencies)) errors.push('Частота платежей повреждена')
-  if (!oneOf(config.currency, currencies)) errors.push('Валюта повреждена')
+  if (!oneOf(config.currency, supportedCurrencies)) errors.push('Валюта повреждена')
   if (!oneOf(config.rounding, roundingModes)) errors.push('Округление повреждено')
   if (!finite(config.termMonths) || !(config.termMonths > 0)) errors.push('Срок должен быть больше нуля')
   if (finite(config.termMonths) && !Number.isInteger(config.termMonths)) errors.push('Срок должен быть целым числом месяцев')

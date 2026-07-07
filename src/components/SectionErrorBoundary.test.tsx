@@ -3,7 +3,7 @@ import { render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { SectionErrorBoundary } from './SectionErrorBoundary'
 
-function BrokenSection() {
+function BrokenSection(): never {
   throw new Error('Раздел сломался')
 }
 

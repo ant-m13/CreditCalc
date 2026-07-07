@@ -71,6 +71,7 @@ const collapsedColumnCount = (showFees: boolean, showDeferred: boolean) => 7 + (
 export function Schedule({ schedule, baseSchedule, repayments, currency, displayDecimals, rows, setRows, more }: ScheduleProps) {
   const { money } = createMoneyFormatter(currency, displayDecimals)
   const [jump, setJump] = useState('')
+  const [jumpError, setJumpError] = useState('')
   const [yearFilter, setYearFilter] = useState('all')
   const [amountSearch, setAmountSearch] = useState('')
   const [monthsCollapsed, setMonthsCollapsed] = useState(false)
@@ -124,9 +125,16 @@ export function Schedule({ schedule, baseSchedule, repayments, currency, display
   }
   const jumpTo = () => {
     const query = normalizeJump(jump)
-    if (!query) return
+    if (!query) {
+      setJumpError('')
+      return
+    }
     const index = schedule.findIndex(row => row.date === query || row.date.startsWith(`${query}-`) || row.date.startsWith(query))
-    if (index < 0) return
+    if (index < 0) {
+      setJumpError('Дата/месяц не найден')
+      return
+    }
+    setJumpError('')
     setRows(Math.max(rows, index + 1))
     setYearFilter('all')
     setAmountSearch('')
@@ -166,7 +174,7 @@ export function Schedule({ schedule, baseSchedule, repayments, currency, display
   }, [pendingRow, rows])
 
   return <section className="panel table-panel">
-    <div className="panel-head schedule-head"><div><h3>График платежей</h3><p>{schedule.length} строк · показано {visibleRows.length} · закрытие {closingDate ? shortDate(closingDate) : '—'}</p></div><div className="schedule-tools"><input value={jump} onChange={event => setJump(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') jumpTo() }} placeholder="Дата, месяц или год"/><button className="ghost" onClick={jumpTo}>Перейти</button><button className="ghost" onClick={() => setRows(schedule.length)}>Показать всё</button></div></div>
+    <div className="panel-head schedule-head"><div><h3>График платежей</h3><p>{schedule.length} строк · показано {visibleRows.length} · закрытие {closingDate ? shortDate(closingDate) : '—'}</p></div><div className="schedule-tools"><input value={jump} onChange={event => { setJump(event.target.value); if (jumpError) setJumpError('') }} onKeyDown={event => { if (event.key === 'Enter') jumpTo() }} placeholder="Дата, месяц или год" aria-describedby={jumpError ? 'schedule-jump-error' : undefined}/><button className="ghost" onClick={jumpTo}>Перейти</button><button className="ghost" onClick={() => setRows(schedule.length)}>Показать всё</button>{jumpError && <p id="schedule-jump-error" className="inline-error schedule-jump-error" role="status">{jumpError}</p>}</div></div>
     <div className="mobile-schedule-bar"><div><span>Остаток долга</span><b>{money(currentBalance)}</b></div><div className="mobile-quick-actions"><button className="ghost compact" onClick={() => quickJump(today.slice(0,4))}>Текущий год</button>{nextRow && <button className="ghost compact" onClick={() => quickJump(nextRow.date)}>Следующий платёж</button>}{nextEarly && <button className="ghost compact" onClick={() => quickJump(nextEarly.date)}>Досрочные</button>}<button className="ghost compact" onClick={() => setMobileTableMode(value => !value)}>{mobileTableMode ? 'Карточки' : 'Таблица'}</button></div></div>
     <div className="schedule-filters"><label><span>Год</span><select value={yearFilter} onChange={event => setYearFilter(event.target.value)}><option value="all">Все годы</option>{years.map(year => <option value={year} key={year}>{year}</option>)}</select></label><label><span>Поиск суммы</span><input inputMode="decimal" value={amountSearch} onChange={event => setAmountSearch(event.target.value)} placeholder="Например 35479,81"/></label><button className="ghost" onClick={() => { setYearFilter('all'); setAmountSearch(''); setMonthsCollapsed(false); setOpenMonths(new Set()) }}>Сбросить</button><label className="schedule-collapse-toggle"><input type="checkbox" checked={monthsCollapsed} onChange={event => setMonthsCollapsed(event.target.checked)}/><span>Свернуть месяцы</span></label></div>
     <div className={mobileTableMode ? 'table-wrap force-mobile-table' : 'table-wrap'}>
