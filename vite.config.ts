@@ -6,7 +6,7 @@ interface PackageMetadata {
   version?: string
 }
 
-const productionCsp = "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; base-uri 'self'; form-action 'none'; object-src 'none'"
+const productionCsp = "default-src 'self'; script-src 'self'; style-src 'self'; style-src-elem 'self'; style-src-attr 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; base-uri 'self'; form-action 'none'; object-src 'none'"
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, '.', '')
