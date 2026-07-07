@@ -1,5 +1,5 @@
 import type { EarlyRepayment, GracePeriod, LoanConfig, RateChange } from './loanEngine'
-import { isRegularPaymentDate, sortRateChanges } from './loanEngine'
+import { repaymentAmountModeContext, sortRateChanges, supportedCurrencies } from './loanEngine'
 import { defaultConfig } from './loanDefaults'
 import type { RepaymentRule } from './repaymentRules'
 import { assertLoanCandidateValid } from './loanCandidate'
@@ -28,15 +28,16 @@ const finite = (value: unknown, minimum = 0) => typeof value === 'number' && Num
 const integer = (value: unknown, minimum = 0) => finite(value, minimum) && Number.isInteger(value)
 const positive = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value) && value > 0
 const hexColor = (value: unknown): value is string => typeof value === 'string' && /^#[0-9a-fA-F]{6}$/.test(value)
-const currencies = ['RUB', 'USD', 'EUR', 'CNY'] as const
+const paymentTypes = ['annuity', 'differentiated'] as const
+const frequencies = ['monthly', 'biweekly', 'quarterly'] as const
+const roundingModes = ['kopecks', 'rubles', 'bank'] as const
+const interestMethods = ['annuity', 'daily'] as const
+const dayCountBases = ['365', '366', '360', 'actual365', 'actualActual'] as const
+const periodStarts = ['inclusive', 'exclusive'] as const
+const balanceMoments = ['startOfDay', 'endOfDay'] as const
 const scenarioIds = ['base', 'reduceTerm', 'reducePayment', 'combined'] as const
-const normalizeAmountMode = (value: unknown, isRegularDate: boolean) => {
-  if (value === undefined) return isRegularDate ? 'totalWithFee' : 'extra'
-  if (value === 'total') return 'totalWithFee'
-  if (value === 'totalWithFee' || value === 'extra') return value
-  return null
-}
-
+const oneOfOrDefault = <T extends string>(value: unknown, values: readonly T[], fallback: T): T => oneOf(value, values) ? value : fallback
+const booleanOrDefault = (value: unknown, fallback: boolean) => typeof value === 'boolean' ? value : fallback
 const ensureTextLength = (value: unknown, label: string) => {
   if (typeof value === 'string' && value.length > MAX_TEXT_FIELD_LENGTH) throw new Error(`${label} слишком длинное. Максимум: ${MAX_TEXT_FIELD_LENGTH} символов`)
 }
@@ -78,14 +79,30 @@ export function parseLoanBackupObject(raw: unknown): LoanBackupData {
 
   const source = raw.config
   const interest = isObject(source.interest) ? source.interest : {}
-  const config = { ...defaultConfig, ...source, interest: { ...defaultConfig.interest, ...interest } } as LoanConfig
+  const currency = source.currency === undefined ? defaultConfig.currency : oneOf(source.currency, supportedCurrencies) ? source.currency : null
+  if (currency === null) throw new Error('Файл содержит неподдерживаемую валюту')
+  const config = {
+    ...defaultConfig,
+    ...source,
+    firstPaymentInterestOnly: booleanOrDefault(source.firstPaymentInterestOnly, defaultConfig.firstPaymentInterestOnly),
+    paymentType: oneOfOrDefault(source.paymentType, paymentTypes, defaultConfig.paymentType),
+    frequency: oneOfOrDefault(source.frequency, frequencies, defaultConfig.frequency),
+    currency,
+    rounding: oneOfOrDefault(source.rounding, roundingModes, defaultConfig.rounding),
+    interest: {
+      ...defaultConfig.interest,
+      ...interest,
+      method: oneOfOrDefault(interest.method, interestMethods, defaultConfig.interest.method),
+      dayCountBasis: oneOfOrDefault(interest.dayCountBasis, dayCountBases, defaultConfig.interest.dayCountBasis),
+      includePaymentDate: booleanOrDefault(interest.includePaymentDate, defaultConfig.interest.includePaymentDate),
+      periodStart: oneOfOrDefault(interest.periodStart, periodStarts, defaultConfig.interest.periodStart),
+      balanceMoment: oneOfOrDefault(interest.balanceMoment, balanceMoments, defaultConfig.interest.balanceMoment)
+    }
+  } as LoanConfig
   if (!positive(config.principal) || !finite(config.annualRate) || config.annualRate > 100 || !integer(config.termMonths, 1) || config.termMonths > MAX_TERM_MONTHS || !integer(config.paymentDay, 1) || config.paymentDay > 31 || !finite(config.closeThreshold) || !finite(config.oneTimeFee) || !finite(config.monthlyFee) || !finite(config.earlyRepaymentFeePercent) || config.earlyRepaymentFeePercent > 100) throw new Error('Параметры кредита содержат недопустимые числа')
   if (!isISODate(config.issueDate) || !isISODate(config.firstPaymentDate)) throw new Error('Проверьте даты выдачи и первого платежа')
   if (config.firstPaymentDate <= config.issueDate) throw new Error('Первый платёж должен быть после даты выдачи')
-  if (!oneOf(config.currency, currencies)) throw new Error('Файл содержит неподдерживаемую валюту')
-  if (typeof config.firstPaymentInterestOnly !== 'boolean' || !oneOf(config.paymentType, ['annuity', 'differentiated']) || !oneOf(config.frequency, ['monthly', 'biweekly', 'quarterly']) || !oneOf(config.rounding, ['kopecks', 'rubles', 'bank'])) throw new Error('Файл содержит неизвестный тип расчёта')
   if (!oneOf(config.rateChangeMode, ['nextPeriod', 'exactDate'])) throw new Error('Файл содержит неизвестный режим изменения ставки')
-  if (typeof config.interest.includePaymentDate !== 'boolean' || !oneOf(config.interest.method, ['annuity', 'daily']) || !oneOf(config.interest.dayCountBasis, ['365', '366', '360', 'actual365', 'actualActual']) || !oneOf(config.interest.periodStart, ['inclusive', 'exclusive']) || !oneOf(config.interest.balanceMoment, ['startOfDay', 'endOfDay'])) throw new Error('Файл содержит неизвестное правило начисления процентов')
 
   const rateChangesRaw = source.rateChanges === undefined ? [] : source.rateChanges
   if (!Array.isArray(rateChangesRaw)) throw new Error('История ставок повреждена')
@@ -104,20 +121,24 @@ export function parseLoanBackupObject(raw: unknown): LoanBackupData {
   if (repaymentsRaw.length > MAX_EARLY_REPAYMENTS) throw new Error(`Слишком много досрочных платежей. Максимум: ${MAX_EARLY_REPAYMENTS}`)
   const repayments = repaymentsRaw.map((item, index) => {
     if (!isObject(item) || typeof item.id !== 'string' || !isISODate(item.date) || !finite(item.amount) || !oneOf(item.strategy, ['reduceTerm', 'reducePayment', 'full', 'custom']) || !oneOf(item.source, ['own', 'subsidy', 'insurance', 'other']) || !oneOf(item.sameDayOrder, ['regularFirst', 'earlyFirst']) || typeof item.interestFirst !== 'boolean') throw new Error(`Ошибка в досрочном платеже №${index + 1}`)
-    if (item.amountMode !== undefined && !oneOf(item.amountMode, ['extra', 'total', 'totalWithFee'])) throw new Error(`Ошибка в досрочном платеже №${index + 1}`)
     if (item.enabled !== undefined && typeof item.enabled !== 'boolean') throw new Error(`Ошибка в досрочном платеже №${index + 1}`)
     if (item.operationSource !== undefined && !oneOf(item.operationSource, ['manual', 'rule'])) throw new Error(`Ошибка в досрочном платеже №${index + 1}: источник операции повреждён`)
     if (item.sourceRuleId !== undefined && typeof item.sourceRuleId !== 'string') throw new Error(`Ошибка в досрочном платеже №${index + 1}: ID правила повреждён`)
     ensureTextLength(item.comment, `Комментарий досрочного платежа №${index + 1}`)
     const sameDaySequence = typeof item.sameDaySequence === 'number' && Number.isInteger(item.sameDaySequence) && item.sameDaySequence >= 0 ? item.sameDaySequence : undefined
     if (item.sameDaySequence !== undefined && sameDaySequence === undefined) throw new Error(`Ошибка в досрочном платеже №${index + 1}`)
-    const isRegularDate = isRegularPaymentDate(item.date, config)
-    const amountMode = normalizeAmountMode(item.amountMode, isRegularDate)
+    const context = repaymentAmountModeContext({
+      amount: item.amount,
+      amountMode: item.amountMode,
+      date: item.date,
+      enabled: item.enabled,
+      sameDayOrder: item.sameDayOrder
+    }, config)
+    const amountMode = context.normalizedAmountMode
     if (amountMode === null) throw new Error(`Ошибка в досрочном платеже №${index + 1}`)
     const enabled = item.enabled ?? true
-    const disabled = !enabled || item.amount === 0
-    if (!disabled && amountMode === 'totalWithFee' && item.sameDayOrder === 'earlyFirst') throw new Error(`Ошибка в досрочном платеже №${index + 1}: общая сумма списания с учётом комиссии применяется после регулярного платежа`)
-    if (!disabled && amountMode === 'totalWithFee' && !isRegularDate) throw new Error(`Ошибка в досрочном платеже №${index + 1}: общую сумму списания с учётом комиссии можно указать только в дату регулярного платежа`)
+    if (context.totalBeforeRegularPayment) throw new Error(`Ошибка в досрочном платеже №${index + 1}: общая сумма списания с учётом комиссии применяется после регулярного платежа`)
+    if (context.totalOnNonRegularDate) throw new Error(`Ошибка в досрочном платеже №${index + 1}: общую сумму списания с учётом комиссии можно указать только в дату регулярного платежа`)
     return { ...item, enabled, amountMode, sameDaySequence: sameDaySequence ?? index, sameDayOrder: amountMode === 'totalWithFee' ? 'regularFirst' : item.sameDayOrder } as unknown as EarlyRepayment
   })
   ensureUniqueIds(repayments, 'Досрочные платежи')

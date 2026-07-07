@@ -90,6 +90,7 @@ beforeEach(() => {
   localStorage.setItem('credit-calculator-seen-version', APP_VERSION)
   window.history.replaceState(null, '', '/')
   vi.stubGlobal('ResizeObserver', ResizeObserverMock)
+  vi.stubGlobal('Worker', undefined)
   vi.stubGlobal('matchMedia', vi.fn().mockReturnValue({
     matches: false,
     media: '',
@@ -118,7 +119,7 @@ describe('App smoke tests', () => {
     expect(screen.getAllByText('Кредитный калькулятор').length).toBeGreaterThan(0)
     expect(await screen.findByText('Сумма кредита', {}, { timeout: 10000 })).toBeTruthy()
     expect(screen.getByText('Данные сохранены')).toBeTruthy()
-  })
+  }, 15000)
 
   it('монтирует печатный отчёт только на время печати', async () => {
     const user = userEvent.setup()

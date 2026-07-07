@@ -6,6 +6,8 @@ export type DayCountBasis = '365' | '366' | '360' | 'actual365' | 'actualActual'
 export type RoundingMode = 'kopecks' | 'rubles' | 'bank'
 export type RateChangeMode = 'nextPeriod' | 'exactDate'
 export type EarlyRepaymentAmountMode = 'extra' | 'totalWithFee'
+export const supportedCurrencies = ['RUB', 'USD', 'EUR', 'CNY'] as const
+export type LoanCurrency = typeof supportedCurrencies[number]
 export type ScheduleEventType =
   | 'loanIssued'
   | 'earlyReduceTerm'
@@ -60,7 +62,7 @@ export interface LoanConfig {
   paymentDay: number
   paymentType: PaymentType
   frequency: Frequency
-  currency: string
+  currency: LoanCurrency
   rounding: RoundingMode
   closeThreshold: number
   oneTimeFee: number

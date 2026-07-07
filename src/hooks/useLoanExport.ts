@@ -1,6 +1,7 @@
 import { useCallback } from 'react'
 import type { LoanBackupData } from '../importExport'
-import type { PaymentScheduleItem } from '../loanEngine'
+import { validateScenario, type PaymentScheduleItem } from '../loanEngine'
+import { assertLoanCandidateValid } from '../loanCandidate'
 import { buildShareUrl, createLoanSnapshot, decodeSharedCalculation, encodeSharedCalculation, looksLikeSharedCalculationUrl, normalizeSharedCalculationPayload } from '../shareCalculation'
 import { loanToBackupData, type LoanProfile } from '../store'
 import type { ImportStatus } from './useLoanImport'
@@ -33,6 +34,30 @@ const copyText = async (text: string) => {
 const escapeHtml = (value: unknown) =>
   String(value).replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]!))
 
+const hasText = (value: unknown) => typeof value === 'string' && value.trim().length > 0
+
+const exportRequiredFields = (loan: LoanProfile) => [
+  { label: 'дату выдачи', value: loan.config.issueDate },
+  { label: 'дату первого платежа', value: loan.config.firstPaymentDate },
+  { label: 'тип платежа', value: loan.config.paymentType },
+  { label: 'периодичность', value: loan.config.frequency },
+  { label: 'валюту', value: loan.config.currency },
+  { label: 'округление', value: loan.config.rounding },
+  { label: 'метод начисления процентов', value: loan.config.interest?.method },
+  { label: 'базу года', value: loan.config.interest?.dayCountBasis },
+  { label: 'начало процентного периода', value: loan.config.interest?.periodStart },
+  { label: 'момент остатка для процентов', value: loan.config.interest?.balanceMoment }
+]
+
+const createValidatedSnapshot = (loan: LoanProfile) => {
+  const missing = exportRequiredFields(loan).filter(field => !hasText(field.value)).map(field => field.label)
+  if (missing.length > 0) throw new Error(`Заполните обязательные поля перед экспортом: ${missing.join(', ')}`)
+  const validationErrors = validateScenario(loan.config, loan.repayments, loan.gracePeriods)
+  if (validationErrors.length > 0) throw new Error(validationErrors.join(' · '))
+  assertLoanCandidateValid(loan.config, loan.repayments, loan.repaymentRules, loan.gracePeriods)
+  return createLoanSnapshot(loanToBackupData(loan))
+}
+
 export function useLoanExport({ loans, activeLoanId, calculatedSchedule, calculatedExportsReady, setImportStatus }: UseLoanExportOptions) {
   const activeLoan = useCallback(() => loans.find(item => item.id === activeLoanId) ?? loans[0], [loans, activeLoanId])
   const print = useCallback(() => window.print(), [])
@@ -46,7 +71,14 @@ export function useLoanExport({ loans, activeLoanId, calculatedSchedule, calcula
     let ext: string = kind
 
     if (kind === 'json') {
-      body = JSON.stringify({ ...createLoanSnapshot(loanToBackupData(loan)), exportedAt: new Date().toISOString() }, null, 2)
+      let snapshot: ReturnType<typeof createLoanSnapshot>
+      try {
+        snapshot = createValidatedSnapshot(loan)
+      } catch (error) {
+        setImportStatus({ kind: 'error', text: error instanceof Error ? error.message : 'Не удалось проверить расчёт перед экспортом' })
+        return
+      }
+      body = JSON.stringify({ ...snapshot, exportedAt: new Date().toISOString() }, null, 2)
       type = 'application/json'
     } else {
       if (!calculatedExportsReady) {
@@ -94,7 +126,7 @@ export function useLoanExport({ loans, activeLoanId, calculatedSchedule, calcula
     try {
       const loan = activeLoan()
       if (!loan) return
-      const snapshot = createLoanSnapshot(loanToBackupData(loan))
+      const snapshot = createValidatedSnapshot(loan)
       const url = await buildShareUrl(snapshot, window.location.href)
       await copyText(url)
       setImportStatus({ kind: 'success', text: `Ссылка на кредит «${loan.name}» скопирована` })
@@ -106,7 +138,7 @@ export function useLoanExport({ loans, activeLoanId, calculatedSchedule, calcula
   const createParameterCode = useCallback(async () => {
     const loan = activeLoan()
     if (!loan) throw new Error('Не выбран кредит')
-    return encodeSharedCalculation(createLoanSnapshot(loanToBackupData(loan)))
+    return encodeSharedCalculation(createValidatedSnapshot(loan))
   }, [activeLoan])
 
   const decodeParameterCode = useCallback((code: string): Promise<LoanBackupData> =>

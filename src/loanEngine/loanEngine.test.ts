@@ -116,6 +116,27 @@ describe('loan engine', () => {
     expect(s.length - base.length).toBe(1)
   })
   it('работает с нулевой ставкой', () => { const s=generateBaseSchedule({...config,annualRate:0}); const first=s.find(x=>x.date==='2024-02-15')!; expect(first.interest).toBe(0); expect(first.payment).toBe(25000) })
+  it('пересчитывает платёж при нулевой ставке после сокращения срока', () => {
+    const zeroRate = { ...config, principal: 120_000, annualRate: 0, termMonths: 12, issueDate: '2024-01-01', firstPaymentDate: '2024-02-01', paymentDay: 1, closeThreshold: 0 }
+    const s = generateBaseSchedule(zeroRate, { earlyRepayments: [
+      early({ id: 'term', date: '2024-03-01', amount: 20_000, strategy: 'reduceTerm' }),
+      early({ id: 'payment', date: '2024-04-01', amount: 10_000, strategy: 'reducePayment' })
+    ] })
+    const nextRegular = s.find(row => row.date === '2024-05-01')!
+
+    expect(nextRegular.payment).toBe(8571.43)
+    expect(s.every(row => row.closingBalance >= 0)).toBe(true)
+    expect(s.at(-1)?.closingBalance).toBe(0)
+  })
+  it('не допускает отрицательный остаток при переплате досрочным погашением', () => {
+    const zeroRate = { ...config, principal: 100_000, annualRate: 0, termMonths: 12, issueDate: '2024-01-01', firstPaymentDate: '2024-02-01', paymentDay: 1, closeThreshold: 0 }
+    const s = generateBaseSchedule(zeroRate, { earlyRepayments: [early({ id: 'overpay', date: '2024-01-15', amount: 150_000, strategy: 'full', interestFirst: false })] })
+    const row = s.find(item => item.date === '2024-01-15')!
+
+    expect(row.closingBalance).toBe(0)
+    expect(row.repaymentOutcomes?.[0]).toMatchObject({ appliedPrincipal: 100_000, unusedAmount: 50_000 })
+    expect(s.every(item => item.closingBalance >= 0)).toBe(true)
+  })
   it('выполняет полное досрочное погашение', () => { const s=generateBaseSchedule(config,{earlyRepayments:[early({date:'2024-03-15',amount:4_000_000,strategy:'full'})]}); expect(s.length).toBe(3); expect(s.at(-1)?.closingBalance).toBe(0) })
   it('считает кредит закрытым при фактическом погашении через reducePayment', () => {
     const closingConfig: LoanConfig = { ...config, principal: 100_000, annualRate: 0, termMonths: 12, issueDate: '2024-01-01', firstPaymentDate: '2024-02-01', paymentDay: 1, firstPaymentInterestOnly: false }
@@ -342,7 +363,7 @@ describe('loan engine', () => {
     ])
   })
 
-  it('уменьшает платёж только на сумму операции reducePayment в смешанном банковском графике', () => {
+  it('пересчитывает платёж по актуальному сроку в смешанном банковском графике', () => {
     const bank:LoanConfig={...config,principal:2375000,annualRate:8.1,issueDate:'2020-11-21',firstPaymentDate:'2020-12-21',firstPaymentInterestOnly:false,termMonths:240,paymentDay:21,interest:{...config.interest,method:'daily',dayCountBasis:'actualActual',includePaymentDate:true,periodStart:'exclusive',balanceMoment:'startOfDay'}}
     const repayments: EarlyRepayment[] = [
       early({id:'mix-1',date:'2026-03-22',amount:11944,strategy:'reduceTerm'}),
@@ -366,17 +387,17 @@ describe('loan engine', () => {
     expect(may.earlyPayment).toBe(26083.59)
     expect(may.principal).toBe(32565.30)
     expect(may.interest).toBe(13531.81)
-    expect(june.payment).toBe(20013.42)
+    expect(june.payment).toBe(20004.4)
     expect(june.interest).toBe(13758.84)
-    expect(june.principal).toBe(6254.58)
-    expect(june.closingBalance).toBe(1993735.38)
-    expect(december2030.payment).toBe(20013.42)
-    expect(december2030.principal).toBe(9507.18)
-    expect(december2030.interest).toBe(10506.24)
-    expect(december2030.closingBalance).toBe(1568590.22)
-    expect(debt.principal).toBe(1993735.38)
-    expect(debt.interest).toBe(4866.90)
-    expect(debt.total).toBeCloseTo(1998602.28, 2)
+    expect(june.principal).toBe(6245.56)
+    expect(june.closingBalance).toBe(1993744.40)
+    expect(december2030.payment).toBe(20004.4)
+    expect(december2030.principal).toBe(9494.26)
+    expect(december2030.interest).toBe(10510.14)
+    expect(december2030.closingBalance).toBe(1569188.60)
+    expect(debt.principal).toBe(1993744.40)
+    expect(debt.interest).toBe(4866.92)
+    expect(debt.total).toBeCloseTo(1998611.32, 2)
     expect(s.at(-1)?.date).toBe('2040-04-21')
   })
 
@@ -387,13 +408,16 @@ describe('loan engine', () => {
     const termOnly = generateBaseSchedule(short, { earlyRepayments: [termReduction] })
     const termOnlySecondIndex = termOnly.findIndex(row => row.date === paymentReduction.date)
     const actualRemainingPeriods = termOnly.slice(termOnlySecondIndex + 1).filter(row => row.isRegularPayment).length
+    const originalRemainingPeriods = generateBaseSchedule(short).filter(row => row.isRegularPayment && row.date > paymentReduction.date).length
     const mixed = generateBaseSchedule(short, { earlyRepayments: [termReduction, paymentReduction] })
     const secondIndex = mixed.findIndex(row => row.date === paymentReduction.date)
     const secondRow = mixed[secondIndex]
     const nextRegular = mixed.slice(secondIndex + 1).find(row => row.isRegularPayment)!
-    const expectedReduction = calculateAnnuityPayment(paymentReduction.amount, short.annualRate, actualRemainingPeriods).toNumber()
+    const expectedPayment = calculateAnnuityPayment(secondRow.closingBalance, short.annualRate, actualRemainingPeriods).toNumber()
+    const stalePayment = secondRow.payment - calculateAnnuityPayment(paymentReduction.amount, short.annualRate, originalRemainingPeriods).toNumber()
     expect(actualRemainingPeriods).toBeLessThan(short.termMonths - 8)
-    expect(nextRegular.payment).toBeCloseTo(secondRow.payment - expectedReduction, 2)
+    expect(nextRegular.payment).toBeCloseTo(expectedPayment, 2)
+    expect(nextRegular.payment).toBeLessThan(stalePayment)
   })
 
   it('учитывает порядок операций в дату регулярного платежа', () => {
@@ -819,11 +843,11 @@ describe('variable rate history', () => {
     const termOnly = generateBaseSchedule(variable, { earlyRepayments: [first] })
     const remainingPeriods = termOnly.filter(row => row.isRegularPayment && row.date > second.date).length
     const mixed = generateBaseSchedule(variable, { earlyRepayments: [first, second] })
+    const secondRow = mixed.find(row => row.date === second.date)!
     const nextRegular = mixed.find(row => row.date === '2024-02-01')!
-    const originalPayment = calculateAnnuityPayment(variable.principal, variable.annualRate, 12, 12, variable.rounding)
-    const expectedReduction = calculateAnnuityPayment(second.amount, 6, remainingPeriods, 12, variable.rounding)
+    const expectedPayment = calculateAnnuityPayment(secondRow.closingBalance, 6, remainingPeriods, 12, variable.rounding)
     expect(remainingPeriods).toBeLessThan(12)
-    expect(nextRegular.payment).toBeCloseTo(originalPayment.minus(expectedReduction).toNumber(), 2)
+    expect(nextRegular.payment).toBeCloseTo(expectedPayment.toNumber(), 2)
   })
 
   it('помечает первую досрочную строку нового периода после изменения ставки', () => {

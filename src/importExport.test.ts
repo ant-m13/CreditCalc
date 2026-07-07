@@ -38,11 +38,40 @@ describe('импорт резервной копии', () => {
       earlyRepaymentFeePercent: defaultConfig.earlyRepaymentFeePercent
     }
     const result = parseLoanBackup(JSON.stringify({ config: legacyConfig, repayments: [], scenario: { id: 'reduceTerm', schedule: [] } }))
+    expect(result.config.firstPaymentInterestOnly).toBe(defaultConfig.firstPaymentInterestOnly)
     expect(result.config.paymentType).toBe(defaultConfig.paymentType)
     expect(result.config.frequency).toBe(defaultConfig.frequency)
     expect(result.config.rounding).toBe(defaultConfig.rounding)
     expect(result.config.rateChanges).toEqual([])
     expect(result.config.rateChangeMode).toBe(defaultConfig.rateChangeMode)
+    expect(result.config.interest).toEqual(defaultConfig.interest)
+  })
+
+  it('нормализует устаревшие поля расчёта к значениям по умолчанию', () => {
+    const result = parseLoanBackup(JSON.stringify({
+      config: {
+        ...defaultConfig,
+        firstPaymentInterestOnly: 'yes',
+        paymentType: 'legacy-annuity',
+        frequency: 'monthly-old',
+        rounding: null,
+        interest: {
+          method: 'classic',
+          dayCountBasis: 'actual360',
+          includePaymentDate: 'no',
+          periodStart: 'middle',
+          balanceMoment: 'paymentTime'
+        }
+      },
+      repayments: [],
+      gracePeriods: [],
+      selectedScenario: 'combined'
+    }))
+
+    expect(result.config.firstPaymentInterestOnly).toBe(defaultConfig.firstPaymentInterestOnly)
+    expect(result.config.paymentType).toBe(defaultConfig.paymentType)
+    expect(result.config.frequency).toBe(defaultConfig.frequency)
+    expect(result.config.rounding).toBe(defaultConfig.rounding)
     expect(result.config.interest).toEqual(defaultConfig.interest)
   })
 
@@ -129,6 +158,16 @@ describe('импорт резервной копии', () => {
     const result = parseLoanBackup(JSON.stringify({ config: defaultConfig, repayments: [disabledRepayment], repaymentRules: [disabledRule], gracePeriods: [], selectedScenario: 'combined' }))
     expect(result.repayments[0]).toMatchObject({ amount: 8704.99, enabled: false })
     expect(result.repaymentRules[0]).toMatchObject({ amount: 20000, enabled: false })
+  })
+
+  it('восстанавливает правила с нулевой суммой или процентом', () => {
+    const zeroAmountRule = { id: 'rule-zero-amount', name: 'Пауза', type: 'monthlyFixed', startDate: '2026-08-15', endDate: '2026-12-15', amount: 0, strategy: 'reduceTerm', source: 'own', sameDayOrder: 'regularFirst', interestFirst: true, skipMonths: [] }
+    const zeroPercentRule = { id: 'rule-zero-percent', name: 'Пауза процента', type: 'paymentPercent', startDate: '2026-08-15', endDate: '2026-12-15', percent: 0, strategy: 'reducePayment', source: 'own', sameDayOrder: 'regularFirst', interestFirst: true, skipMonths: [] }
+    const result = parseLoanBackup(JSON.stringify({ config: defaultConfig, repayments: [], repaymentRules: [zeroAmountRule, zeroPercentRule], gracePeriods: [], selectedScenario: 'combined' }))
+
+    expect(result.repaymentRules).toHaveLength(2)
+    expect(result.repaymentRules[0]).toMatchObject({ id: 'rule-zero-amount', amount: 0 })
+    expect(result.repaymentRules[1]).toMatchObject({ id: 'rule-zero-percent', percent: 0 })
   })
 
   it('отклоняет импорт с количеством правил сверх лимита', () => {
