@@ -116,6 +116,27 @@ describe('loan engine', () => {
     expect(s.length - base.length).toBe(1)
   })
   it('работает с нулевой ставкой', () => { const s=generateBaseSchedule({...config,annualRate:0}); const first=s.find(x=>x.date==='2024-02-15')!; expect(first.interest).toBe(0); expect(first.payment).toBe(25000) })
+  it('пересчитывает платёж при нулевой ставке после сокращения срока', () => {
+    const zeroRate = { ...config, principal: 120_000, annualRate: 0, termMonths: 12, issueDate: '2024-01-01', firstPaymentDate: '2024-02-01', paymentDay: 1, closeThreshold: 0 }
+    const s = generateBaseSchedule(zeroRate, { earlyRepayments: [
+      early({ id: 'term', date: '2024-03-01', amount: 20_000, strategy: 'reduceTerm' }),
+      early({ id: 'payment', date: '2024-04-01', amount: 10_000, strategy: 'reducePayment' })
+    ] })
+    const nextRegular = s.find(row => row.date === '2024-05-01')!
+
+    expect(nextRegular.payment).toBe(8571.43)
+    expect(s.every(row => row.closingBalance >= 0)).toBe(true)
+    expect(s.at(-1)?.closingBalance).toBe(0)
+  })
+  it('не допускает отрицательный остаток при переплате досрочным погашением', () => {
+    const zeroRate = { ...config, principal: 100_000, annualRate: 0, termMonths: 12, issueDate: '2024-01-01', firstPaymentDate: '2024-02-01', paymentDay: 1, closeThreshold: 0 }
+    const s = generateBaseSchedule(zeroRate, { earlyRepayments: [early({ id: 'overpay', date: '2024-01-15', amount: 150_000, strategy: 'full', interestFirst: false })] })
+    const row = s.find(item => item.date === '2024-01-15')!
+
+    expect(row.closingBalance).toBe(0)
+    expect(row.repaymentOutcomes?.[0]).toMatchObject({ appliedPrincipal: 100_000, unusedAmount: 50_000 })
+    expect(s.every(item => item.closingBalance >= 0)).toBe(true)
+  })
   it('выполняет полное досрочное погашение', () => { const s=generateBaseSchedule(config,{earlyRepayments:[early({date:'2024-03-15',amount:4_000_000,strategy:'full'})]}); expect(s.length).toBe(3); expect(s.at(-1)?.closingBalance).toBe(0) })
   it('считает кредит закрытым при фактическом погашении через reducePayment', () => {
     const closingConfig: LoanConfig = { ...config, principal: 100_000, annualRate: 0, termMonths: 12, issueDate: '2024-01-01', firstPaymentDate: '2024-02-01', paymentDay: 1, firstPaymentInterestOnly: false }
