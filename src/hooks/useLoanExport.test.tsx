@@ -67,20 +67,27 @@ const scheduleRow = (patch: Partial<PaymentScheduleItem> = {}): PaymentScheduleI
 function ExportProbe({
   calculatedSchedule,
   calculatedExportsReady = true,
-  setImportStatus = vi.fn()
+  setImportStatus = vi.fn(),
+  activeLoan = loan,
+  kind = 'csv'
 }: {
   calculatedSchedule: PaymentScheduleItem[] | null
   calculatedExportsReady?: boolean
   setImportStatus?: (status: ImportStatus | null) => void
+  activeLoan?: LoanProfile
+  kind?: 'csv' | 'json' | 'xls'
 }) {
-  const { download } = useLoanExport({
-    loans: [loan],
-    activeLoanId: loan.id,
+  const { download, createParameterCode } = useLoanExport({
+    loans: [activeLoan],
+    activeLoanId: activeLoan.id,
     calculatedSchedule,
     calculatedExportsReady,
     setImportStatus
   })
-  return <button onClick={() => download('csv')}>CSV</button>
+  return <>
+    <button onClick={() => download(kind)}>Export</button>
+    <button onClick={() => void createParameterCode().catch(error => setImportStatus({ kind: 'error', text: error instanceof Error ? error.message : 'Не удалось сформировать код параметров' }))}>Code</button>
+  </>
 }
 
 let exportedBlob: Blob | null = null
@@ -106,7 +113,7 @@ describe('useLoanExport', () => {
     const user = userEvent.setup()
     render(<ExportProbe calculatedSchedule={[scheduleRow()]}/>)
 
-    await user.click(screen.getByRole('button', { name: 'CSV' }))
+    await user.click(screen.getByRole('button', { name: 'Export' }))
 
     expect(syncRecalcMock).not.toHaveBeenCalled()
     expect(exportedBlob).not.toBeNull()
@@ -118,13 +125,42 @@ describe('useLoanExport', () => {
     const setImportStatus = vi.fn()
     render(<ExportProbe calculatedSchedule={[scheduleRow()]} calculatedExportsReady={false} setImportStatus={setImportStatus}/>)
 
-    await user.click(screen.getByRole('button', { name: 'CSV' }))
+    await user.click(screen.getByRole('button', { name: 'Export' }))
 
     expect(syncRecalcMock).not.toHaveBeenCalled()
     expect(exportedBlob).toBeNull()
     expect(setImportStatus).toHaveBeenCalledWith({
       kind: 'error',
       text: 'Дождитесь окончания пересчёта, чтобы экспортировать актуальный график'
+    })
+  })
+
+  it('rejects JSON export when required loan fields are empty', async () => {
+    const user = userEvent.setup()
+    const setImportStatus = vi.fn()
+    const brokenLoan = { ...loan, config: { ...loan.config, firstPaymentDate: '' } }
+    render(<ExportProbe calculatedSchedule={null} activeLoan={brokenLoan} kind="json" setImportStatus={setImportStatus}/>)
+
+    await user.click(screen.getByRole('button', { name: 'Export' }))
+
+    expect(exportedBlob).toBeNull()
+    expect(setImportStatus).toHaveBeenCalledWith({
+      kind: 'error',
+      text: 'Заполните обязательные поля перед экспортом: дату первого платежа'
+    })
+  })
+
+  it('rejects parameter code when required loan fields are empty', async () => {
+    const user = userEvent.setup()
+    const setImportStatus = vi.fn()
+    const brokenLoan = { ...loan, config: { ...loan.config, issueDate: '', firstPaymentDate: '' } }
+    render(<ExportProbe calculatedSchedule={null} activeLoan={brokenLoan} setImportStatus={setImportStatus}/>)
+
+    await user.click(screen.getByRole('button', { name: 'Code' }))
+
+    expect(setImportStatus).toHaveBeenCalledWith({
+      kind: 'error',
+      text: 'Заполните обязательные поля перед экспортом: дату выдачи, дату первого платежа'
     })
   })
 })
