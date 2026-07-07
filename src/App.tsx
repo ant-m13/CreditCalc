@@ -79,6 +79,8 @@ function App() {
   } = useLoanExport({
     loans: store.loans,
     activeLoanId: store.activeLoanId,
+    calculatedSchedule: selected?.schedule ?? null,
+    calculatedExportsReady: !isStale,
     setImportStatus
   })
   const {
