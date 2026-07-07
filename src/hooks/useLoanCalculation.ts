@@ -25,50 +25,87 @@ const emptyResult: LoanCalculationResult = {
   base: null
 }
 
+interface CalculationSnapshot extends LoanCalculationInput {
+  revision: string
+}
+
+interface CalculationEnvelope {
+  revision: string
+  snapshot: CalculationSnapshot
+  result: LoanCalculationResult
+}
+
+const objectRevisions = new WeakMap<object, number>()
+let nextObjectRevision = 0
+
+const objectRevision = (value: object) => {
+  let revision = objectRevisions.get(value)
+  if (revision === undefined) {
+    revision = nextObjectRevision
+    nextObjectRevision += 1
+    objectRevisions.set(value, revision)
+  }
+  return revision
+}
+
+const snapshotRevision = ({ config, repayments, repaymentRules, gracePeriods, selectedScenario, displayDecimals, loanId }: LoanCalculationInput) =>
+  JSON.stringify([
+    loanId ?? '',
+    objectRevision(config),
+    objectRevision(repayments),
+    objectRevision(repaymentRules),
+    objectRevision(gracePeriods),
+    selectedScenario,
+    displayDecimals
+  ])
+
 export function useLoanCalculation({ config, repayments, repaymentRules, gracePeriods, selectedScenario, displayDecimals, loanId }: LoanCalculationInput) {
-  const liveSnapshot = useMemo(
-    () => ({ config, repayments, repaymentRules, gracePeriods, selectedScenario, displayDecimals, loanId }),
+  const liveRevision = useMemo(
+    () => snapshotRevision({ config, repayments, repaymentRules, gracePeriods, selectedScenario, displayDecimals, loanId }),
     [config, repayments, repaymentRules, gracePeriods, selectedScenario, displayDecimals, loanId]
   )
-  const calculationSnapshot = useDeferredValue(liveSnapshot)
-  const isStale = calculationSnapshot !== liveSnapshot
-
-  const syncResult = useMemo(
-    () => typeof Worker === 'undefined' ? buildLoanCalculation(calculationSnapshot) : null,
-    [calculationSnapshot]
+  const liveSnapshot = useMemo(
+    () => ({ revision: liveRevision, config, repayments, repaymentRules, gracePeriods, selectedScenario, displayDecimals, loanId }),
+    [liveRevision, config, repayments, repaymentRules, gracePeriods, selectedScenario, displayDecimals, loanId]
   )
-  const [workerResult, setWorkerResult] = useState<LoanCalculationResult | null>(syncResult)
-  const [workerPending, setWorkerPending] = useState(false)
+  const calculationSnapshot = useDeferredValue(liveSnapshot)
+  const requestedRevision = calculationSnapshot.revision
+  const deferredStale = calculationSnapshot.revision !== liveSnapshot.revision
+
+  const syncEnvelope = useMemo<CalculationEnvelope | null>(
+    () => typeof Worker === 'undefined'
+      ? { revision: requestedRevision, snapshot: calculationSnapshot, result: buildLoanCalculation(calculationSnapshot) }
+      : null,
+    [calculationSnapshot, requestedRevision]
+  )
+  const [workerEnvelope, setWorkerEnvelope] = useState<CalculationEnvelope | null>(syncEnvelope)
   const workerRef = useRef<Worker | null>(null)
-  const revisionRef = useRef(0)
 
   useEffect(() => {
     if (typeof Worker === 'undefined') {
-      setWorkerResult(syncResult)
-      setWorkerPending(false)
+      setWorkerEnvelope(syncEnvelope)
       return
     }
     workerRef.current ??= new Worker(new URL('../loanCalculation.worker.ts', import.meta.url), { type: 'module' })
     const worker = workerRef.current
-    const revision = revisionRef.current + 1
-    revisionRef.current = revision
-    setWorkerPending(true)
-    worker.onmessage = (event: MessageEvent<{ revision: number; result: LoanCalculationResult }>) => {
-      if (event.data.revision !== revisionRef.current) return
-      setWorkerResult(event.data.result)
-      setWorkerPending(false)
+    const revision = requestedRevision
+    const snapshot = calculationSnapshot
+    worker.onmessage = (event: MessageEvent<{ revision: string; result: LoanCalculationResult }>) => {
+      if (event.data.revision !== revision) return
+      setWorkerEnvelope({ revision, snapshot, result: event.data.result })
     }
     worker.onerror = () => {
-      if (revision !== revisionRef.current) return
-      setWorkerResult(buildLoanCalculation(calculationSnapshot))
-      setWorkerPending(false)
+      setWorkerEnvelope({ revision, snapshot, result: buildLoanCalculation(snapshot) })
     }
-    worker.postMessage({ revision, snapshot: calculationSnapshot })
-  }, [calculationSnapshot, syncResult])
+    worker.postMessage({ revision, snapshot })
+  }, [calculationSnapshot, requestedRevision, syncEnvelope])
 
   useEffect(() => () => workerRef.current?.terminate(), [])
 
-  const result = workerResult ?? syncResult ?? emptyResult
+  const envelope = syncEnvelope ?? workerEnvelope
+  const resultIsCurrent = envelope?.revision === requestedRevision
+  const resultSnapshot = envelope?.snapshot ?? calculationSnapshot
+  const result = envelope?.result ?? emptyResult
   const generatedRepayments = result.generatedRepayments
   const allRepayments = result.allRepayments
   const errors = result.errors
@@ -114,7 +151,7 @@ export function useLoanCalculation({ config, repayments, repaymentRules, gracePe
     base,
     overviewChartData,
     defaultEarlyDate,
-    calculationSnapshot,
-    isStale: isStale || workerPending
+    calculationSnapshot: resultSnapshot,
+    isStale: deferredStale || !resultIsCurrent
   }
 }
