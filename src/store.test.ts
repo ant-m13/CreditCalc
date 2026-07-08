@@ -148,7 +148,7 @@ describe('миграция локального хранилища', () => {
     expect(normalized.activeLoanId).toBe('valid')
   })
 
-  it('помещает нерассчитываемый восстановленный кредит в карантин с отчётом', () => {
+  it('помещает структурно повреждённый восстановленный кредит в карантин с отчётом', () => {
     const normalized = normalizePersistedState({
       activeLoanId: 'broken-plan',
       loans: [{
@@ -180,6 +180,34 @@ describe('миграция локального хранилища', () => {
       reason: expect.stringContaining('Льготные периоды')
     })
     expect(normalized.quarantinedLoansRaw[0].raw).toMatchObject({ id: 'broken-plan', gracePeriods: expect.arrayContaining([expect.objectContaining({ id: 'g1' })]) })
+  })
+
+  it('восстанавливает расчётно невалидный, но структурно корректный план без карантина', () => {
+    const first = { ...rule(1), type: 'monthlyTotalPayment' as const, amount: 100000, startDate: defaultConfig.firstPaymentDate, endDate: defaultConfig.firstPaymentDate }
+    const second = { ...rule(2), type: 'monthlyTotalPayment' as const, amount: 110000, startDate: defaultConfig.firstPaymentDate, endDate: defaultConfig.firstPaymentDate }
+    const persistedLoan = loanProfile({
+      id: 'recoverable-plan',
+      name: 'Расчёт с ошибкой',
+      repaymentRules: [first, second]
+    })
+
+    const normalized = normalizePersistedState({
+      activeLoanId: persistedLoan.id,
+      loans: [persistedLoan]
+    }) as any
+    const errors = buildLoanCalculation({
+      config: normalized.config,
+      repayments: normalized.repayments,
+      repaymentRules: normalized.repaymentRules,
+      gracePeriods: normalized.gracePeriods,
+      selectedScenario: normalized.selectedScenario
+    }).errors.join(' · ')
+
+    expect(normalized.activeLoanId).toBe(persistedLoan.id)
+    expect(normalized.repaymentRules).toHaveLength(2)
+    expect(normalized.storageRecoveryReport).toEqual([])
+    expect(normalized.quarantinedLoansRaw).toEqual([])
+    expect(errors).toContain('только одну общую сумму')
   })
 
   it('сохраняет уже накопленный буфер карантина при следующей миграции', () => {

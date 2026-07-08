@@ -475,9 +475,6 @@ export const normalizePersistedState = (persisted: unknown): Partial<LoanPersist
       const normalized = loanFromData(loan, name, id)
       const errors = validateScenario(normalized.config, normalized.repayments, normalized.gracePeriods)
       if (errors.length) throw new Error(errors[0])
-      if (normalized.repayments.length > 0 || normalized.repaymentRules.length > 0 || normalized.gracePeriods.length > 0) {
-        assertRepaymentPlanValid(normalized.config, normalized.repayments, normalized.repaymentRules, normalized.gracePeriods)
-      }
       return normalized
     } catch (error) {
       const message = error instanceof Error ? error.message : 'неизвестная ошибка'
