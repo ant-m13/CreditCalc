@@ -10,10 +10,22 @@ import type { ImportStatus } from './useLoanImport'
 const candidateValidationMock = vi.hoisted(() => vi.fn(() => {
   throw new Error('sync candidate validation should not run')
 }))
+const sharedCalculationMock = vi.hoisted(() => ({
+  buildShareUrl: vi.fn(async () => 'https://example.test/#calc=v1.test-code'),
+  encodeSharedCalculation: vi.fn(async () => 'v1.test-code')
+}))
 
 vi.mock('../loanCandidate', () => ({
   assertLoanCandidateValid: candidateValidationMock
 }))
+vi.mock('../shareCalculation', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../shareCalculation')>()
+  return {
+    ...actual,
+    buildShareUrl: sharedCalculationMock.buildShareUrl,
+    encodeSharedCalculation: sharedCalculationMock.encodeSharedCalculation
+  }
+})
 
 import { useLoanExport } from './useLoanExport'
 
@@ -101,6 +113,8 @@ let exportedBlob: Blob | null = null
 beforeEach(() => {
   exportedBlob = null
   candidateValidationMock.mockClear()
+  sharedCalculationMock.buildShareUrl.mockClear()
+  sharedCalculationMock.encodeSharedCalculation.mockClear()
   vi.spyOn(URL, 'createObjectURL').mockImplementation(blob => {
     exportedBlob = blob as Blob
     return 'blob:test-export'
@@ -224,11 +238,12 @@ describe('useLoanExport', () => {
     await user.click(screen.getByRole('button', { name: 'Link' }))
 
     expect(candidateValidationMock).not.toHaveBeenCalled()
-    expect(writeText).toHaveBeenCalledWith(expect.stringContaining('#calc=v1.'))
-    expect(setImportStatus).toHaveBeenCalledWith({
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith(expect.stringContaining('#calc=v1.')))
+    expect(sharedCalculationMock.buildShareUrl).toHaveBeenCalled()
+    await waitFor(() => expect(setImportStatus).toHaveBeenCalledWith({
       kind: 'success',
       text: 'Ссылка на кредит «Экспорт» скопирована'
-    })
+    }))
   })
 
   it('creates parameter code from the ready calculation result without candidate validation', async () => {
@@ -239,6 +254,7 @@ describe('useLoanExport', () => {
     await user.click(screen.getByRole('button', { name: 'Code' }))
 
     expect(candidateValidationMock).not.toHaveBeenCalled()
+    expect(sharedCalculationMock.encodeSharedCalculation).toHaveBeenCalled()
     await waitFor(() => expect(setImportStatus).toHaveBeenCalledWith(expect.objectContaining({
       kind: 'success',
       text: expect.stringMatching(/^v1\./)
