@@ -20,6 +20,7 @@ export interface LoanBackupData {
   theme: 'emerald' | 'ocean' | 'violet' | 'graphite' | 'warm' | 'night'
   customAccentColor?: string
   useCustomAccentColor?: boolean
+  importWarnings?: string[]
 }
 
 const isObject = (value: unknown): value is Record<string, unknown> => Boolean(value) && typeof value === 'object' && !Array.isArray(value)
@@ -79,7 +80,11 @@ export function parseLoanBackupObject(raw: unknown): LoanBackupData {
 
   const source = raw.config
   const interest = isObject(source.interest) ? source.interest : {}
+  const importWarnings: string[] = []
   const currency = oneOf(source.currency, supportedCurrencies) ? source.currency : defaultConfig.currency
+  if (source.currency !== undefined && !oneOf(source.currency, supportedCurrencies)) {
+    importWarnings.push(`Валюта ${String(source.currency)} не поддерживается и заменена на ${defaultConfig.currency}`)
+  }
   const config = {
     ...defaultConfig,
     ...source,
@@ -198,7 +203,7 @@ export function parseLoanBackupObject(raw: unknown): LoanBackupData {
   const theme = oneOf(settings.theme, ['emerald', 'ocean', 'violet', 'graphite', 'warm', 'night']) ? settings.theme : 'emerald'
   const customAccentColor = hexColor(settings.customAccentColor) ? settings.customAccentColor : '#0b9873'
   const useCustomAccentColor = typeof settings.useCustomAccentColor === 'boolean' ? settings.useCustomAccentColor : false
-  const result: LoanBackupData = { name, config, repayments, repaymentRules, gracePeriods, selectedScenario, termUnit, displayDecimals, appFontSize, scheduleFontSize, theme, customAccentColor, useCustomAccentColor }
+  const result: LoanBackupData = { name, config, repayments, repaymentRules, gracePeriods, selectedScenario, termUnit, displayDecimals, appFontSize, scheduleFontSize, theme, customAccentColor, useCustomAccentColor, ...(importWarnings.length ? { importWarnings } : {}) }
   assertLoanCandidateValid(config, repayments, repaymentRules, gracePeriods)
   return result
 }
