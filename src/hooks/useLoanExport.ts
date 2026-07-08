@@ -1,6 +1,7 @@
 import { useCallback } from 'react'
 import type { LoanBackupData } from '../importExport'
 import type { PaymentScheduleItem } from '../loanEngine'
+import { buildLoanCalculation } from '../loanCalculation'
 import { buildShareUrl, createLoanSnapshot, decodeSharedCalculation, encodeSharedCalculation, looksLikeSharedCalculationUrl, normalizeSharedCalculationPayload } from '../shareCalculation'
 import { loanToBackupData, type LoanProfile } from '../store'
 import type { ImportStatus } from './useLoanImport'
@@ -56,6 +57,14 @@ const createSnapshotFromReadyCalculation = (loan: LoanProfile, calculatedExports
   if (missing.length > 0) throw new Error(`Заполните обязательные поля перед экспортом: ${missing.join(', ')}`)
   if (!calculatedExportsReady) throw new Error(STALE_EXPORT_MESSAGE)
   if (calculationErrors.length > 0) throw new Error(calculationErrors.join(' · '))
+  const verificationErrors = buildLoanCalculation({
+    config: loan.config,
+    repayments: loan.repayments,
+    repaymentRules: loan.repaymentRules,
+    gracePeriods: loan.gracePeriods,
+    selectedScenario: loan.selectedScenario
+  }).errors
+  if (verificationErrors.length > 0) throw new Error(verificationErrors.join(' · '))
   return createLoanSnapshot(loanToBackupData(loan))
 }
 
