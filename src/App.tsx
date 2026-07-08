@@ -83,6 +83,7 @@ function App() {
     activeLoanId: store.activeLoanId,
     calculatedSchedule: selected?.schedule ?? null,
     calculatedExportsReady: !isStale,
+    calculationErrors: errors,
     setImportStatus
   })
   const {

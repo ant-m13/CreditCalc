@@ -1,7 +1,6 @@
 import { useCallback } from 'react'
 import type { LoanBackupData } from '../importExport'
-import { validateScenario, type PaymentScheduleItem } from '../loanEngine'
-import { assertLoanCandidateValid } from '../loanCandidate'
+import type { PaymentScheduleItem } from '../loanEngine'
 import { buildShareUrl, createLoanSnapshot, decodeSharedCalculation, encodeSharedCalculation, looksLikeSharedCalculationUrl, normalizeSharedCalculationPayload } from '../shareCalculation'
 import { loanToBackupData, type LoanProfile } from '../store'
 import type { ImportStatus } from './useLoanImport'
@@ -11,8 +10,11 @@ interface UseLoanExportOptions {
   activeLoanId: string
   calculatedSchedule: PaymentScheduleItem[] | null
   calculatedExportsReady: boolean
+  calculationErrors: string[]
   setImportStatus: (status: ImportStatus | null) => void
 }
+
+const STALE_EXPORT_MESSAGE = 'Дождитесь окончания пересчёта, чтобы экспортировать актуальный график'
 
 const copyText = async (text: string) => {
   try {
@@ -49,16 +51,15 @@ const exportRequiredFields = (loan: LoanProfile) => [
   { label: 'момент остатка для процентов', value: loan.config.interest?.balanceMoment }
 ]
 
-const createValidatedSnapshot = (loan: LoanProfile) => {
+const createSnapshotFromReadyCalculation = (loan: LoanProfile, calculatedExportsReady: boolean, calculationErrors: string[]) => {
   const missing = exportRequiredFields(loan).filter(field => !hasText(field.value)).map(field => field.label)
   if (missing.length > 0) throw new Error(`Заполните обязательные поля перед экспортом: ${missing.join(', ')}`)
-  const validationErrors = validateScenario(loan.config, loan.repayments, loan.gracePeriods)
-  if (validationErrors.length > 0) throw new Error(validationErrors.join(' · '))
-  assertLoanCandidateValid(loan.config, loan.repayments, loan.repaymentRules, loan.gracePeriods)
+  if (!calculatedExportsReady) throw new Error(STALE_EXPORT_MESSAGE)
+  if (calculationErrors.length > 0) throw new Error(calculationErrors.join(' · '))
   return createLoanSnapshot(loanToBackupData(loan))
 }
 
-export function useLoanExport({ loans, activeLoanId, calculatedSchedule, calculatedExportsReady, setImportStatus }: UseLoanExportOptions) {
+export function useLoanExport({ loans, activeLoanId, calculatedSchedule, calculatedExportsReady, calculationErrors, setImportStatus }: UseLoanExportOptions) {
   const activeLoan = useCallback(() => loans.find(item => item.id === activeLoanId) ?? loans[0], [loans, activeLoanId])
   const print = useCallback(() => window.print(), [])
 
@@ -73,7 +74,7 @@ export function useLoanExport({ loans, activeLoanId, calculatedSchedule, calcula
     if (kind === 'json') {
       let snapshot: ReturnType<typeof createLoanSnapshot>
       try {
-        snapshot = createValidatedSnapshot(loan)
+        snapshot = createSnapshotFromReadyCalculation(loan, calculatedExportsReady, calculationErrors)
       } catch (error) {
         setImportStatus({ kind: 'error', text: error instanceof Error ? error.message : 'Не удалось проверить расчёт перед экспортом' })
         return
@@ -82,7 +83,7 @@ export function useLoanExport({ loans, activeLoanId, calculatedSchedule, calcula
       type = 'application/json'
     } else {
       if (!calculatedExportsReady) {
-        setImportStatus({ kind: 'error', text: 'Дождитесь окончания пересчёта, чтобы экспортировать актуальный график' })
+        setImportStatus({ kind: 'error', text: STALE_EXPORT_MESSAGE })
         return
       }
       const schedule = calculatedSchedule
@@ -120,26 +121,26 @@ export function useLoanExport({ loans, activeLoanId, calculatedSchedule, calcula
     anchor.download = `credit-${safeName}.${ext}`
     anchor.click()
     URL.revokeObjectURL(anchor.href)
-  }, [activeLoan, calculatedExportsReady, calculatedSchedule, setImportStatus])
+  }, [activeLoan, calculatedExportsReady, calculatedSchedule, calculationErrors, setImportStatus])
 
   const copyShareLink = useCallback(async () => {
     try {
       const loan = activeLoan()
       if (!loan) return
-      const snapshot = createValidatedSnapshot(loan)
+      const snapshot = createSnapshotFromReadyCalculation(loan, calculatedExportsReady, calculationErrors)
       const url = await buildShareUrl(snapshot, window.location.href)
       await copyText(url)
       setImportStatus({ kind: 'success', text: `Ссылка на кредит «${loan.name}» скопирована` })
     } catch (error) {
       setImportStatus({ kind: 'error', text: error instanceof Error ? error.message : 'Не удалось сформировать ссылку на расчёт' })
     }
-  }, [activeLoan, setImportStatus])
+  }, [activeLoan, calculatedExportsReady, calculationErrors, setImportStatus])
 
   const createParameterCode = useCallback(async () => {
     const loan = activeLoan()
     if (!loan) throw new Error('Не выбран кредит')
-    return encodeSharedCalculation(createValidatedSnapshot(loan))
-  }, [activeLoan])
+    return encodeSharedCalculation(createSnapshotFromReadyCalculation(loan, calculatedExportsReady, calculationErrors))
+  }, [activeLoan, calculatedExportsReady, calculationErrors])
 
   const decodeParameterCode = useCallback((code: string): Promise<LoanBackupData> =>
     decodeSharedCalculation(normalizeSharedCalculationPayload(code)), [])
