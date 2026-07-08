@@ -192,6 +192,21 @@ describe('loan engine', () => {
     expect(schedule.some(item => item.eventTypes.length > 0 && item.eventTypes.every(type => type === 'earlyIgnored'))).toBe(false)
     expect(row.repaymentOutcomes).toEqual([expect.objectContaining({ repaymentId: 'late-after-close', requestedAmount: 50_000, appliedAmount: 0, unusedAmount: 50_000, reason: 'debtClosed' })])
   })
+
+  it('сохраняет regularPaymentApplied для totalWithFee после даты закрытия', () => {
+    const closingConfig: LoanConfig = { ...config, principal: 120_000, annualRate: 0, termMonths: 12, issueDate: '2024-01-01', firstPaymentDate: '2024-02-01', paymentDay: 1, firstPaymentInterestOnly: false }
+    const schedule = generateBaseSchedule(closingConfig, {
+      earlyRepayments: [
+        early({ id: 'full-close', date: '2024-01-15', amount: 120_000, strategy: 'full', interestFirst: false, sameDaySequence: 0 }),
+        early({ id: 'late-total-after-close', date: '2024-02-01', amount: 50_000, amountMode: 'totalWithFee', strategy: 'reduceTerm', sameDayOrder: 'regularFirst', sameDaySequence: 1 })
+      ]
+    })
+    const row = schedule.at(-1)!
+    const outcome = row.repaymentOutcomes?.find(item => item.repaymentId === 'late-total-after-close')
+
+    expect(row.date).toBe('2024-01-15')
+    expect(outcome).toMatchObject({ requestedAmount: 50_000, regularPaymentApplied: 10_000, appliedAmount: 0, fee: 0, unusedAmount: 40_000, reason: 'debtClosed' })
+  })
   it('не закрывает кредит, если основной долг погашен, но остались отложенные проценты', () => {
     const c = { ...config, principal: 1_000_000, termMonths: 12, firstPaymentDate: '2024-02-01', paymentDay: 1 }
     const s = generateBaseSchedule(c, {
