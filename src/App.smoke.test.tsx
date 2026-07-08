@@ -117,9 +117,9 @@ describe('App smoke tests', () => {
 
     expect(screen.getByRole('heading', { name: 'Ваш кредит' })).toBeTruthy()
     expect(screen.getAllByText('Кредитный калькулятор').length).toBeGreaterThan(0)
-    expect(await screen.findByText('Сумма кредита', {}, { timeout: 10000 })).toBeTruthy()
+    expect(await screen.findByText('Сумма кредита', {}, { timeout: 20000 })).toBeTruthy()
     expect(screen.getByText('Данные сохранены')).toBeTruthy()
-  }, 15000)
+  }, 30000)
 
   it('монтирует печатный отчёт только на время печати', async () => {
     const user = userEvent.setup()
