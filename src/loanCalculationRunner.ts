@@ -27,9 +27,11 @@ export const calculateLoanSynchronously = (snapshot: LoanCalculationSnapshot): L
 
 export class LoanCalculationRunner {
   private worker: Worker | null = null
+  private workerErrorCount = 0
+  private readonly maxWorkerErrors = 3
 
   calculate(snapshot: LoanCalculationSnapshot, onResult: (envelope: LoanCalculationEnvelope) => void) {
-    if (!canUseLoanCalculationWorker()) {
+    if (!canUseLoanCalculationWorker() || this.workerErrorCount >= this.maxWorkerErrors) {
       onResult(calculateLoanSynchronously(snapshot))
       return
     }
@@ -40,6 +42,7 @@ export class LoanCalculationRunner {
         worker = new Worker(new URL('./loanCalculation.worker.ts', import.meta.url), { type: 'module' })
         this.worker = worker
       } catch {
+        this.workerErrorCount += 1
         onResult(calculateLoanSynchronously(snapshot))
         return
       }
@@ -47,19 +50,22 @@ export class LoanCalculationRunner {
 
     worker.onmessage = (event: MessageEvent<WorkerResponse>) => {
       if (event.data.revision !== snapshot.revision) return
+      this.workerErrorCount = 0
       onResult({ revision: snapshot.revision, snapshot, result: event.data.result })
     }
     worker.onerror = () => {
+      this.workerErrorCount += 1
       worker.terminate()
-      this.worker = null
+      if (this.worker === worker) this.worker = null
       onResult(calculateLoanSynchronously(snapshot))
     }
 
     try {
       worker.postMessage({ revision: snapshot.revision, snapshot })
     } catch {
+      this.workerErrorCount += 1
       worker.terminate()
-      this.worker = null
+      if (this.worker === worker) this.worker = null
       onResult(calculateLoanSynchronously(snapshot))
     }
   }

@@ -146,4 +146,25 @@ describe('useLoanCalculation', () => {
     await waitFor(() => expect(DeferredWorker.instances[1].messages).toHaveLength(1))
     expect(DeferredWorker.instances[1]).not.toBe(failedWorker)
   })
+
+  it('uses sync calculation after repeated worker runtime errors', async () => {
+    const { rerender } = render(<Probe {...loanInput({ config: { ...defaultConfig, currency: 'RUB' } })}/>)
+
+    await waitFor(() => expect(DeferredWorker.instances[0].messages).toHaveLength(1))
+    await act(async () => DeferredWorker.instances[0].onerror?.(new Event('error')))
+    rerender(<Probe {...loanInput({ config: { ...defaultConfig, currency: 'USD' } })}/>)
+
+    await waitFor(() => expect(DeferredWorker.instances[1].messages).toHaveLength(1))
+    await act(async () => DeferredWorker.instances[1].onerror?.(new Event('error')))
+    rerender(<Probe {...loanInput({ config: { ...defaultConfig, currency: 'EUR' } })}/>)
+
+    await waitFor(() => expect(DeferredWorker.instances[2].messages).toHaveLength(1))
+    await act(async () => DeferredWorker.instances[2].onerror?.(new Event('error')))
+    rerender(<Probe {...loanInput({ config: { ...defaultConfig, currency: 'CNY' } })}/>)
+
+    await waitFor(() => expect(current().isStale).toBe(false))
+    expect(DeferredWorker.instances).toHaveLength(3)
+    expect(current().calculationSnapshot.config.currency).toBe('CNY')
+    expect(current().selected).not.toBeNull()
+  })
 })
