@@ -180,8 +180,10 @@ describe('импорт резервной копии', () => {
     expect(() => parseLoanBackup(JSON.stringify({ repayments: [] }))).toThrow('параметры кредита')
   })
 
-  it('отклоняет неподдерживаемую валюту', () => {
-    expect(() => parseLoanBackup(JSON.stringify({ config: { ...defaultConfig, currency: 'NOT-A-CURRENCY' }, repayments: [], gracePeriods: [] }))).toThrow('валюту')
+  it('подставляет валюту по умолчанию для старого файла с неподдерживаемой валютой', () => {
+    const result = parseLoanBackup(JSON.stringify({ config: { ...defaultConfig, currency: 'NOT-A-CURRENCY' }, repayments: [], gracePeriods: [] }))
+
+    expect(result.config.currency).toBe(defaultConfig.currency)
   })
 
   it('отклоняет невозможные календарные даты', () => {

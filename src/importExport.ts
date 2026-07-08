@@ -79,8 +79,7 @@ export function parseLoanBackupObject(raw: unknown): LoanBackupData {
 
   const source = raw.config
   const interest = isObject(source.interest) ? source.interest : {}
-  const currency = source.currency === undefined ? defaultConfig.currency : oneOf(source.currency, supportedCurrencies) ? source.currency : null
-  if (currency === null) throw new Error('Файл содержит неподдерживаемую валюту')
+  const currency = oneOf(source.currency, supportedCurrencies) ? source.currency : defaultConfig.currency
   const config = {
     ...defaultConfig,
     ...source,
