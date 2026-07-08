@@ -28,7 +28,17 @@ export const calculateLoanSynchronously = (snapshot: LoanCalculationSnapshot): L
 export class LoanCalculationRunner {
   private worker: Worker | null = null
   private workerErrorCount = 0
+  private workerRuntimeErrorCount = 0
   private readonly maxWorkerErrors = 3
+
+  private recordWorkerAcceptedWork() {
+    this.workerErrorCount = this.workerRuntimeErrorCount
+  }
+
+  private recordWorkerResult() {
+    this.workerErrorCount = 0
+    this.workerRuntimeErrorCount = 0
+  }
 
   calculate(snapshot: LoanCalculationSnapshot, onResult: (envelope: LoanCalculationEnvelope) => void) {
     if (!canUseLoanCalculationWorker() || this.workerErrorCount >= this.maxWorkerErrors) {
@@ -50,10 +60,11 @@ export class LoanCalculationRunner {
 
     worker.onmessage = (event: MessageEvent<WorkerResponse>) => {
       if (event.data.revision !== snapshot.revision) return
-      this.workerErrorCount = 0
+      this.recordWorkerResult()
       onResult({ revision: snapshot.revision, snapshot, result: event.data.result })
     }
     worker.onerror = () => {
+      this.workerRuntimeErrorCount += 1
       this.workerErrorCount += 1
       worker.terminate()
       if (this.worker === worker) this.worker = null
@@ -62,6 +73,7 @@ export class LoanCalculationRunner {
 
     try {
       worker.postMessage({ revision: snapshot.revision, snapshot })
+      this.recordWorkerAcceptedWork()
     } catch {
       this.workerErrorCount += 1
       worker.terminate()

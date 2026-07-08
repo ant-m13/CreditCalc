@@ -183,4 +183,23 @@ describe('useLoanCalculation', () => {
     expect(current().calculationSnapshot.config.currency).toBe('CNY')
     expect(current().selected).not.toBeNull()
   })
+
+  it('does not keep transient startup failures on the edge after a worker accepts work', async () => {
+    vi.stubGlobal('Worker', ConstructorThrowingWorker)
+    const { rerender } = render(<Probe {...loanInput({ config: { ...defaultConfig, currency: 'RUB' } })}/>)
+
+    await waitFor(() => expect(current().calculationSnapshot.config.currency).toBe('RUB'))
+    rerender(<Probe {...loanInput({ config: { ...defaultConfig, currency: 'USD' } })}/>)
+    await waitFor(() => expect(current().calculationSnapshot.config.currency).toBe('USD'))
+
+    vi.stubGlobal('Worker', DeferredWorker)
+    rerender(<Probe {...loanInput({ config: { ...defaultConfig, currency: 'EUR' } })}/>)
+
+    await waitFor(() => expect(DeferredWorker.instances[0].messages).toHaveLength(1))
+    await act(async () => DeferredWorker.instances[0].onerror?.(new Event('error')))
+    rerender(<Probe {...loanInput({ config: { ...defaultConfig, currency: 'CNY' } })}/>)
+
+    await waitFor(() => expect(DeferredWorker.instances).toHaveLength(2))
+    expect(DeferredWorker.instances[1].messages).toHaveLength(1)
+  })
 })
