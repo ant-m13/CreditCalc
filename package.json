@@ -1,7 +1,7 @@
 {
   "name": "credit-calculator",
   "private": true,
-  "version": "1.6.7",
+  "version": "1.6.8",
   "description": "Кредитный калькулятор с досрочными погашениями, банковским графиком платежей и локальным хранением данных.",
   "license": "MIT",
   "homepage": "https://ant-m13.github.io/CreditCalc/",
