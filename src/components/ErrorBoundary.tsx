@@ -2,13 +2,18 @@ import { Component, type ErrorInfo, type ReactNode } from 'react'
 
 interface ErrorBoundaryState {
   message: string | null
+  recoveryMessage: string | null
 }
 
+const storageKey = 'ipoteka-calculator-v1'
+
+const errorMessage = (error: unknown) => error instanceof Error ? error.message : 'неизвестная ошибка'
+
 export class ErrorBoundary extends Component<{ children: ReactNode }, ErrorBoundaryState> {
-  state: ErrorBoundaryState = { message: null }
+  state: ErrorBoundaryState = { message: null, recoveryMessage: null }
 
   static getDerivedStateFromError(error: unknown): ErrorBoundaryState {
-    return { message: error instanceof Error ? error.message : 'Неизвестная ошибка приложения' }
+    return { message: error instanceof Error ? error.message : 'Неизвестная ошибка приложения', recoveryMessage: null }
   }
 
   componentDidCatch(error: unknown, info: ErrorInfo) {
@@ -16,21 +21,46 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, ErrorBound
   }
 
   downloadLocalData = () => {
-    const data = window.localStorage.getItem('ipoteka-calculator-v1') ?? '{}'
-    const anchor = document.createElement('a')
-    anchor.href = URL.createObjectURL(new Blob([data], { type: 'application/json' }))
-    anchor.download = `credit-calculator-recovery-${new Date().toISOString().slice(0, 10)}.json`
-    anchor.click()
-    URL.revokeObjectURL(anchor.href)
+    let data = '{}'
+
+    try {
+      data = window.localStorage.getItem(storageKey) ?? '{}'
+    } catch (error) {
+      console.error('Failed to read localStorage recovery data', error)
+      this.setState({ recoveryMessage: 'localStorage недоступен. Скачан пустой файл восстановления.' })
+    }
+
+    try {
+      const anchor = document.createElement('a')
+      anchor.href = URL.createObjectURL(new Blob([data], { type: 'application/json' }))
+      anchor.download = `credit-calculator-recovery-${new Date().toISOString().slice(0, 10)}.json`
+      anchor.click()
+      URL.revokeObjectURL(anchor.href)
+    } catch (error) {
+      console.error('Failed to download recovery data', error)
+      this.setState({ recoveryMessage: `Не удалось скачать файл восстановления: ${errorMessage(error)}.` })
+    }
   }
 
   restartWithoutStorage = () => {
-    window.localStorage.removeItem('ipoteka-calculator-v1')
-    window.location.reload()
+    try {
+      window.localStorage.removeItem(storageKey)
+    } catch (error) {
+      console.error('Failed to clear localStorage during recovery', error)
+      this.setState({ recoveryMessage: `Не удалось очистить localStorage: ${errorMessage(error)}. Откройте приложение в приватном окне или очистите данные сайта в настройках браузера.` })
+      return
+    }
+
+    try {
+      window.location.reload()
+    } catch (error) {
+      console.error('Failed to reload during recovery', error)
+      this.setState({ recoveryMessage: `Не удалось перезагрузить приложение: ${errorMessage(error)}.` })
+    }
   }
 
   render() {
     if (!this.state.message) return this.props.children
-    return <main className="error-boundary"><section className="panel list-panel"><div className="panel-head"><div><span className="eyebrow">Ошибка приложения</span><h3>Не удалось отобразить расчёт</h3><p>{this.state.message}</p></div></div><div className="error-actions"><button className="ghost" onClick={this.downloadLocalData}>Скачать данные</button><button className="ghost" onClick={this.restartWithoutStorage}>Запустить без localStorage</button><button className="primary" onClick={() => window.location.reload()}>Перезагрузить приложение</button></div></section></main>
+    return <main className="error-boundary"><section className="panel list-panel"><div className="panel-head"><div><span className="eyebrow">Ошибка приложения</span><h3>Не удалось отобразить расчёт</h3><p>{this.state.message}</p>{this.state.recoveryMessage ? <p role="status">{this.state.recoveryMessage}</p> : null}</div></div><div className="error-actions"><button className="ghost" onClick={this.downloadLocalData}>Скачать данные</button><button className="ghost" onClick={this.restartWithoutStorage}>Запустить без localStorage</button><button className="primary" onClick={() => window.location.reload()}>Перезагрузить приложение</button></div></section></main>
   }
 }
