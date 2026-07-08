@@ -128,6 +128,23 @@ describe('loan engine', () => {
     expect(s.every(row => row.closingBalance >= 0)).toBe(true)
     expect(s.at(-1)?.closingBalance).toBe(0)
   })
+  it('после сокращения срока пересчитывает reducePayment по актуальному остатку периодов', () => {
+    const short = { ...config, principal: 1_000_000, annualRate: 12, termMonths: 24, issueDate: '2024-01-01', firstPaymentDate: '2024-02-01', paymentDay: 1, closeThreshold: 0 }
+    const reduceTerm = early({ id: 'term-first', date: '2024-03-01', amount: 300_000, strategy: 'reduceTerm' })
+    const reducePayment = early({ id: 'payment-second', date: '2024-04-01', amount: 100_000, strategy: 'reducePayment' })
+    const contractualRemaining = generateBaseSchedule(short).filter(row => row.isRegularPayment && row.date > reducePayment.date).length
+    const termOnly = generateBaseSchedule(short, { earlyRepayments: [reduceTerm] })
+    const actualRemaining = termOnly.filter(row => row.isRegularPayment && row.date > reducePayment.date).length
+    const mixed = generateBaseSchedule(short, { earlyRepayments: [reduceTerm, reducePayment] })
+    const reducePaymentRow = mixed.find(row => row.date === reducePayment.date)!
+    const nextRegular = mixed.find(row => row.date === '2024-05-01')!
+    const expectedPayment = calculateAnnuityPayment(reducePaymentRow.closingBalance, short.annualRate, actualRemaining, 12, short.rounding)
+    const staleBugPayment = reducePaymentRow.payment - calculateAnnuityPayment(reducePayment.amount, short.annualRate, contractualRemaining, 12, short.rounding).toNumber()
+
+    expect(actualRemaining).toBeLessThan(contractualRemaining)
+    expect(nextRegular.payment).toBeCloseTo(expectedPayment.toNumber(), 2)
+    expect(nextRegular.payment).toBeLessThan(staleBugPayment)
+  })
   it('не допускает отрицательный остаток при переплате досрочным погашением', () => {
     const zeroRate = { ...config, principal: 100_000, annualRate: 0, termMonths: 12, issueDate: '2024-01-01', firstPaymentDate: '2024-02-01', paymentDay: 1, closeThreshold: 0 }
     const s = generateBaseSchedule(zeroRate, { earlyRepayments: [early({ id: 'overpay', date: '2024-01-15', amount: 150_000, strategy: 'full', interestFirst: false })] })
