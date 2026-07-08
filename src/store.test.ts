@@ -391,6 +391,23 @@ describe('лимиты store до мутации', () => {
     expect(useLoanStore.getState().repaymentRules).toHaveLength(MAX_REPAYMENT_RULES)
   })
 
+  it('не добавляет структурно повреждённое правило', () => {
+    setStoreLoan(loanProfile())
+
+    expect(() => useLoanStore.getState().addRepaymentRule({ ...rule(1), startDate: 'broken-date' })).toThrow('дата начала')
+
+    expect(useLoanStore.getState().repaymentRules).toEqual([])
+  })
+
+  it('не обновляет правило повреждёнными данными', () => {
+    const existingRule = rule(1)
+    setStoreLoan(loanProfile({ repaymentRules: [existingRule] }))
+
+    expect(() => useLoanStore.getState().updateRepaymentRule({ ...existingRule, amount: Number.NaN })).toThrow('сумма')
+
+    expect(useLoanStore.getState().repaymentRules).toEqual([existingRule])
+  })
+
   it('сохраняет конфликтующие monthlyTotalPayment rules до полного async-расчёта', () => {
     setStoreLoan(loanProfile())
     const first = { ...rule(1), type: 'monthlyTotalPayment' as const, amount: 100000, startDate: defaultConfig.firstPaymentDate, endDate: defaultConfig.firstPaymentDate }

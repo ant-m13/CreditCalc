@@ -46,6 +46,9 @@ const fontSizes = ['normal', 'large', 'xlarge'] as const
 const oneOf = <T extends string>(value: unknown, values: readonly T[], fallback: T): T =>
   typeof value === 'string' && values.includes(value as T) ? value as T : fallback
 
+const isOneOf = <T extends string>(value: unknown, values: readonly T[]): value is T =>
+  typeof value === 'string' && values.includes(value as T)
+
 const finiteNumber = (value: unknown, fallback: number, min = 0, max = Number.POSITIVE_INFINITY) =>
   typeof value === 'number' && Number.isFinite(value) ? Math.min(max, Math.max(min, value)) : fallback
 
@@ -345,6 +348,46 @@ export const assertRepaymentPlanValid = (config: LoanConfig, repayments: EarlyRe
 export const assertRepaymentPlanStructurallyValid = (config: LoanConfig, repayments: EarlyRepayment[], gracePeriods: GracePeriod[]) => {
   const validationErrors = validateScenario(config, repayments, gracePeriods)
   if (validationErrors.length > 0) throw new Error(validationErrors.join(' · '))
+}
+
+export const assertRepaymentRuleStructurallyValid = (rule: RepaymentRule) => {
+  const errors: string[] = []
+  const title = typeof rule.name === 'string' && rule.name.trim() ? `«${normalizeText(rule.name)}»` : 'без названия'
+  const label = `Правило досрочных платежей ${title}`
+  const type = isOneOf(rule.type, repaymentRuleTypes) ? rule.type : null
+
+  if (typeof rule.id !== 'string' || !rule.id.trim()) errors.push(`${label}: ID повреждён`)
+  if (typeof rule.name !== 'string' || !rule.name.trim()) errors.push(`${label}: название обязательно`)
+  if (typeof rule.name === 'string' && rule.name.length > MAX_TEXT_FIELD_LENGTH) errors.push(`${label}: название слишком длинное`)
+  if (!type) errors.push(`${label}: тип повреждён`)
+  if (!isISODate(rule.startDate)) errors.push(`${label}: дата начала должна быть корректной`)
+  if (!isISODate(rule.endDate)) errors.push(`${label}: дата окончания должна быть корректной`)
+  if (isISODate(rule.startDate) && isISODate(rule.endDate) && rule.endDate < rule.startDate) errors.push(`${label}: окончание раньше начала`)
+  if (rule.ruleSequence !== undefined && (!Number.isInteger(rule.ruleSequence) || rule.ruleSequence < 0)) errors.push(`${label}: порядок повреждён`)
+  if (rule.enabled !== undefined && typeof rule.enabled !== 'boolean') errors.push(`${label}: признак активности повреждён`)
+  if (!isOneOf(rule.strategy, repaymentStrategies)) errors.push(`${label}: стратегия повреждена`)
+  if (!isOneOf(rule.source, repaymentSources)) errors.push(`${label}: источник повреждён`)
+  if (!isOneOf(rule.sameDayOrder, sameDayOrders)) errors.push(`${label}: порядок в дату платежа повреждён`)
+  if (typeof rule.interestFirst !== 'boolean') errors.push(`${label}: правило погашения процентов повреждено`)
+  if (!Array.isArray(rule.skipMonths)) {
+    errors.push(`${label}: месяцы пропуска повреждены`)
+  } else {
+    if (rule.skipMonths.length > MAX_RULE_SKIP_MONTHS) errors.push(`${label}: слишком много месяцев пропуска. Максимум: ${MAX_RULE_SKIP_MONTHS}`)
+    if (!rule.skipMonths.every(isISOYearMonth)) errors.push(`${label}: месяц пропуска должен быть корректным`)
+  }
+  if (rule.comment !== undefined && typeof rule.comment !== 'string') errors.push(`${label}: комментарий повреждён`)
+  if (typeof rule.comment === 'string' && rule.comment.length > MAX_TEXT_FIELD_LENGTH) errors.push(`${label}: комментарий слишком длинный`)
+
+  if (type === 'paymentPercent') {
+    if (typeof rule.percent !== 'number' || !Number.isFinite(rule.percent) || rule.percent < 0) errors.push(`${label}: процент должен быть неотрицательным числом`)
+  } else if (type && (typeof rule.amount !== 'number' || !Number.isFinite(rule.amount) || rule.amount < 0)) {
+    errors.push(`${label}: сумма должна быть неотрицательным числом`)
+  }
+
+  if (rule.amount !== undefined && (typeof rule.amount !== 'number' || !Number.isFinite(rule.amount) || rule.amount < 0)) errors.push(`${label}: сумма повреждена`)
+  if (rule.percent !== undefined && (typeof rule.percent !== 'number' || !Number.isFinite(rule.percent) || rule.percent < 0)) errors.push(`${label}: процент повреждён`)
+
+  if (errors.length > 0) throw new Error([...new Set(errors)].join(' · '))
 }
 
 export const assertGracePeriodsDoNotOverlap = (gracePeriods: GracePeriod[]) => {

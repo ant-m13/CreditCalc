@@ -8,6 +8,7 @@ import {
   assertGracePeriodsDoNotOverlap,
   assertImportWithinLimits,
   assertRepaymentPlanValid,
+  assertRepaymentRuleStructurallyValid,
   assertRepaymentPlanStructurallyValid,
   defaultAccentColor,
   defaultLoanData,
@@ -170,12 +171,19 @@ export const useLoanStore = create<LoanState>()(persist((set) => ({
   removeRepayment: (id) => set(s => syncActive(s, { repayments: s.repayments.filter(r => r.id !== id) })),
   addRepaymentRule: (rule) => set(s => {
     if (s.repaymentRules.length >= MAX_REPAYMENT_RULES) throw new Error(`Можно добавить не более ${MAX_REPAYMENT_RULES} правил досрочных платежей`)
-    const repaymentRules = sortRules([...s.repaymentRules, withRuleSequence(s.repaymentRules, rule)])
+    const nextRule = withRuleSequence(s.repaymentRules, rule)
+    assertRepaymentRuleStructurallyValid(nextRule)
+    const repaymentRules = sortRules([...s.repaymentRules, nextRule])
     return syncActive(s, { repaymentRules })
   }),
   updateRepaymentRule: (rule) => set(s => {
     if (!s.repaymentRules.some(item => item.id === rule.id)) throw new Error('Редактируемое правило не найдено в активном кредите')
-    const repaymentRules = sortRules(s.repaymentRules.map(item => item.id === rule.id ? { ...rule, ruleSequence: rule.ruleSequence ?? item.ruleSequence } : item))
+    const repaymentRules = sortRules(s.repaymentRules.map(item => {
+      if (item.id !== rule.id) return item
+      const nextRule = { ...rule, ruleSequence: rule.ruleSequence ?? item.ruleSequence }
+      assertRepaymentRuleStructurallyValid(nextRule)
+      return nextRule
+    }))
     return syncActive(s, { repaymentRules })
   }),
   removeRepaymentRule: (id) => set(s => syncActive(s, { repaymentRules: s.repaymentRules.filter(rule => rule.id !== id) })),
