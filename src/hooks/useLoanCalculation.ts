@@ -17,29 +17,48 @@ const emptyResult: LoanCalculationResult = {
   base: null
 }
 
-const objectRevisions = new WeakMap<object, number>()
-let nextObjectRevision = 0
+const MAX_OBJECT_REVISION = Number.MAX_SAFE_INTEGER
 
-const objectRevision = (value: object) => {
-  let revision = objectRevisions.get(value)
-  if (revision === undefined) {
-    revision = nextObjectRevision
-    nextObjectRevision += 1
-    objectRevisions.set(value, revision)
+export const createSnapshotRevisionTracker = (maxObjectRevision = MAX_OBJECT_REVISION) => {
+  let objectRevisions = new WeakMap<object, number>()
+  let nextObjectRevision = 0
+  let objectRevisionEpoch = 0
+
+  const objectRevision = (value: object) => {
+    let revision = objectRevisions.get(value)
+    if (revision === undefined) {
+      if (nextObjectRevision >= maxObjectRevision) {
+        objectRevisions = new WeakMap<object, number>()
+        nextObjectRevision = 0
+        objectRevisionEpoch += 1
+      }
+      revision = nextObjectRevision
+      nextObjectRevision += 1
+      objectRevisions.set(value, revision)
+    }
+    return revision
   }
-  return revision
+
+  return ({ config, repayments, repaymentRules, gracePeriods, selectedScenario, displayDecimals, loanId }: LoanCalculationInput) => {
+    const configRevision = objectRevision(config)
+    const repaymentsRevision = objectRevision(repayments)
+    const repaymentRulesRevision = objectRevision(repaymentRules)
+    const gracePeriodsRevision = objectRevision(gracePeriods)
+
+    return JSON.stringify([
+      objectRevisionEpoch,
+      loanId ?? '',
+      configRevision,
+      repaymentsRevision,
+      repaymentRulesRevision,
+      gracePeriodsRevision,
+      selectedScenario,
+      displayDecimals
+    ])
+  }
 }
 
-const snapshotRevision = ({ config, repayments, repaymentRules, gracePeriods, selectedScenario, displayDecimals, loanId }: LoanCalculationInput) =>
-  JSON.stringify([
-    loanId ?? '',
-    objectRevision(config),
-    objectRevision(repayments),
-    objectRevision(repaymentRules),
-    objectRevision(gracePeriods),
-    selectedScenario,
-    displayDecimals
-  ])
+const snapshotRevision = createSnapshotRevisionTracker()
 
 export function useLoanCalculation({ config, repayments, repaymentRules, gracePeriods, selectedScenario, displayDecimals, loanId }: LoanCalculationInput) {
   const liveRevision = useMemo(

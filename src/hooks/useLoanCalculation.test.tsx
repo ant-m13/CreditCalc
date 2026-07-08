@@ -3,7 +3,7 @@ import { act, cleanup, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { defaultConfig } from '../loanDefaults'
 import { buildLoanCalculation, type LoanCalculationResult } from '../loanCalculation'
-import { useLoanCalculation, type LoanCalculationInput } from './useLoanCalculation'
+import { createSnapshotRevisionTracker, useLoanCalculation, type LoanCalculationInput } from './useLoanCalculation'
 
 interface WorkerRequest {
   revision: string
@@ -86,6 +86,22 @@ afterEach(() => {
 })
 
 describe('useLoanCalculation', () => {
+  it('changes revision epoch when the object revision counter is exhausted', () => {
+    const tracker = createSnapshotRevisionTracker(4)
+    const firstInput = loanInput()
+    const firstRevision = tracker(firstInput)
+    const secondRevision = tracker(loanInput({
+      config: { ...defaultConfig, currency: 'USD' },
+      repayments: [],
+      repaymentRules: [],
+      gracePeriods: []
+    }))
+
+    expect(JSON.parse(firstRevision)[0]).toBe(0)
+    expect(JSON.parse(secondRevision)[0]).toBe(1)
+    expect(secondRevision).not.toBe(firstRevision)
+  })
+
   it('keeps worker result and snapshot consistent while a new revision is pending', async () => {
     const initial = loanInput({ config: { ...defaultConfig, currency: 'RUB' } })
     const { rerender } = render(<Probe {...initial}/>)
