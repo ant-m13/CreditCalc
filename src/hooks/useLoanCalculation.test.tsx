@@ -163,6 +163,30 @@ describe('useLoanCalculation', () => {
     expect(DeferredWorker.instances[1]).not.toBe(failedWorker)
   })
 
+  it('keeps stale state visible before scheduled sync fallback after worker runtime error', async () => {
+    const { rerender } = render(<Probe {...loanInput({ config: { ...defaultConfig, currency: 'RUB' } })}/>)
+    const worker = DeferredWorker.instances[0]
+
+    await waitFor(() => expect(worker.messages).toHaveLength(1))
+    await act(async () => worker.resolve(0))
+    await waitFor(() => expect(current().isStale).toBe(false))
+
+    rerender(<Probe {...loanInput({ config: { ...defaultConfig, currency: 'USD' } })}/>)
+
+    await waitFor(() => expect(worker.messages).toHaveLength(2))
+    await act(async () => worker.onerror?.(new Event('error')))
+
+    expect(current().isStale).toBe(true)
+    expect(screen.getByTestId('snapshot-currency').textContent).toBe('RUB')
+
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 0))
+    })
+
+    await waitFor(() => expect(current().isStale).toBe(false))
+    expect(current().calculationSnapshot.config.currency).toBe('USD')
+  })
+
   it('uses sync calculation after repeated worker runtime errors', async () => {
     const { rerender } = render(<Probe {...loanInput({ config: { ...defaultConfig, currency: 'RUB' } })}/>)
 
