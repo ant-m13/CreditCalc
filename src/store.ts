@@ -8,6 +8,7 @@ import {
   assertGracePeriodsDoNotOverlap,
   assertImportWithinLimits,
   assertRepaymentPlanValid,
+  assertRepaymentPlanStructurallyValid,
   defaultAccentColor,
   defaultLoanData,
   loanFromData,
@@ -139,18 +140,18 @@ export const useLoanStore = create<LoanState>()(persist((set) => ({
   storageRecoveryReport: [],
   updateConfig: (patch) => set(s => {
     const config = normalizeConfigPatch(s.config, patch)
-    assertRepaymentPlanValid(config, s.repayments, s.repaymentRules, s.gracePeriods)
+    assertRepaymentPlanStructurallyValid(config, s.repayments, s.gracePeriods)
     return syncActive(s, { config })
   }),
   updateInterest: (patch) => set(s => {
     const config = { ...s.config, interest: { ...s.config.interest, ...patch } }
-    assertRepaymentPlanValid(config, s.repayments, s.repaymentRules, s.gracePeriods)
+    assertRepaymentPlanStructurallyValid(config, s.repayments, s.gracePeriods)
     return syncActive(s, { config })
   }),
   addRepayment: (repayment) => set(s => {
     if (s.repayments.length >= MAX_EARLY_REPAYMENTS) throw new Error(`Можно добавить не более ${MAX_EARLY_REPAYMENTS} разовых платежей`)
     const repayments = sortRepayments([...s.repayments, withRepaymentSequence(s.repayments, repayment)])
-    assertRepaymentPlanValid(s.config, repayments, s.repaymentRules, s.gracePeriods)
+    assertRepaymentPlanStructurallyValid(s.config, repayments, s.gracePeriods)
     return syncActive(s, { repayments })
   }),
   updateRepayment: (repayment) => set(s => {
@@ -161,20 +162,18 @@ export const useLoanStore = create<LoanState>()(persist((set) => ({
         sameDaySequence: repayment.date === item.date ? repayment.sameDaySequence ?? item.sameDaySequence : undefined
       })
       : item))
-    assertRepaymentPlanValid(s.config, repayments, s.repaymentRules, s.gracePeriods)
+    assertRepaymentPlanStructurallyValid(s.config, repayments, s.gracePeriods)
     return syncActive(s, { repayments })
   }),
   removeRepayment: (id) => set(s => syncActive(s, { repayments: s.repayments.filter(r => r.id !== id) })),
   addRepaymentRule: (rule) => set(s => {
     if (s.repaymentRules.length >= MAX_REPAYMENT_RULES) throw new Error(`Можно добавить не более ${MAX_REPAYMENT_RULES} правил досрочных платежей`)
     const repaymentRules = sortRules([...s.repaymentRules, withRuleSequence(s.repaymentRules, rule)])
-    assertRepaymentPlanValid(s.config, s.repayments, repaymentRules, s.gracePeriods)
     return syncActive(s, { repaymentRules })
   }),
   updateRepaymentRule: (rule) => set(s => {
     if (!s.repaymentRules.some(item => item.id === rule.id)) throw new Error('Редактируемое правило не найдено в активном кредите')
     const repaymentRules = sortRules(s.repaymentRules.map(item => item.id === rule.id ? { ...rule, ruleSequence: rule.ruleSequence ?? item.ruleSequence } : item))
-    assertRepaymentPlanValid(s.config, s.repayments, repaymentRules, s.gracePeriods)
     return syncActive(s, { repaymentRules })
   }),
   removeRepaymentRule: (id) => set(s => syncActive(s, { repaymentRules: s.repaymentRules.filter(rule => rule.id !== id) })),
@@ -182,13 +181,13 @@ export const useLoanStore = create<LoanState>()(persist((set) => ({
     if (s.gracePeriods.length >= MAX_GRACE_PERIODS) throw new Error(`Можно добавить не более ${MAX_GRACE_PERIODS} льготных периодов`)
     const gracePeriods = [...s.gracePeriods, grace]
     assertGracePeriodsDoNotOverlap(gracePeriods)
-    assertRepaymentPlanValid(s.config, s.repayments, s.repaymentRules, gracePeriods)
+    assertRepaymentPlanStructurallyValid(s.config, s.repayments, gracePeriods)
     return syncActive(s, { gracePeriods })
   }),
   removeGrace: (id) => set(s => {
     const gracePeriods = s.gracePeriods.filter(g => g.id !== id)
     if (gracePeriods.length === s.gracePeriods.length) throw new Error('Льготный период не найден в активном кредите')
-    assertRepaymentPlanValid(s.config, s.repayments, s.repaymentRules, gracePeriods)
+    assertRepaymentPlanStructurallyValid(s.config, s.repayments, gracePeriods)
     return syncActive(s, { gracePeriods })
   }),
   selectScenario: (selectedScenario) => set(s => syncActive(s, { selectedScenario })),

@@ -342,6 +342,11 @@ export const assertRepaymentPlanValid = (config: LoanConfig, repayments: EarlyRe
   assertLoanCandidateValid(config, repayments, rules, gracePeriods)
 }
 
+export const assertRepaymentPlanStructurallyValid = (config: LoanConfig, repayments: EarlyRepayment[], gracePeriods: GracePeriod[]) => {
+  const validationErrors = validateScenario(config, repayments, gracePeriods)
+  if (validationErrors.length > 0) throw new Error(validationErrors.join(' · '))
+}
+
 export const assertGracePeriodsDoNotOverlap = (gracePeriods: GracePeriod[]) => {
   const sortedGrace = [...gracePeriods].sort((a, b) => a.startDate.localeCompare(b.startDate) || a.id.localeCompare(b.id))
   sortedGrace.forEach((period, index) => {

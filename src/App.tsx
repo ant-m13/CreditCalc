@@ -1,7 +1,7 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import { flushSync } from 'react-dom'
 import { ArrowDownToLine, CalendarDays, History, Landmark, Menu, Moon, Plus, Printer, ReceiptText, Settings2, ShieldCheck, Sun, TrendingDown, X } from 'lucide-react'
-import { compareScenarios, isRegularPaymentDate, preparePaymentCalendar, validateScenario, type EarlyRepayment } from './loanEngine'
+import { isRegularPaymentDate, validateScenario, type EarlyRepayment } from './loanEngine'
 import { useLoanStore } from './store'
 import { FontControls } from './components/FontControls'
 import { GraceList } from './components/GraceList'
@@ -19,7 +19,6 @@ import { useLoanExport } from './hooks/useLoanExport'
 import { useLoanImport } from './hooks/useLoanImport'
 import { useSharedCalculation } from './hooks/useSharedCalculation'
 import { useStorageStatus } from './hooks/useStorageStatus'
-import { expandRepaymentRules } from './repaymentRules'
 
 const Overview = lazy(() => import('./components/Overview').then(module => ({ default: module.Overview })))
 const Settings = lazy(() => import('./components/Settings').then(module => ({ default: module.Settings })))
@@ -159,12 +158,8 @@ function App() {
     if (nextEnabled) {
       try {
         const candidateManual = store.repayments.map(item => item.id === repayment.id ? { ...repayment, enabled: true } : item)
-        const paymentCalendar = preparePaymentCalendar(store.config, store.gracePeriods)
-        const generated = expandRepaymentRules(store.config, store.repaymentRules, store.gracePeriods, paymentCalendar)
-        const candidateRepayments = [...candidateManual.filter(item => item.enabled !== false && item.amount > 0), ...generated]
-        const validationErrors = validateScenario(store.config, candidateRepayments, store.gracePeriods)
+        const validationErrors = validateScenario(store.config, candidateManual, store.gracePeriods)
         if (validationErrors.length) throw new Error(validationErrors.join(' · '))
-        compareScenarios(store.config, candidateRepayments, store.gracePeriods, paymentCalendar)
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Платёж нельзя включить без исправления параметров'
         setImportStatus({ kind: 'error', text: message })
