@@ -33,6 +33,33 @@ export interface RepaymentAmountModeContext {
   countsAsTotalWithFee: boolean
 }
 
+interface RepaymentAmountModeValidationOptions {
+  includeTotalDateErrors?: boolean
+  invalidMode?: string
+  totalBeforeRegularPayment?: string
+  totalOnNonRegularDate?: string
+}
+
+export const normalizeStoredRepaymentAmountMode = (context: RepaymentAmountModeContext): EarlyRepayment['amountMode'] =>
+  context.normalizedAmountMode === 'totalWithFee' && context.isRegularDate ? 'totalWithFee' : 'extra'
+
+export const repaymentAmountModeValidationErrors = (
+  context: RepaymentAmountModeContext,
+  label: string,
+  options: RepaymentAmountModeValidationOptions = {}
+) => {
+  const errors: string[] = []
+  const includeTotalDateErrors = options.includeTotalDateErrors ?? true
+  if (context.normalizedAmountMode === null) errors.push(options.invalidMode ?? `${label}: режим суммы повреждён`)
+  if (includeTotalDateErrors && context.totalBeforeRegularPayment) {
+    errors.push(options.totalBeforeRegularPayment ?? `${label}: общая сумма списания с учётом комиссии может применяться только после регулярного платежа`)
+  }
+  if (includeTotalDateErrors && context.totalOnNonRegularDate) {
+    errors.push(options.totalOnNonRegularDate ?? `${label}: общую сумму списания с учётом комиссии можно указать только в дату регулярного платежа`)
+  }
+  return errors
+}
+
 export function repaymentAmountModeContextForRegularDate(
   repayment: { amount: unknown; amountMode?: unknown; enabled?: unknown; sameDayOrder?: unknown },
   isRegularDate: boolean

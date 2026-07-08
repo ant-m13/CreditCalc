@@ -2,7 +2,7 @@ import { supportedCurrencies, type EarlyRepayment, type GracePeriod, type LoanCo
 import { differenceInCalendarDays, parseISO } from 'date-fns'
 import { MAX_CALENDAR_DAYS, MAX_CALENDAR_YEARS, MAX_EARLY_REPAYMENTS, MAX_GRACE_PERIODS, MAX_RATE_CHANGES, MAX_TERM_MONTHS } from './limits'
 import { contractualFinalPaymentDate, preparePaymentCalendar, totalPaymentPeriods } from './dates'
-import { isLegacyRepaymentAmountMode, isRepaymentAmountMode, repaymentAmountModeContext, repaymentAmountModeContextForRegularDate } from './repaymentAmountMode'
+import { repaymentAmountModeContext, repaymentAmountModeContextForRegularDate, repaymentAmountModeValidationErrors } from './repaymentAmountMode'
 import { isISODate } from '../utils/dateValidation'
 
 const finite = (value: unknown) => typeof value === 'number' && Number.isFinite(value)
@@ -111,16 +111,13 @@ export function validateScenario(config: LoanConfig, repayments: EarlyRepayment[
     if (!oneOf(repayment.source, repaymentSources)) errors.push(`Досрочный платёж №${index + 1}: источник повреждён`)
     if (!oneOf(repayment.sameDayOrder, sameDayOrders)) errors.push(`Досрочный платёж №${index + 1}: порядок в дату платежа повреждён`)
     if (typeof repayment.interestFirst !== 'boolean') errors.push(`Досрочный платёж №${index + 1}: правило погашения процентов повреждено`)
-    if (!isISODate(repayment.date)) errors.push(`Досрочный платёж №${index + 1}: дата должна быть корректной`)
+    const repaymentDateValid = isISODate(repayment.date)
+    if (!repaymentDateValid) errors.push(`Досрочный платёж №${index + 1}: дата должна быть корректной`)
     else if (isISODate(config.issueDate) && repayment.date < config.issueDate) errors.push(`Досрочный платёж №${index + 1}: дата раньше выдачи кредита`)
     else if (isISODate(config.issueDate) && exceedsCalendarHorizon(config.issueDate, repayment.date)) errors.push(horizonError(`Досрочный платёж №${index + 1}`))
-    if (repayment.amountMode !== undefined && !isRepaymentAmountMode(repayment.amountMode) && !isLegacyRepaymentAmountMode(repayment.amountMode)) errors.push(`Досрочный платёж №${index + 1}: режим суммы повреждён`)
-    const amountModeContext = isISODate(repayment.date)
-      ? configDatesValid ? repaymentAmountModeContext(repayment, config) : repaymentAmountModeContextForRegularDate(repayment, false)
-      : null
-    if (amountModeContext?.totalBeforeRegularPayment) errors.push(`Досрочный платёж №${index + 1}: общая сумма списания с учётом комиссии может применяться только после регулярного платежа`)
-    if (amountModeContext?.totalOnNonRegularDate) errors.push(`Досрочный платёж №${index + 1}: общую сумму списания с учётом комиссии можно указать только в дату регулярного платежа`)
-    if (amountModeContext?.countsAsTotalWithFee) totalRepaymentsByDate.set(repayment.date, (totalRepaymentsByDate.get(repayment.date) ?? 0) + 1)
+    const amountModeContext = repaymentDateValid && configDatesValid ? repaymentAmountModeContext(repayment, config) : repaymentAmountModeContextForRegularDate(repayment, false)
+    errors.push(...repaymentAmountModeValidationErrors(amountModeContext, `Досрочный платёж №${index + 1}`, { includeTotalDateErrors: repaymentDateValid }))
+    if (repaymentDateValid && amountModeContext.countsAsTotalWithFee) totalRepaymentsByDate.set(repayment.date, (totalRepaymentsByDate.get(repayment.date) ?? 0) + 1)
   })
   totalRepaymentsByDate.forEach((count, date) => {
     if (count > 1) errors.push(`На дату ${date} можно указать только одну общую сумму списания с учётом комиссии`)

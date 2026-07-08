@@ -26,8 +26,16 @@ export type LoanImportData =
   Pick<LoanProfile, 'config' | 'repayments' | 'gracePeriods' | 'selectedScenario' | 'termUnit' | 'displayDecimals' | 'theme'> &
   Partial<Pick<LoanProfile, 'name' | 'appFontSize' | 'scheduleFontSize' | 'repaymentRules' | 'customAccentColor' | 'useCustomAccentColor'>>
 
+export interface QuarantinedLoanRaw {
+  id: string
+  name: string
+  reason: string
+  raw: unknown
+}
+
 export type LoanPersistedState = LoanData & {
   loans: LoanProfile[]
   activeLoanId: string
   storageRecoveryReport: string[]
+  quarantinedLoansRaw: QuarantinedLoanRaw[]
 }

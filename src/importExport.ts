@@ -1,5 +1,5 @@
 import type { EarlyRepayment, GracePeriod, LoanConfig, RateChange } from './loanEngine'
-import { repaymentAmountModeContext, sortRateChanges, supportedCurrencies } from './loanEngine'
+import { repaymentAmountModeContext, repaymentAmountModeValidationErrors, sortRateChanges, supportedCurrencies } from './loanEngine'
 import { defaultConfig } from './loanDefaults'
 import type { RepaymentRule } from './repaymentRules'
 import { assertLoanCandidateValid } from './loanCandidate'
@@ -134,11 +134,14 @@ export function parseLoanBackupObject(raw: unknown): LoanBackupData {
       enabled: item.enabled,
       sameDayOrder: item.sameDayOrder
     }, config)
+    const label = `Ошибка в досрочном платеже №${index + 1}`
+    const amountModeErrors = repaymentAmountModeValidationErrors(context, label, {
+      invalidMode: label,
+      totalBeforeRegularPayment: `${label}: общая сумма списания с учётом комиссии применяется после регулярного платежа`
+    })
     const amountMode = context.normalizedAmountMode
-    if (amountMode === null) throw new Error(`Ошибка в досрочном платеже №${index + 1}`)
+    if (amountModeErrors.length || amountMode === null) throw new Error(amountModeErrors[0] ?? label)
     const enabled = item.enabled ?? true
-    if (context.totalBeforeRegularPayment) throw new Error(`Ошибка в досрочном платеже №${index + 1}: общая сумма списания с учётом комиссии применяется после регулярного платежа`)
-    if (context.totalOnNonRegularDate) throw new Error(`Ошибка в досрочном платеже №${index + 1}: общую сумму списания с учётом комиссии можно указать только в дату регулярного платежа`)
     return { ...item, enabled, amountMode, sameDaySequence: sameDaySequence ?? index, sameDayOrder: amountMode === 'totalWithFee' ? 'regularFirst' : item.sameDayOrder } as unknown as EarlyRepayment
   })
   ensureUniqueIds(repayments, 'Досрочные платежи')

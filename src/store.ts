@@ -23,7 +23,7 @@ import {
   withRepaymentSequence,
   withRuleSequence
 } from './storeNormalization'
-import type { LoanData, LoanImportData, LoanProfile } from './storeTypes'
+import type { LoanData, LoanImportData, LoanProfile, QuarantinedLoanRaw } from './storeTypes'
 
 export { defaultConfig } from './loanDefaults'
 export { MAX_LOANS, loanToBackupData, normalizePersistedState } from './storeNormalization'
@@ -111,6 +111,7 @@ interface LoanState extends LoanData {
   addLoanFromData: (data: LoanImportData) => void
   replaceData: (data: LoanImportData) => void
   storageRecoveryReport: string[]
+  quarantinedLoansRaw: QuarantinedLoanRaw[]
 }
 
 const loanToPublicState = (loan: LoanProfile) => ({
@@ -138,6 +139,7 @@ export const useLoanStore = create<LoanState>()(persist((set) => ({
   loans: [initialLoan],
   activeLoanId: initialLoan.id,
   storageRecoveryReport: [],
+  quarantinedLoansRaw: [],
   updateConfig: (patch) => set(s => {
     const config = normalizeConfigPatch(s.config, patch)
     assertRepaymentPlanStructurallyValid(config, s.repayments, s.gracePeriods)
@@ -200,7 +202,7 @@ export const useLoanStore = create<LoanState>()(persist((set) => ({
   setUseCustomAccentColor: (useCustomAccentColor) => set(s => syncActive(s, { useCustomAccentColor })),
   resetCustomAccentColor: () => set(s => syncActive(s, { customAccentColor: defaultAccentColor, useCustomAccentColor: false })),
   retryStorageSave: () => set(s => ({ activeLoanId: s.activeLoanId, loans: s.loans })),
-  clearStorageRecoveryReport: () => set({ storageRecoveryReport: [] }),
+  clearStorageRecoveryReport: () => set({ storageRecoveryReport: [], quarantinedLoansRaw: [] }),
   switchLoan: (id) => set(s => switchToLoan(s, id)),
   createLoan: (name = 'Новый кредит') => set(s => {
     assertCanAddLoan(s.loans.length)

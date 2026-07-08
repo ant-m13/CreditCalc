@@ -173,6 +173,35 @@ describe('миграция локального хранилища', () => {
     expect(normalized.activeLoanId).toBe('loan-default')
     expect(normalized.storageRecoveryReport.join(' ')).toContain('карантин')
     expect(normalized.storageRecoveryReport.join(' ')).toContain('Льготные периоды')
+    expect(normalized.quarantinedLoansRaw).toHaveLength(1)
+    expect(normalized.quarantinedLoansRaw[0]).toMatchObject({
+      id: 'broken-plan',
+      name: 'Повреждённый план',
+      reason: expect.stringContaining('Льготные периоды')
+    })
+    expect(normalized.quarantinedLoansRaw[0].raw).toMatchObject({ id: 'broken-plan', gracePeriods: expect.arrayContaining([expect.objectContaining({ id: 'g1' })]) })
+  })
+
+  it('сохраняет уже накопленный буфер карантина при следующей миграции', () => {
+    const raw = { id: 'lost-loan', config: { principal: 'broken' } }
+    const normalized = normalizePersistedState({
+      quarantinedLoansRaw: [{ id: 'lost-loan', name: 'Старый сбой', reason: 'ошибка расчёта', raw }]
+    }) as any
+
+    expect(normalized.quarantinedLoansRaw).toEqual([{ id: 'lost-loan', name: 'Старый сбой', reason: 'ошибка расчёта', raw }])
+  })
+
+  it('очищает отчёт и буфер карантина по действию пользователя', () => {
+    setStoreLoan(loanProfile())
+    useLoanStore.setState({
+      storageRecoveryReport: ['Кредит помещён в карантин'],
+      quarantinedLoansRaw: [{ id: 'bad', name: 'Сбой', reason: 'ошибка', raw: { id: 'bad' } }]
+    })
+
+    useLoanStore.getState().clearStorageRecoveryReport()
+
+    expect(useLoanStore.getState().storageRecoveryReport).toEqual([])
+    expect(useLoanStore.getState().quarantinedLoansRaw).toEqual([])
   })
 
   it('перевыпускает повторяющиеся ID кредитов и вложенных записей', () => {
