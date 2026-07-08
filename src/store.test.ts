@@ -191,6 +191,22 @@ describe('миграция локального хранилища', () => {
     expect(normalized.quarantinedLoansRaw).toEqual([{ id: 'lost-loan', name: 'Старый сбой', reason: 'ошибка расчёта', raw }])
   })
 
+  it('отбрасывает повреждённые записи буфера карантина при миграции', () => {
+    const raw = { id: 'valid-raw' }
+    const normalized = normalizePersistedState({
+      quarantinedLoansRaw: [
+        null,
+        { id: '', name: 'Без ID', reason: 'ошибка', raw },
+        { id: 'bad-name', name: '', reason: 'ошибка', raw },
+        { id: 'bad-reason', name: 'Без причины', reason: '', raw },
+        { id: 'no-raw', name: 'Без raw', reason: 'ошибка' },
+        { id: ' valid ', name: ' Сохранить ', reason: ' ошибка ', raw }
+      ]
+    }) as any
+
+    expect(normalized.quarantinedLoansRaw).toEqual([{ id: 'valid', name: 'Сохранить', reason: 'ошибка', raw }])
+  })
+
   it('очищает отчёт и буфер карантина по действию пользователя', () => {
     setStoreLoan(loanProfile())
     useLoanStore.setState({

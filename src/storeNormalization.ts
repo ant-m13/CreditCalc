@@ -439,6 +439,18 @@ export const loanToBackupData = (loan: LoanProfile): LoanBackupData => ({
   useCustomAccentColor: loan.useCustomAccentColor
 })
 
+const normalizeQuarantinedLoansRaw = (value: unknown): QuarantinedLoanRaw[] => {
+  if (!Array.isArray(value)) return []
+  return value.flatMap((item): QuarantinedLoanRaw[] => {
+    if (!isObject(item) || !('raw' in item)) return []
+    const id = normalizeText(item.id)
+    const name = normalizeText(item.name)
+    const reason = normalizeText(item.reason)
+    if (!id || !name || !reason) return []
+    return [{ id, name, reason, raw: item.raw }]
+  }).slice(0, MAX_LOANS)
+}
+
 export const normalizePersistedState = (persisted: unknown): Partial<LoanPersistedState> => {
   const state = (isObject(persisted) ? persisted : {}) as Partial<LoanPersistedState>
   const rawLoans = Array.isArray(state.loans)
@@ -457,17 +469,7 @@ export const normalizePersistedState = (persisted: unknown): Partial<LoanPersist
     return nextId
   }
   const storageRecoveryReport: string[] = []
-  const quarantinedLoansRaw: QuarantinedLoanRaw[] = Array.isArray(state.quarantinedLoansRaw)
-    ? state.quarantinedLoansRaw.flatMap((item): QuarantinedLoanRaw[] => {
-      if (!isObject(item)) return []
-      return [{
-        id: typeof item.id === 'string' && item.id.trim() ? item.id : createId('quarantine'),
-        name: typeof item.name === 'string' && item.name.trim() ? item.name : 'Повреждённый кредит',
-        reason: typeof item.reason === 'string' && item.reason.trim() ? item.reason : 'Причина неизвестна',
-        raw: item.raw
-      }]
-    })
-    : []
+  const quarantinedLoansRaw: QuarantinedLoanRaw[] = normalizeQuarantinedLoansRaw(state.quarantinedLoansRaw)
   const recoverLoan = (loan: Partial<LoanProfile | LoanData>, name: string, id: string) => {
     try {
       const normalized = loanFromData(loan, name, id)
