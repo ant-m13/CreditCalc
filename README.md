@@ -1,6 +1,6 @@
 # Кредитный калькулятор
 [![Pull request checks](https://github.com/ant-m13/CreditCalc/actions/workflows/pr-checks.yml/badge.svg)](https://github.com/ant-m13/CreditCalc/actions/workflows/pr-checks.yml)
-[![Deploy to GitHub Pages](https://github.com/ant-m13/CreditCalc/actions/workflows/deploy-pages.yml/badge.svg?branch=main)](https://github.com/ant-m13/CreditCalc/actions/workflows/deploy-pages.yml)
+[![Deploy to GitHub Pages](https://github.com/ant-m13/CreditCalc/actions/workflows/deploy-pages.yml/badge.svg)](https://github.com/ant-m13/CreditCalc/actions/workflows/deploy-pages.yml)
 [![Release](https://img.shields.io/github/v/release/ant-m13/CreditCalc?display_name=tag&sort=semver)](https://github.com/ant-m13/CreditCalc/releases)
 [![Version](https://img.shields.io/github/package-json/v/ant-m13/CreditCalc?label=version)](package.json)
 [![License](https://img.shields.io/github/license/ant-m13/CreditCalc)](LICENSE)
@@ -134,7 +134,7 @@ pnpm audit --prod
 4. production-сборку;
 5. публикацию папки `dist` через GitHub Pages.
 
-Для первого запуска в GitHub откройте `Settings → Pages` и выберите источник `GitHub Actions`. После этого публикация будет выполняться при push в ветку `main` или вручную через вкладку `Actions`.
+Для первого запуска в GitHub откройте `Settings → Pages` и выберите источник `GitHub Actions`. После этого публикация будет выполняться после успешного auto-release, при push release-тега `v*` или вручную через вкладку `Actions` с указанием существующего тега.
 
 Адрес опубликованного сайта обычно выглядит так:
 
@@ -146,9 +146,10 @@ https://<owner>.github.io/<repository>/
 
 ## Релизы с готовым сайтом
 
-В проекте используются два workflow:
+Для релизов, публикации и обслуживания используются:
 
 - `.github/workflows/auto-release.yml` — при изменении версии в `package.json` проверяет проект, создаёт git-тег `vX.Y.Z`, собирает архив сайта и создаёт GitHub Release;
+- `.github/workflows/deploy-pages.yml` — публикует GitHub Pages только из release-тега после auto-release, прямого tag push или ручного запуска;
 - `.github/workflows/release-dist.yml` — ручной или резервный workflow для сборки релиза по уже существующему тегу.
 - `.github/dependabot.yml` — еженедельно проверяет обновления npm-зависимостей.
 
@@ -164,7 +165,7 @@ git commit -m "Release v1.6.6"
 git push origin release/1.6.6
 ```
 
-После merge release-ветки в `main` workflow сам создаст тег и релиз. Ручной запуск `release-dist.yml` тоже возможен, но нужно указать существующий тег, например `v1.6.6`.
+После merge release-ветки в `main` workflow сам создаст тег, релиз и запустит публикацию GitHub Pages из release-тега. Ручной запуск `release-dist.yml` или `deploy-pages.yml` тоже возможен, но нужно указать существующий тег, например `v1.6.6`.
 
 Архив релиза содержит готовую папку `dist` и подходит для размещения на любом статическом хостинге.
 
