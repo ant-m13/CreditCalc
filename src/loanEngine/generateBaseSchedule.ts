@@ -91,6 +91,7 @@ export function generateBaseSchedule(config: LoanConfig, options: Options = {}):
   let principalPerPeriod = money(new Decimal(balance).div(Math.max(1, configuredPeriods)), config.rounding)
   let currentAnnualRate = config.annualRate
   let payment = config.paymentType === 'annuity' ? calculateAnnuityPayment(balance, currentAnnualRate, configuredPeriods, periodsPerYear(config.frequency), config.rounding) : principalPerPeriod
+  let paymentTracksReducedTerm = false
   let paymentDate = config.firstPaymentDate
   let previousPaymentDate = config.issueDate
   let accrualStart = config.issueDate
@@ -142,8 +143,10 @@ export function generateBaseSchedule(config: LoanConfig, options: Options = {}):
   const effectiveAnnualRate = (date: string) =>
     config.rateChangeMode === 'exactDate' ? rateTimeline.rateAt(date, currentAnnualRate) : currentAnnualRate
   const updateEffectiveTerm = (remainingPeriods: number, afterCurrentPayment: boolean, annualRate = currentAnnualRate) => {
+    const previousRemainingPeriods = currentRemainingPeriods
     const periods = estimateRemainingPeriods(config, balance, payment, principalPerPeriod, remainingPeriods, annualRate)
     currentRemainingPeriods = afterCurrentPayment ? periods + 1 : periods
+    return currentRemainingPeriods !== previousRemainingPeriods
   }
   const applyEarly = (early: EarlyRepayment, interestDue: Decimal, remainingPeriods: number, amountOverride?: Decimal.Value, afterCurrentPayment = false) => {
     const strategy = options.forcedStrategy ?? early.strategy
@@ -190,12 +193,28 @@ export function generateBaseSchedule(config: LoanConfig, options: Options = {}):
     const appliedAmount = paidInterest.add(paidPrincipal)
     const unusedAmount = Decimal.max(0, earlyAmount.minus(fee).minus(appliedAmount))
     if (strategy === 'reducePayment' && balance.gt(0) && config.paymentType === 'annuity') {
-      payment = calculateAnnuityPayment(balance, annualRateAtEvent, Math.max(1, remainingPeriods), periodsPerYear(config.frequency), config.rounding)
+      const periods = Math.max(1, remainingPeriods)
+      const recalculatedPayment = calculateAnnuityPayment(balance, annualRateAtEvent, periods, periodsPerYear(config.frequency), config.rounding)
+      const rateChangedInsidePeriod = annualRateAtEvent !== currentAnnualRate
+      if (rateChangedInsidePeriod || !paymentTracksReducedTerm) {
+        payment = recalculatedPayment
+        paymentTracksReducedTerm = false
+      } else {
+        const paymentDecrease = calculateAnnuityPayment(paidPrincipal, annualRateAtEvent, periods, periodsPerYear(config.frequency), config.rounding)
+        payment = money(Decimal.max(0, payment.minus(paymentDecrease)), config.rounding)
+      }
     } else if (strategy === 'reducePayment' && balance.gt(0)) {
-      principalPerPeriod = money(balance.div(Math.max(1, remainingPeriods)), config.rounding)
+      const periods = Math.max(1, remainingPeriods)
+      const recalculatedPrincipal = money(balance.div(periods), config.rounding)
+      if (!paymentTracksReducedTerm) {
+        principalPerPeriod = recalculatedPrincipal
+      } else {
+        const principalDecrease = money(paidPrincipal.div(periods), config.rounding)
+        principalPerPeriod = money(Decimal.max(0, principalPerPeriod.minus(principalDecrease)), config.rounding)
+      }
     }
     if (strategy === 'reduceTerm' && paidPrincipal.gt(0)) {
-      updateEffectiveTerm(remainingPeriods, afterCurrentPayment, annualRateAtEvent)
+      paymentTracksReducedTerm = updateEffectiveTerm(remainingPeriods, afterCurrentPayment, annualRateAtEvent) || paymentTracksReducedTerm
     }
     return {
       paidInterest,
@@ -512,6 +531,7 @@ export function generateBaseSchedule(config: LoanConfig, options: Options = {}):
         pendingRateChange = currentAnnualRate
         if (config.paymentType === 'annuity') {
           payment = calculateAnnuityPayment(balance, currentAnnualRate, Math.max(1, periodsAfterCurrentPayment(currentRemainingPeriods)), periodsPerYear(config.frequency), config.rounding)
+          paymentTracksReducedTerm = false
         }
       }
     }
