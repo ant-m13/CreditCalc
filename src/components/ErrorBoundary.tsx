@@ -5,11 +5,16 @@ interface ErrorBoundaryState {
   recoveryMessage: string | null
 }
 
+interface ErrorBoundaryProps {
+  children: ReactNode
+  reloadPage?: () => void
+}
+
 const storageKey = 'ipoteka-calculator-v1'
 
 const errorMessage = (error: unknown) => error instanceof Error ? error.message : 'неизвестная ошибка'
 
-export class ErrorBoundary extends Component<{ children: ReactNode }, ErrorBoundaryState> {
+export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
   state: ErrorBoundaryState = { message: null, recoveryMessage: null }
 
   static getDerivedStateFromError(error: unknown): ErrorBoundaryState {
@@ -52,10 +57,11 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, ErrorBound
     }
 
     try {
-      window.location.reload()
+      const reloadPage = this.props.reloadPage ?? (() => window.location.reload())
+      reloadPage()
     } catch (error) {
       console.error('Failed to reload during recovery', error)
-      this.setState({ recoveryMessage: `Не удалось перезагрузить приложение: ${errorMessage(error)}.` })
+      this.setState({ recoveryMessage: `localStorage очищен, но автоматическая перезагрузка не удалась: ${errorMessage(error)}. Перезагрузите страницу вручную (Ctrl+F5).` })
     }
   }
 
