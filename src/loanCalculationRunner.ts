@@ -27,10 +27,48 @@ export const calculateLoanSynchronously = (snapshot: LoanCalculationSnapshot): L
 
 export class LoanCalculationRunner {
   private worker: Worker | null = null
+  private syncFallbackTimer: ReturnType<typeof setTimeout> | null = null
+  private syncFallbackRevision: string | null = null
+  private workerErrorCount = 0
+  private workerRuntimeErrorCount = 0
+  private readonly maxWorkerErrors = 3
+
+  private clearScheduledSyncFallback() {
+    if (this.syncFallbackTimer !== null) clearTimeout(this.syncFallbackTimer)
+    this.syncFallbackTimer = null
+    this.syncFallbackRevision = null
+  }
+
+  private scheduleSynchronousFallback(snapshot: LoanCalculationSnapshot, onResult: (envelope: LoanCalculationEnvelope) => void) {
+    this.clearScheduledSyncFallback()
+    this.syncFallbackRevision = snapshot.revision
+    this.syncFallbackTimer = setTimeout(() => {
+      if (this.syncFallbackRevision !== snapshot.revision) return
+      this.syncFallbackTimer = null
+      this.syncFallbackRevision = null
+      onResult(calculateLoanSynchronously(snapshot))
+    }, 0)
+  }
+
+  private recordWorkerAcceptedWork() {
+    this.workerErrorCount = this.workerRuntimeErrorCount
+  }
+
+  private recordWorkerResult() {
+    this.clearScheduledSyncFallback()
+    this.workerErrorCount = 0
+    this.workerRuntimeErrorCount = 0
+  }
 
   calculate(snapshot: LoanCalculationSnapshot, onResult: (envelope: LoanCalculationEnvelope) => void) {
-    if (!canUseLoanCalculationWorker()) {
-      onResult(calculateLoanSynchronously(snapshot))
+    this.clearScheduledSyncFallback()
+
+    if (!canUseLoanCalculationWorker() || this.workerErrorCount >= this.maxWorkerErrors) {
+      if (canUseLoanCalculationWorker()) {
+        this.scheduleSynchronousFallback(snapshot, onResult)
+      } else {
+        onResult(calculateLoanSynchronously(snapshot))
+      }
       return
     }
 
@@ -40,31 +78,38 @@ export class LoanCalculationRunner {
         worker = new Worker(new URL('./loanCalculation.worker.ts', import.meta.url), { type: 'module' })
         this.worker = worker
       } catch {
-        onResult(calculateLoanSynchronously(snapshot))
+        this.workerErrorCount += 1
+        this.scheduleSynchronousFallback(snapshot, onResult)
         return
       }
     }
 
     worker.onmessage = (event: MessageEvent<WorkerResponse>) => {
       if (event.data.revision !== snapshot.revision) return
+      this.recordWorkerResult()
       onResult({ revision: snapshot.revision, snapshot, result: event.data.result })
     }
     worker.onerror = () => {
+      this.workerRuntimeErrorCount += 1
+      this.workerErrorCount += 1
       worker.terminate()
-      this.worker = null
-      onResult(calculateLoanSynchronously(snapshot))
+      if (this.worker === worker) this.worker = null
+      this.scheduleSynchronousFallback(snapshot, onResult)
     }
 
     try {
       worker.postMessage({ revision: snapshot.revision, snapshot })
+      this.recordWorkerAcceptedWork()
     } catch {
+      this.workerErrorCount += 1
       worker.terminate()
-      this.worker = null
-      onResult(calculateLoanSynchronously(snapshot))
+      if (this.worker === worker) this.worker = null
+      this.scheduleSynchronousFallback(snapshot, onResult)
     }
   }
 
   dispose() {
+    this.clearScheduledSyncFallback()
     this.worker?.terminate()
     this.worker = null
   }

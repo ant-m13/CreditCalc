@@ -6,6 +6,7 @@ import type { PaymentScheduleItem } from '../loanEngine'
 import { defaultConfig } from '../loanDefaults'
 import type { LoanProfile } from '../store'
 import type { ImportStatus } from './useLoanImport'
+import type { RepaymentRule } from '../repaymentRules'
 
 const candidateValidationMock = vi.hoisted(() => vi.fn(() => {
   throw new Error('sync candidate validation should not run')
@@ -193,6 +194,34 @@ describe('useLoanExport', () => {
     expect(setImportStatus).toHaveBeenCalledWith({
       kind: 'error',
       text: 'Полный расчёт остановлен'
+    })
+  })
+
+  it('rejects JSON export if caller passed an empty error list for an invalid plan', async () => {
+    const user = userEvent.setup()
+    const setImportStatus = vi.fn()
+    const totalRule = (id: string, amount: number): RepaymentRule => ({
+      id,
+      name: id,
+      type: 'monthlyTotalPayment',
+      startDate: defaultConfig.firstPaymentDate,
+      endDate: defaultConfig.firstPaymentDate,
+      amount,
+      strategy: 'reduceTerm',
+      source: 'own',
+      sameDayOrder: 'regularFirst',
+      interestFirst: true,
+      skipMonths: []
+    })
+    const invalidLoan = { ...loan, repaymentRules: [totalRule('total-1', 100000), totalRule('total-2', 110000)] }
+    render(<ExportProbe calculatedSchedule={null} activeLoan={invalidLoan} calculationErrors={[]} kind="json" setImportStatus={setImportStatus}/>)
+
+    await user.click(screen.getByRole('button', { name: 'Export' }))
+
+    expect(exportedBlob).toBeNull()
+    expect(setImportStatus).toHaveBeenCalledWith({
+      kind: 'error',
+      text: expect.stringContaining('только одну общую сумму')
     })
   })
 

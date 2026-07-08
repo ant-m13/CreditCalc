@@ -17,7 +17,7 @@ import { MAX_EARLY_REPAYMENTS, MAX_GRACE_PERIODS, MAX_RATE_CHANGES, MAX_REPAYMEN
 import { createDefaultConfig, defaultConfig } from './loanDefaults'
 import { assertLoanCandidateValid } from './loanCandidate'
 import type { LoanBackupData } from './importExport'
-import { sortRepaymentRulesByApplicationOrder, type RepaymentRule } from './repaymentRules'
+import { sortRepaymentRulesByApplicationOrder, validateRepaymentRuleStructure, type RepaymentRule } from './repaymentRules'
 import type { LoanData, LoanImportData, LoanPersistedState, LoanProfile, QuarantinedLoanRaw, ThemeName } from './storeTypes'
 import { createId } from './utils/createId'
 import { isISODate, isISOYearMonth } from './utils/dateValidation'
@@ -347,6 +347,11 @@ export const assertRepaymentPlanStructurallyValid = (config: LoanConfig, repayme
   if (validationErrors.length > 0) throw new Error(validationErrors.join(' · '))
 }
 
+export const assertRepaymentRuleStructurallyValid = (rule: RepaymentRule) => {
+  const errors = validateRepaymentRuleStructure(rule)
+  if (errors.length > 0) throw new Error(errors.join(' · '))
+}
+
 export const assertGracePeriodsDoNotOverlap = (gracePeriods: GracePeriod[]) => {
   const sortedGrace = [...gracePeriods].sort((a, b) => a.startDate.localeCompare(b.startDate) || a.id.localeCompare(b.id))
   sortedGrace.forEach((period, index) => {
@@ -396,6 +401,18 @@ export const loanToBackupData = (loan: LoanProfile): LoanBackupData => ({
   useCustomAccentColor: loan.useCustomAccentColor
 })
 
+const normalizeQuarantinedLoansRaw = (value: unknown): QuarantinedLoanRaw[] => {
+  if (!Array.isArray(value)) return []
+  return value.flatMap((item): QuarantinedLoanRaw[] => {
+    if (!isObject(item) || !('raw' in item)) return []
+    const id = normalizeText(item.id)
+    const name = normalizeText(item.name)
+    const reason = normalizeText(item.reason)
+    if (!id || !name || !reason) return []
+    return [{ id, name, reason, raw: item.raw }]
+  }).slice(0, MAX_LOANS)
+}
+
 export const normalizePersistedState = (persisted: unknown): Partial<LoanPersistedState> => {
   const state = (isObject(persisted) ? persisted : {}) as Partial<LoanPersistedState>
   const rawLoans = Array.isArray(state.loans)
@@ -414,25 +431,12 @@ export const normalizePersistedState = (persisted: unknown): Partial<LoanPersist
     return nextId
   }
   const storageRecoveryReport: string[] = []
-  const quarantinedLoansRaw: QuarantinedLoanRaw[] = Array.isArray(state.quarantinedLoansRaw)
-    ? state.quarantinedLoansRaw.flatMap((item): QuarantinedLoanRaw[] => {
-      if (!isObject(item)) return []
-      return [{
-        id: typeof item.id === 'string' && item.id.trim() ? item.id : createId('quarantine'),
-        name: typeof item.name === 'string' && item.name.trim() ? item.name : 'Повреждённый кредит',
-        reason: typeof item.reason === 'string' && item.reason.trim() ? item.reason : 'Причина неизвестна',
-        raw: item.raw
-      }]
-    })
-    : []
+  const quarantinedLoansRaw: QuarantinedLoanRaw[] = normalizeQuarantinedLoansRaw(state.quarantinedLoansRaw)
   const recoverLoan = (loan: Partial<LoanProfile | LoanData>, name: string, id: string) => {
     try {
       const normalized = loanFromData(loan, name, id)
       const errors = validateScenario(normalized.config, normalized.repayments, normalized.gracePeriods)
       if (errors.length) throw new Error(errors[0])
-      if (normalized.repayments.length > 0 || normalized.repaymentRules.length > 0 || normalized.gracePeriods.length > 0) {
-        assertRepaymentPlanValid(normalized.config, normalized.repayments, normalized.repaymentRules, normalized.gracePeriods)
-      }
       return normalized
     } catch (error) {
       const message = error instanceof Error ? error.message : 'неизвестная ошибка'

@@ -19,6 +19,7 @@ import { useLoanExport } from './hooks/useLoanExport'
 import { useLoanImport } from './hooks/useLoanImport'
 import { useSharedCalculation } from './hooks/useSharedCalculation'
 import { useStorageStatus } from './hooks/useStorageStatus'
+import { createQuarantineExport } from './quarantineExport'
 
 const Overview = lazy(() => import('./components/Overview').then(module => ({ default: module.Overview })))
 const Settings = lazy(() => import('./components/Settings').then(module => ({ default: module.Settings })))
@@ -206,7 +207,7 @@ function App() {
   }, [download, guardCalculatedExport])
   const downloadQuarantinedLoans = useCallback(() => {
     try {
-      const body = JSON.stringify({ exportedAt: new Date().toISOString(), quarantinedLoans: store.quarantinedLoansRaw }, null, 2)
+      const body = JSON.stringify(createQuarantineExport(store.quarantinedLoansRaw), null, 2)
       const anchor = document.createElement('a')
       anchor.href = URL.createObjectURL(new Blob([body], { type: 'application/json' }))
       anchor.download = `credit-quarantine-${new Date().toISOString().slice(0, 10)}.json`

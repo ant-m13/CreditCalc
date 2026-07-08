@@ -9,6 +9,9 @@ interface UseLoanImportOptions {
   resetRows: () => void
 }
 
+const successMessage = (message: string, data: LoanBackupData) =>
+  data.importWarnings?.length ? `${message}. Предупреждение: ${data.importWarnings.join(' · ')}` : message
+
 export function useLoanImport({ addLoanFromData, replaceData, resetRows }: UseLoanImportOptions) {
   const [importStatus, setImportStatus] = useState<ImportStatus | null>(null)
 
@@ -16,7 +19,7 @@ export function useLoanImport({ addLoanFromData, replaceData, resetRows }: UseLo
     try {
       addLoanFromData(data)
       resetRows()
-      setImportStatus({ kind: 'success', text: `Создан новый кредит из ${source}` })
+      setImportStatus({ kind: 'success', text: successMessage(`Создан новый кредит из ${source}`, data) })
       return true
     } catch (error) {
       setImportStatus({ kind: 'error', text: error instanceof Error ? error.message : 'Не удалось создать кредит' })
@@ -28,7 +31,7 @@ export function useLoanImport({ addLoanFromData, replaceData, resetRows }: UseLo
     try {
       replaceData(data)
       resetRows()
-      setImportStatus({ kind: 'success', text: `Текущий кредит заменён данными из ${source}` })
+      setImportStatus({ kind: 'success', text: successMessage(`Текущий кредит заменён данными из ${source}`, data) })
       return true
     } catch (error) {
       setImportStatus({ kind: 'error', text: error instanceof Error ? error.message : 'Не удалось заменить текущий кредит' })

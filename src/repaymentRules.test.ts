@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { defaultConfig } from './loanDefaults'
-import { expandRepaymentRules, type RepaymentRule } from './repaymentRules'
+import { expandRepaymentRules, validateRepaymentRuleStructure, type RepaymentRule } from './repaymentRules'
 import { compareScenarios, sortRepaymentsByApplicationOrder, type EarlyRepayment, type GracePeriod } from './loanEngine'
 import { MAX_RULE_SKIP_MONTHS } from './loanEngine/limits'
 
@@ -20,6 +20,48 @@ const rule = (patch: Partial<RepaymentRule>): RepaymentRule => ({
 })
 
 describe('правила досрочных платежей', () => {
+  it('валидирует структуру правила до сохранения', () => {
+    expect(validateRepaymentRuleStructure(rule({}))).toEqual([])
+    expect(validateRepaymentRuleStructure(rule({ amount: 0 }))).toEqual([])
+    expect(validateRepaymentRuleStructure(rule({ type: 'paymentPercent', amount: undefined, percent: 0 }))).toEqual([])
+  })
+
+  it('возвращает ошибки для повреждённой структуры правила', () => {
+    const errors = validateRepaymentRuleStructure(rule({
+      id: '',
+      name: '',
+      startDate: 'not-a-date',
+      endDate: '2026-13-01',
+      ruleSequence: -1,
+      enabled: 'yes' as unknown as boolean,
+      strategy: 'broken' as RepaymentRule['strategy'],
+      source: 'broken' as RepaymentRule['source'],
+      sameDayOrder: 'broken' as RepaymentRule['sameDayOrder'],
+      interestFirst: 'yes' as unknown as boolean,
+      skipMonths: ['2026-13'],
+      comment: 123 as unknown as string
+    }))
+    const message = errors.join('\n')
+
+    expect(message).toContain('ID повреждён')
+    expect(message).toContain('название обязательно')
+    expect(message).toContain('дата начала должна быть корректной')
+    expect(message).toContain('дата окончания должна быть корректной')
+    expect(message).toContain('порядок повреждён')
+    expect(message).toContain('признак активности повреждён')
+    expect(message).toContain('стратегия повреждена')
+    expect(message).toContain('источник повреждён')
+    expect(message).toContain('порядок в дату платежа повреждён')
+    expect(message).toContain('правило погашения процентов повреждено')
+    expect(message).toContain('месяц пропуска должен быть корректным')
+    expect(message).toContain('комментарий повреждён')
+  })
+
+  it('проверяет обязательную сумму или процент по типу правила', () => {
+    expect(validateRepaymentRuleStructure(rule({ amount: undefined })).join('\n')).toContain('сумма должна быть неотрицательным числом')
+    expect(validateRepaymentRuleStructure(rule({ type: 'paymentPercent', amount: undefined, percent: undefined })).join('\n')).toContain('процент должен быть неотрицательным числом')
+  })
+
   it('не строит базовый график, если правил нет', () => {
     expect(expandRepaymentRules({ ...defaultConfig, firstPaymentDate: defaultConfig.issueDate }, [])).toEqual([])
   })

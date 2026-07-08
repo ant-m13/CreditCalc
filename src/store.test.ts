@@ -148,7 +148,7 @@ describe('миграция локального хранилища', () => {
     expect(normalized.activeLoanId).toBe('valid')
   })
 
-  it('помещает нерассчитываемый восстановленный кредит в карантин с отчётом', () => {
+  it('помещает структурно повреждённый восстановленный кредит в карантин с отчётом', () => {
     const normalized = normalizePersistedState({
       activeLoanId: 'broken-plan',
       loans: [{
@@ -182,6 +182,34 @@ describe('миграция локального хранилища', () => {
     expect(normalized.quarantinedLoansRaw[0].raw).toMatchObject({ id: 'broken-plan', gracePeriods: expect.arrayContaining([expect.objectContaining({ id: 'g1' })]) })
   })
 
+  it('восстанавливает расчётно невалидный, но структурно корректный план без карантина', () => {
+    const first = { ...rule(1), type: 'monthlyTotalPayment' as const, amount: 100000, startDate: defaultConfig.firstPaymentDate, endDate: defaultConfig.firstPaymentDate }
+    const second = { ...rule(2), type: 'monthlyTotalPayment' as const, amount: 110000, startDate: defaultConfig.firstPaymentDate, endDate: defaultConfig.firstPaymentDate }
+    const persistedLoan = loanProfile({
+      id: 'recoverable-plan',
+      name: 'Расчёт с ошибкой',
+      repaymentRules: [first, second]
+    })
+
+    const normalized = normalizePersistedState({
+      activeLoanId: persistedLoan.id,
+      loans: [persistedLoan]
+    }) as any
+    const errors = buildLoanCalculation({
+      config: normalized.config,
+      repayments: normalized.repayments,
+      repaymentRules: normalized.repaymentRules,
+      gracePeriods: normalized.gracePeriods,
+      selectedScenario: normalized.selectedScenario
+    }).errors.join(' · ')
+
+    expect(normalized.activeLoanId).toBe(persistedLoan.id)
+    expect(normalized.repaymentRules).toHaveLength(2)
+    expect(normalized.storageRecoveryReport).toEqual([])
+    expect(normalized.quarantinedLoansRaw).toEqual([])
+    expect(errors).toContain('только одну общую сумму')
+  })
+
   it('сохраняет уже накопленный буфер карантина при следующей миграции', () => {
     const raw = { id: 'lost-loan', config: { principal: 'broken' } }
     const normalized = normalizePersistedState({
@@ -189,6 +217,22 @@ describe('миграция локального хранилища', () => {
     }) as any
 
     expect(normalized.quarantinedLoansRaw).toEqual([{ id: 'lost-loan', name: 'Старый сбой', reason: 'ошибка расчёта', raw }])
+  })
+
+  it('отбрасывает повреждённые записи буфера карантина при миграции', () => {
+    const raw = { id: 'valid-raw' }
+    const normalized = normalizePersistedState({
+      quarantinedLoansRaw: [
+        null,
+        { id: '', name: 'Без ID', reason: 'ошибка', raw },
+        { id: 'bad-name', name: '', reason: 'ошибка', raw },
+        { id: 'bad-reason', name: 'Без причины', reason: '', raw },
+        { id: 'no-raw', name: 'Без raw', reason: 'ошибка' },
+        { id: ' valid ', name: ' Сохранить ', reason: ' ошибка ', raw }
+      ]
+    }) as any
+
+    expect(normalized.quarantinedLoansRaw).toEqual([{ id: 'valid', name: 'Сохранить', reason: 'ошибка', raw }])
   })
 
   it('очищает отчёт и буфер карантина по действию пользователя', () => {
@@ -389,6 +433,23 @@ describe('лимиты store до мутации', () => {
     setStoreLoan(loanProfile({ repaymentRules }))
     expect(() => useLoanStore.getState().addRepaymentRule(rule(MAX_REPAYMENT_RULES + 1))).toThrow(String(MAX_REPAYMENT_RULES))
     expect(useLoanStore.getState().repaymentRules).toHaveLength(MAX_REPAYMENT_RULES)
+  })
+
+  it('не добавляет структурно повреждённое правило', () => {
+    setStoreLoan(loanProfile())
+
+    expect(() => useLoanStore.getState().addRepaymentRule({ ...rule(1), startDate: 'broken-date' })).toThrow('дата начала')
+
+    expect(useLoanStore.getState().repaymentRules).toEqual([])
+  })
+
+  it('не обновляет правило повреждёнными данными', () => {
+    const existingRule = rule(1)
+    setStoreLoan(loanProfile({ repaymentRules: [existingRule] }))
+
+    expect(() => useLoanStore.getState().updateRepaymentRule({ ...existingRule, amount: Number.NaN })).toThrow('сумма')
+
+    expect(useLoanStore.getState().repaymentRules).toEqual([existingRule])
   })
 
   it('сохраняет конфликтующие monthlyTotalPayment rules до полного async-расчёта', () => {

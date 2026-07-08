@@ -180,8 +180,11 @@ describe('импорт резервной копии', () => {
     expect(() => parseLoanBackup(JSON.stringify({ repayments: [] }))).toThrow('параметры кредита')
   })
 
-  it('отклоняет неподдерживаемую валюту', () => {
-    expect(() => parseLoanBackup(JSON.stringify({ config: { ...defaultConfig, currency: 'NOT-A-CURRENCY' }, repayments: [], gracePeriods: [] }))).toThrow('валюту')
+  it('подставляет валюту по умолчанию для старого файла с неподдерживаемой валютой', () => {
+    const result = parseLoanBackup(JSON.stringify({ config: { ...defaultConfig, currency: 'NOT-A-CURRENCY' }, repayments: [], gracePeriods: [] }))
+
+    expect(result.config.currency).toBe(defaultConfig.currency)
+    expect(result.importWarnings).toEqual(['Валюта NOT-A-CURRENCY не поддерживается и заменена на RUB'])
   })
 
   it('отклоняет невозможные календарные даты', () => {

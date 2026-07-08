@@ -76,4 +76,28 @@ describe('ErrorBoundary', () => {
     expect(storage.removeItem).toHaveBeenCalledWith('ipoteka-calculator-v1')
     expect(screen.getByRole('status').textContent).toContain('Не удалось очистить localStorage: storage blocked')
   })
+
+  it('подсказывает ручную перезагрузку, если localStorage очищен, но reload не удался', () => {
+    const storage = {
+      length: 0,
+      clear: vi.fn(),
+      getItem: vi.fn(),
+      key: vi.fn(),
+      removeItem: vi.fn(),
+      setItem: vi.fn()
+    }
+    Object.defineProperty(window, 'localStorage', { configurable: true, value: storage })
+    const reloadPage = vi.fn(() => {
+      throw new Error('reload blocked')
+    })
+
+    render(<ErrorBoundary reloadPage={reloadPage}><BrokenApp/></ErrorBoundary>)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Запустить без localStorage' }))
+
+    expect(storage.removeItem).toHaveBeenCalledWith('ipoteka-calculator-v1')
+    expect(reloadPage).toHaveBeenCalled()
+    expect(screen.getByRole('status').textContent).toContain('localStorage очищен')
+    expect(screen.getByRole('status').textContent).toContain('Ctrl+F5')
+  })
 })

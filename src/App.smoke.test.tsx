@@ -117,7 +117,7 @@ describe('App smoke tests', () => {
 
     expect(screen.getByRole('heading', { name: 'Ваш кредит' })).toBeTruthy()
     expect(screen.getAllByText('Кредитный калькулятор').length).toBeGreaterThan(0)
-    expect(await screen.findByText('Сумма кредита', {}, { timeout: 10000 })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Обзор' }).getAttribute('aria-current')).toBe('page')
     expect(screen.getByText('Данные сохранены')).toBeTruthy()
   }, 15000)
 
