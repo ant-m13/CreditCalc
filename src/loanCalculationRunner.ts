@@ -50,6 +50,8 @@ export class LoanCalculationRunner {
       onResult({ revision: snapshot.revision, snapshot, result: event.data.result })
     }
     worker.onerror = () => {
+      worker.terminate()
+      this.worker = null
       onResult(calculateLoanSynchronously(snapshot))
     }
 

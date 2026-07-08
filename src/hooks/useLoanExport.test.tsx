@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { PaymentScheduleItem } from '../loanEngine'
@@ -7,13 +7,25 @@ import { defaultConfig } from '../loanDefaults'
 import type { LoanProfile } from '../store'
 import type { ImportStatus } from './useLoanImport'
 
-const syncRecalcMock = vi.hoisted(() => vi.fn(() => {
-  throw new Error('sync recalculation should not run')
+const candidateValidationMock = vi.hoisted(() => vi.fn(() => {
+  throw new Error('sync candidate validation should not run')
+}))
+const sharedCalculationMock = vi.hoisted(() => ({
+  buildShareUrl: vi.fn(async () => 'https://example.test/#calc=v1.test-code'),
+  encodeSharedCalculation: vi.fn(async () => 'v1.test-code')
 }))
 
-vi.mock('../loanCalculation', () => ({
-  buildLoanCalculationOrThrow: syncRecalcMock
+vi.mock('../loanCandidate', () => ({
+  assertLoanCandidateValid: candidateValidationMock
 }))
+vi.mock('../shareCalculation', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../shareCalculation')>()
+  return {
+    ...actual,
+    buildShareUrl: sharedCalculationMock.buildShareUrl,
+    encodeSharedCalculation: sharedCalculationMock.encodeSharedCalculation
+  }
+})
 
 import { useLoanExport } from './useLoanExport'
 
@@ -69,24 +81,30 @@ function ExportProbe({
   calculatedExportsReady = true,
   setImportStatus = vi.fn(),
   activeLoan = loan,
-  kind = 'csv'
+  kind = 'csv',
+  calculationErrors = []
 }: {
   calculatedSchedule: PaymentScheduleItem[] | null
   calculatedExportsReady?: boolean
   setImportStatus?: (status: ImportStatus | null) => void
   activeLoan?: LoanProfile
   kind?: 'csv' | 'json' | 'xls'
+  calculationErrors?: string[]
 }) {
-  const { download, createParameterCode } = useLoanExport({
+  const { download, copyShareLink, createParameterCode } = useLoanExport({
     loans: [activeLoan],
     activeLoanId: activeLoan.id,
     calculatedSchedule,
     calculatedExportsReady,
+    calculationErrors,
     setImportStatus
   })
   return <>
     <button onClick={() => download(kind)}>Export</button>
-    <button onClick={() => void createParameterCode().catch(error => setImportStatus({ kind: 'error', text: error instanceof Error ? error.message : 'Не удалось сформировать код параметров' }))}>Code</button>
+    <button onClick={() => void copyShareLink()}>Link</button>
+    <button onClick={() => void createParameterCode()
+      .then(code => setImportStatus({ kind: 'success', text: code }))
+      .catch(error => setImportStatus({ kind: 'error', text: error instanceof Error ? error.message : 'Не удалось сформировать код параметров' }))}>Code</button>
   </>
 }
 
@@ -94,7 +112,9 @@ let exportedBlob: Blob | null = null
 
 beforeEach(() => {
   exportedBlob = null
-  syncRecalcMock.mockClear()
+  candidateValidationMock.mockClear()
+  sharedCalculationMock.buildShareUrl.mockClear()
+  sharedCalculationMock.encodeSharedCalculation.mockClear()
   vi.spyOn(URL, 'createObjectURL').mockImplementation(blob => {
     exportedBlob = blob as Blob
     return 'blob:test-export'
@@ -115,9 +135,20 @@ describe('useLoanExport', () => {
 
     await user.click(screen.getByRole('button', { name: 'Export' }))
 
-    expect(syncRecalcMock).not.toHaveBeenCalled()
+    expect(candidateValidationMock).not.toHaveBeenCalled()
     expect(exportedBlob).not.toBeNull()
     await expect(exportedBlob!.text()).resolves.toContain('7;2030-01-15;123;45;168;999')
+  })
+
+  it('exports JSON from the ready calculation result without candidate validation', async () => {
+    const user = userEvent.setup()
+    render(<ExportProbe calculatedSchedule={null} kind="json"/>)
+
+    await user.click(screen.getByRole('button', { name: 'Export' }))
+
+    expect(candidateValidationMock).not.toHaveBeenCalled()
+    expect(exportedBlob).not.toBeNull()
+    await expect(exportedBlob!.text()).resolves.toContain('"version": 1')
   })
 
   it('rejects calculated export while the worker result is not ready', async () => {
@@ -127,11 +158,41 @@ describe('useLoanExport', () => {
 
     await user.click(screen.getByRole('button', { name: 'Export' }))
 
-    expect(syncRecalcMock).not.toHaveBeenCalled()
+    expect(candidateValidationMock).not.toHaveBeenCalled()
     expect(exportedBlob).toBeNull()
     expect(setImportStatus).toHaveBeenCalledWith({
       kind: 'error',
       text: 'Дождитесь окончания пересчёта, чтобы экспортировать актуальный график'
+    })
+  })
+
+  it('rejects JSON export while the worker result is not ready', async () => {
+    const user = userEvent.setup()
+    const setImportStatus = vi.fn()
+    render(<ExportProbe calculatedSchedule={null} calculatedExportsReady={false} kind="json" setImportStatus={setImportStatus}/>)
+
+    await user.click(screen.getByRole('button', { name: 'Export' }))
+
+    expect(candidateValidationMock).not.toHaveBeenCalled()
+    expect(exportedBlob).toBeNull()
+    expect(setImportStatus).toHaveBeenCalledWith({
+      kind: 'error',
+      text: 'Дождитесь окончания пересчёта, чтобы экспортировать актуальный график'
+    })
+  })
+
+  it('rejects JSON export when the current worker result has errors', async () => {
+    const user = userEvent.setup()
+    const setImportStatus = vi.fn()
+    render(<ExportProbe calculatedSchedule={null} calculationErrors={['Полный расчёт остановлен']} kind="json" setImportStatus={setImportStatus}/>)
+
+    await user.click(screen.getByRole('button', { name: 'Export' }))
+
+    expect(candidateValidationMock).not.toHaveBeenCalled()
+    expect(exportedBlob).toBeNull()
+    expect(setImportStatus).toHaveBeenCalledWith({
+      kind: 'error',
+      text: 'Полный расчёт остановлен'
     })
   })
 
@@ -162,5 +223,41 @@ describe('useLoanExport', () => {
       kind: 'error',
       text: 'Заполните обязательные поля перед экспортом: дату выдачи, дату первого платежа'
     })
+  })
+
+  it('copies share link from the ready calculation result without candidate validation', async () => {
+    const user = userEvent.setup()
+    const setImportStatus = vi.fn()
+    const writeText = vi.fn(async () => {})
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText }
+    })
+    render(<ExportProbe calculatedSchedule={null} setImportStatus={setImportStatus}/>)
+
+    await user.click(screen.getByRole('button', { name: 'Link' }))
+
+    expect(candidateValidationMock).not.toHaveBeenCalled()
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith(expect.stringContaining('#calc=v1.')))
+    expect(sharedCalculationMock.buildShareUrl).toHaveBeenCalled()
+    await waitFor(() => expect(setImportStatus).toHaveBeenCalledWith({
+      kind: 'success',
+      text: 'Ссылка на кредит «Экспорт» скопирована'
+    }))
+  })
+
+  it('creates parameter code from the ready calculation result without candidate validation', async () => {
+    const user = userEvent.setup()
+    const setImportStatus = vi.fn()
+    render(<ExportProbe calculatedSchedule={null} setImportStatus={setImportStatus}/>)
+
+    await user.click(screen.getByRole('button', { name: 'Code' }))
+
+    expect(candidateValidationMock).not.toHaveBeenCalled()
+    expect(sharedCalculationMock.encodeSharedCalculation).toHaveBeenCalled()
+    await waitFor(() => expect(setImportStatus).toHaveBeenCalledWith(expect.objectContaining({
+      kind: 'success',
+      text: expect.stringMatching(/^v1\./)
+    })))
   })
 })

@@ -2,8 +2,18 @@ name: Deploy to GitHub Pages
 
 on:
   push:
+    tags:
+      - 'v*'
+  workflow_run:
+    workflows: ['Auto tag on version change']
+    types: [completed]
     branches: [main]
   workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Тег релиза, например v1.6.6'
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -16,13 +26,69 @@ concurrency:
 
 jobs:
   deploy:
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout release source metadata
+        if: github.event_name == 'workflow_run'
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - name: Resolve release tag
+        id: release
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_TAG: ${{ github.event.inputs.tag || '' }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          case "$EVENT_NAME" in
+            workflow_dispatch)
+              TAG="$INPUT_TAG"
+              ;;
+            push)
+              TAG="$REF_NAME"
+              ;;
+            workflow_run)
+              VERSION="$(node -p "require('./package.json').version")"
+              TAG="v$VERSION"
+              ;;
+            *)
+              echo "Неподдерживаемое событие: $EVENT_NAME"
+              exit 1
+              ;;
+          esac
+
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Validate release tag
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          if [[ ! "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
+            echo "Некорректный тег релиза: $RELEASE_TAG"
+            exit 1
+          fi
+
+          git ls-remote --exit-code --tags \
+            "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" \
+            "refs/tags/${RELEASE_TAG}" >/dev/null
+
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.release.outputs.tag }}
+
+      - name: Read deployment revision
+        id: revision
+        shell: bash
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -48,6 +114,7 @@ jobs:
         run: pnpm build
         env:
           VITE_BASE_PATH: /${{ github.event.repository.name }}/
+          VITE_COMMIT_SHA: ${{ steps.revision.outputs.sha }}
 
       - name: Run production browser E2E
         run: pnpm test:e2e

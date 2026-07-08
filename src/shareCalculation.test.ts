@@ -138,6 +138,26 @@ describe('ссылка на расчёт', () => {
     expect(decoded.config.interest).toEqual(defaultConfig.interest)
   })
 
+  it('восстанавливает старый payload ссылки без новых полей расчёта', async () => {
+    const legacyConfig = { ...config } as Record<string, unknown>
+    delete legacyConfig.firstPaymentInterestOnly
+    delete legacyConfig.paymentType
+    delete legacyConfig.frequency
+    delete legacyConfig.rounding
+    delete legacyConfig.rateChanges
+    delete legacyConfig.rateChangeMode
+    delete legacyConfig.interest
+
+    const decoded = await decodeSharedCalculation(await encodeSharedCalculation({ ...snapshot(), config: legacyConfig } as never))
+    expect(decoded.config.firstPaymentInterestOnly).toBe(defaultConfig.firstPaymentInterestOnly)
+    expect(decoded.config.paymentType).toBe(defaultConfig.paymentType)
+    expect(decoded.config.frequency).toBe(defaultConfig.frequency)
+    expect(decoded.config.rounding).toBe(defaultConfig.rounding)
+    expect(decoded.config.rateChanges).toEqual([])
+    expect(decoded.config.rateChangeMode).toBe(defaultConfig.rateChangeMode)
+    expect(decoded.config.interest).toEqual(defaultConfig.interest)
+  })
+
   it('отклоняет слишком большой payload', async () => {
     const tooBig = { ...snapshot(), repayments: [{ ...repayments[0], comment: 'я'.repeat(700_000) }] }
     await expect(encodeSharedCalculation(tooBig)).rejects.toThrow('слишком большой')

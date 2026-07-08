@@ -2,6 +2,7 @@ import { addMonths, format, parseISO } from 'date-fns'
 import {
   nextPaymentDate,
   nextSameDaySequence,
+  normalizeStoredRepaymentAmountMode,
   repaymentAmountModeContext,
   sortRateChanges,
   sortRepaymentsByApplicationOrder,
@@ -17,7 +18,7 @@ import { createDefaultConfig, defaultConfig } from './loanDefaults'
 import { assertLoanCandidateValid } from './loanCandidate'
 import type { LoanBackupData } from './importExport'
 import { sortRepaymentRulesByApplicationOrder, type RepaymentRule } from './repaymentRules'
-import type { LoanData, LoanImportData, LoanPersistedState, LoanProfile, ThemeName } from './storeTypes'
+import type { LoanData, LoanImportData, LoanPersistedState, LoanProfile, QuarantinedLoanRaw, ThemeName } from './storeTypes'
 import { createId } from './utils/createId'
 import { isISODate, isISOYearMonth } from './utils/dateValidation'
 
@@ -212,8 +213,7 @@ const normalizeRepayments = (value: unknown, config: LoanConfig): EarlyRepayment
       enabled: item.enabled,
       sameDayOrder: item.sameDayOrder
     }, config)
-    const requestedAmountMode = context.normalizedAmountMode ?? 'extra'
-    const amountMode = requestedAmountMode === 'totalWithFee' && context.isRegularDate ? 'totalWithFee' : 'extra'
+    const amountMode = normalizeStoredRepaymentAmountMode(context)
     const sequenceCandidate = typeof item.sameDaySequence === 'number' && Number.isInteger(item.sameDaySequence) && item.sameDaySequence >= 0 ? item.sameDaySequence : index
     return [{
       id: item.id,
@@ -342,6 +342,11 @@ export const assertRepaymentPlanValid = (config: LoanConfig, repayments: EarlyRe
   assertLoanCandidateValid(config, repayments, rules, gracePeriods)
 }
 
+export const assertRepaymentPlanStructurallyValid = (config: LoanConfig, repayments: EarlyRepayment[], gracePeriods: GracePeriod[]) => {
+  const validationErrors = validateScenario(config, repayments, gracePeriods)
+  if (validationErrors.length > 0) throw new Error(validationErrors.join(' · '))
+}
+
 export const assertGracePeriodsDoNotOverlap = (gracePeriods: GracePeriod[]) => {
   const sortedGrace = [...gracePeriods].sort((a, b) => a.startDate.localeCompare(b.startDate) || a.id.localeCompare(b.id))
   sortedGrace.forEach((period, index) => {
@@ -409,6 +414,17 @@ export const normalizePersistedState = (persisted: unknown): Partial<LoanPersist
     return nextId
   }
   const storageRecoveryReport: string[] = []
+  const quarantinedLoansRaw: QuarantinedLoanRaw[] = Array.isArray(state.quarantinedLoansRaw)
+    ? state.quarantinedLoansRaw.flatMap((item): QuarantinedLoanRaw[] => {
+      if (!isObject(item)) return []
+      return [{
+        id: typeof item.id === 'string' && item.id.trim() ? item.id : createId('quarantine'),
+        name: typeof item.name === 'string' && item.name.trim() ? item.name : 'Повреждённый кредит',
+        reason: typeof item.reason === 'string' && item.reason.trim() ? item.reason : 'Причина неизвестна',
+        raw: item.raw
+      }]
+    })
+    : []
   const recoverLoan = (loan: Partial<LoanProfile | LoanData>, name: string, id: string) => {
     try {
       const normalized = loanFromData(loan, name, id)
@@ -421,6 +437,7 @@ export const normalizePersistedState = (persisted: unknown): Partial<LoanPersist
     } catch (error) {
       const message = error instanceof Error ? error.message : 'неизвестная ошибка'
       storageRecoveryReport.push(`Кредит «${name}» помещён в карантин: ${message}`)
+      quarantinedLoansRaw.push({ id, name, reason: message, raw: loan })
       return null
     }
   }
@@ -438,5 +455,5 @@ export const normalizePersistedState = (persisted: unknown): Partial<LoanPersist
   if (!recoveredLoans.length && rawLoans.length) storageRecoveryReport.push('Все повреждённые кредиты отклонены, создан новый пустой расчёт.')
   const activeLoanId = typeof state.activeLoanId === 'string' && loans.some(loan => loan.id === state.activeLoanId) ? state.activeLoanId : loans[0].id
   const active = loans.find(loan => loan.id === activeLoanId) ?? loans[0]
-  return { loans, activeLoanId, ...publicData(active), storageRecoveryReport }
+  return { loans, activeLoanId, ...publicData(active), storageRecoveryReport, quarantinedLoansRaw: quarantinedLoansRaw.slice(0, MAX_LOANS) }
 }

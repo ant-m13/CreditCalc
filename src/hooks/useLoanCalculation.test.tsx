@@ -129,4 +129,21 @@ describe('useLoanCalculation', () => {
     expect(current().selected).not.toBeNull()
     expect(PostMessageThrowingWorker.instances[0].terminate).toHaveBeenCalledTimes(1)
   })
+
+  it('terminates and resets the worker after runtime errors', async () => {
+    const { rerender } = render(<Probe {...loanInput({ config: { ...defaultConfig, currency: 'RUB' } })}/>)
+    const failedWorker = DeferredWorker.instances[0]
+
+    await waitFor(() => expect(failedWorker.messages).toHaveLength(1))
+    await act(async () => failedWorker.onerror?.(new Event('error')))
+    await waitFor(() => expect(current().isStale).toBe(false))
+    expect(current().calculationSnapshot.config.currency).toBe('RUB')
+    expect(failedWorker.terminate).toHaveBeenCalledTimes(1)
+
+    rerender(<Probe {...loanInput({ config: { ...defaultConfig, currency: 'USD' } })}/>)
+
+    await waitFor(() => expect(DeferredWorker.instances).toHaveLength(2))
+    await waitFor(() => expect(DeferredWorker.instances[1].messages).toHaveLength(1))
+    expect(DeferredWorker.instances[1]).not.toBe(failedWorker)
+  })
 })

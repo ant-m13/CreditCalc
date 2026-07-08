@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { validateScenario } from './loanEngine'
+import { buildLoanCalculation } from './loanCalculation'
 import { MAX_EARLY_REPAYMENTS, MAX_RATE_CHANGES, MAX_REPAYMENT_RULES } from './loanEngine/limits'
 import { defaultConfig, MAX_LOANS, normalizePersistedState, useLoanStore, type LoanProfile } from './store'
 import type { EarlyRepayment } from './loanEngine'
@@ -57,6 +58,17 @@ const rule = (index: number): RepaymentRule => ({
 
 const setStoreLoan = (loan: LoanProfile) => {
   useLoanStore.setState({ ...loan, loans: [loan], activeLoanId: loan.id })
+}
+
+const currentCalculationErrors = () => {
+  const state = useLoanStore.getState()
+  return buildLoanCalculation({
+    config: state.config,
+    repayments: state.repayments,
+    repaymentRules: state.repaymentRules,
+    gracePeriods: state.gracePeriods,
+    selectedScenario: state.selectedScenario
+  }).errors.join(' · ')
 }
 
 describe('миграция локального хранилища', () => {
@@ -161,6 +173,35 @@ describe('миграция локального хранилища', () => {
     expect(normalized.activeLoanId).toBe('loan-default')
     expect(normalized.storageRecoveryReport.join(' ')).toContain('карантин')
     expect(normalized.storageRecoveryReport.join(' ')).toContain('Льготные периоды')
+    expect(normalized.quarantinedLoansRaw).toHaveLength(1)
+    expect(normalized.quarantinedLoansRaw[0]).toMatchObject({
+      id: 'broken-plan',
+      name: 'Повреждённый план',
+      reason: expect.stringContaining('Льготные периоды')
+    })
+    expect(normalized.quarantinedLoansRaw[0].raw).toMatchObject({ id: 'broken-plan', gracePeriods: expect.arrayContaining([expect.objectContaining({ id: 'g1' })]) })
+  })
+
+  it('сохраняет уже накопленный буфер карантина при следующей миграции', () => {
+    const raw = { id: 'lost-loan', config: { principal: 'broken' } }
+    const normalized = normalizePersistedState({
+      quarantinedLoansRaw: [{ id: 'lost-loan', name: 'Старый сбой', reason: 'ошибка расчёта', raw }]
+    }) as any
+
+    expect(normalized.quarantinedLoansRaw).toEqual([{ id: 'lost-loan', name: 'Старый сбой', reason: 'ошибка расчёта', raw }])
+  })
+
+  it('очищает отчёт и буфер карантина по действию пользователя', () => {
+    setStoreLoan(loanProfile())
+    useLoanStore.setState({
+      storageRecoveryReport: ['Кредит помещён в карантин'],
+      quarantinedLoansRaw: [{ id: 'bad', name: 'Сбой', reason: 'ошибка', raw: { id: 'bad' } }]
+    })
+
+    useLoanStore.getState().clearStorageRecoveryReport()
+
+    expect(useLoanStore.getState().storageRecoveryReport).toEqual([])
+    expect(useLoanStore.getState().quarantinedLoansRaw).toEqual([])
   })
 
   it('перевыпускает повторяющиеся ID кредитов и вложенных записей', () => {
@@ -350,20 +391,25 @@ describe('лимиты store до мутации', () => {
     expect(useLoanStore.getState().repaymentRules).toHaveLength(MAX_REPAYMENT_RULES)
   })
 
-  it('не сохраняет конфликтующие monthlyTotalPayment rules', () => {
+  it('сохраняет конфликтующие monthlyTotalPayment rules до полного async-расчёта', () => {
     setStoreLoan(loanProfile())
     const first = { ...rule(1), type: 'monthlyTotalPayment' as const, amount: 100000, startDate: defaultConfig.firstPaymentDate, endDate: defaultConfig.firstPaymentDate }
     const second = { ...rule(2), type: 'monthlyTotalPayment' as const, amount: 110000, startDate: defaultConfig.firstPaymentDate, endDate: defaultConfig.firstPaymentDate }
     useLoanStore.getState().addRepaymentRule(first)
-    expect(() => useLoanStore.getState().addRepaymentRule(second)).toThrow('только одну общую сумму')
-    expect(useLoanStore.getState().repaymentRules).toHaveLength(1)
+    useLoanStore.getState().addRepaymentRule(second)
+
+    expect(useLoanStore.getState().repaymentRules).toHaveLength(2)
+    expect(currentCalculationErrors()).toContain('только одну общую сумму')
   })
 
-  it('не сохраняет total rule, конфликтующее с ручной total-операцией', () => {
+  it('сохраняет total rule, конфликтующее с ручной total-операцией, до полного async-расчёта', () => {
     setStoreLoan(loanProfile({ repayments: [{ ...repayment(1), amount: 100000, amountMode: 'totalWithFee', sameDayOrder: 'regularFirst' }] }))
     const totalRule = { ...rule(1), type: 'monthlyTotalPayment' as const, amount: 110000, startDate: defaultConfig.firstPaymentDate, endDate: defaultConfig.firstPaymentDate }
-    expect(() => useLoanStore.getState().addRepaymentRule(totalRule)).toThrow('только одну общую сумму')
-    expect(useLoanStore.getState().repaymentRules).toHaveLength(0)
+
+    useLoanStore.getState().addRepaymentRule(totalRule)
+
+    expect(useLoanStore.getState().repaymentRules).toHaveLength(1)
+    expect(currentCalculationErrors()).toContain('только одну общую сумму')
   })
 
   it('сохраняет нулевое total rule рядом с ручной общей суммой', () => {
@@ -456,22 +502,26 @@ describe('лимиты store до мутации', () => {
     expect(useLoanStore.getState().gracePeriods).toHaveLength(1)
   })
 
-  it('не добавляет льготный период, который делает общий платёж невалидным', () => {
+  it('добавляет льготный период до полного async-расчёта, даже если он делает общий платёж невалидным', () => {
     const totalRule = { ...rule(1), type: 'monthlyTotalPayment' as const, amount: 10000, startDate: defaultConfig.firstPaymentDate, endDate: defaultConfig.firstPaymentDate }
     const invalidGrace = { id: 'g-invalid', startDate: defaultConfig.firstPaymentDate, endDate: defaultConfig.firstPaymentDate, type: 'custom' as const, paymentAmount: 20000, extendTerm: true, accrueInterest: true, capitalizeInterest: false }
     setStoreLoan(loanProfile({ repaymentRules: [totalRule] }))
 
-    expect(() => useLoanStore.getState().addGrace(invalidGrace)).toThrow('не меньше обязательного платежа')
-    expect(useLoanStore.getState().gracePeriods).toHaveLength(0)
+    useLoanStore.getState().addGrace(invalidGrace)
+
+    expect(useLoanStore.getState().gracePeriods).toHaveLength(1)
+    expect(currentCalculationErrors()).toContain('не меньше обязательного платежа')
   })
 
-  it('не удаляет льготный период, если без него общий платёж становится невалидным', () => {
+  it('удаляет льготный период до полного async-расчёта, даже если без него общий платёж становится невалидным', () => {
     const totalRule = { ...rule(1), type: 'monthlyTotalPayment' as const, amount: 10000, startDate: defaultConfig.firstPaymentDate, endDate: defaultConfig.firstPaymentDate }
     const requiredGrace = { id: 'g-required', startDate: defaultConfig.firstPaymentDate, endDate: defaultConfig.firstPaymentDate, type: 'custom' as const, paymentAmount: 5000, extendTerm: true, accrueInterest: true, capitalizeInterest: false }
     setStoreLoan(loanProfile({ repaymentRules: [totalRule], gracePeriods: [requiredGrace] }))
 
-    expect(() => useLoanStore.getState().removeGrace(requiredGrace.id)).toThrow('не меньше обязательного платежа')
-    expect(useLoanStore.getState().gracePeriods).toHaveLength(1)
+    useLoanStore.getState().removeGrace(requiredGrace.id)
+
+    expect(useLoanStore.getState().gracePeriods).toHaveLength(0)
+    expect(currentCalculationErrors()).toContain('не меньше обязательного платежа')
   })
 
   it('строит примерный кредит с актуальными датами и валидным досрочным платежом', () => {
