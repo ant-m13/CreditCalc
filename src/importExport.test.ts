@@ -187,6 +187,15 @@ describe('импорт резервной копии', () => {
     expect(result.importWarnings).toEqual(['Валюта NOT-A-CURRENCY не поддерживается и заменена на RUB'])
   })
 
+  it('предупреждает о валюте по умолчанию для старого файла без валюты', () => {
+    const legacyConfig = { ...defaultConfig } as Record<string, unknown>
+    delete legacyConfig.currency
+    const result = parseLoanBackup(JSON.stringify({ config: legacyConfig, repayments: [], gracePeriods: [] }))
+
+    expect(result.config.currency).toBe(defaultConfig.currency)
+    expect(result.importWarnings).toEqual(['В файле не указана валюта, используется RUB'])
+  })
+
   it('отклоняет невозможные календарные даты', () => {
     expect(() => parseLoanBackup(JSON.stringify({ config: { ...defaultConfig, issueDate: '2024-02-31' }, repayments: [], gracePeriods: [] }))).toThrow('даты')
   })
