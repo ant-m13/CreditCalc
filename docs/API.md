@@ -255,7 +255,7 @@ v1.<base64url(gzip(utf8-json(SharedCalculationV1)))>
 - полный URL с `#calc=...`;
 - строку `calc=...`;
 - сырой payload `v1....`.
-- legacy payload `v1`, внутри которого JSON не содержит собственного поля `version`.
+- payload `v1....`, внутри которого JSON может не содержать собственного поля `version`.
 
 Ограничения share-link:
 
