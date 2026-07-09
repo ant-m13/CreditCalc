@@ -21,6 +21,7 @@ Run the same checks as CI before opening a pull request:
 pnpm lint
 pnpm typecheck
 pnpm test
+pnpm test:coverage
 pnpm build
 ```
 

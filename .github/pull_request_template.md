@@ -11,6 +11,7 @@
 - [ ] `pnpm lint`
 - [ ] `pnpm typecheck`
 - [ ] `pnpm test`
+- [ ] `pnpm test:coverage`
 - [ ] `pnpm build`
 - [ ] При изменении зависимостей: `pnpm audit --prod`
 

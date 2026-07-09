@@ -23,10 +23,12 @@ Workflow:
 3. checkout указанного тега;
 4. включает pnpm через Corepack;
 5. устанавливает зависимости;
-6. запускает ESLint;
-7. запускает тесты;
-8. собирает проект;
-9. публикует `dist` через GitHub Pages.
+6. запускает non-blocking audit production-зависимостей;
+7. запускает ESLint;
+8. запускает тесты;
+9. собирает проект;
+10. запускает production E2E smoke-test;
+11. публикует `dist` через GitHub Pages.
 
 Для GitHub Pages используется переменная:
 
@@ -55,12 +57,13 @@ Workflow:
 1. читает версию из `package.json`;
 2. проверяет, что в `CHANGELOG.md` есть раздел для этой версии;
 3. устанавливает зависимости;
-4. запускает ESLint;
-5. запускает тесты;
-6. собирает проект;
-7. создаёт и отправляет тег `vX.Y.Z`, если такого тега ещё нет;
-8. архивирует содержимое `dist`;
-9. создаёт или обновляет GitHub Release с архивом `credit-calculator-dist.zip`.
+4. запускает non-blocking audit production-зависимостей;
+5. запускает ESLint;
+6. запускает тесты;
+7. собирает проект;
+8. создаёт и отправляет тег `vX.Y.Z`, если такого тега ещё нет;
+9. архивирует содержимое `dist`;
+10. создаёт или обновляет GitHub Release с архивом `credit-calculator-dist.zip`.
 
 Workflow создаёт Release сам, потому что tag push, выполненный стандартным `GITHUB_TOKEN`, не запускает следующий workflow автоматически.
 
@@ -83,11 +86,12 @@ Workflow:
 2. проверяет, что указанный тег существует в репозитории;
 3. checkout указанного тега;
 4. устанавливает зависимости;
-5. запускает ESLint;
-6. запускает тесты;
-7. собирает проект с `VITE_BASE_PATH=./`;
-8. архивирует содержимое `dist`;
-9. прикрепляет `credit-calculator-dist.zip` к GitHub Release.
+5. запускает non-blocking audit production-зависимостей;
+6. запускает ESLint;
+7. запускает тесты;
+8. собирает проект с `VITE_BASE_PATH=./`;
+9. архивирует содержимое `dist`;
+10. прикрепляет `credit-calculator-dist.zip` к GitHub Release.
 
 `VITE_BASE_PATH=./` делает архив пригодным для размещения на любом статическом хостинге, а не только на GitHub Pages.
 
@@ -102,6 +106,7 @@ Workflow:
 pnpm lint
 pnpm typecheck
 pnpm test
+pnpm test:coverage
 pnpm build
 pnpm audit --prod
 ```
@@ -115,7 +120,7 @@ pnpm audit --prod
 Если тег уже существует, можно вручную запустить `release-dist.yml` или `deploy-pages.yml` и указать тег, например:
 
 ```text
-v1.6.6
+v1.6.9
 ```
 
 `release-dist.yml` соберёт проект именно из этого тега и обновит/создаст релиз с архивом `credit-calculator-dist.zip`. `deploy-pages.yml` опубликует на GitHub Pages сборку из того же тега.
