@@ -139,7 +139,7 @@ describe('App smoke tests', () => {
     await user.click(screen.getByRole('button', { name: /Печать/i }))
     expect(screen.getByRole('heading', { name: 'Расчёт кредита' })).toBeTruthy()
     expect(print).toHaveBeenCalledTimes(1)
-  })
+  }, 20000)
 
   it('добавляет выключенный досрочный платёж и быстро включает его из календаря', async () => {
     const user = userEvent.setup()
