@@ -34,6 +34,7 @@ export class LoanCalculationRunner {
   private syncFallbackRevision: string | null = null
   private workerErrorCount = 0
   private workerRuntimeErrorCount = 0
+  private workerFallbackWarningShown = false
   private readonly maxWorkerErrors = MAX_WORKER_ERRORS
 
   private clearScheduledSyncFallback() {
@@ -61,6 +62,13 @@ export class LoanCalculationRunner {
     this.clearScheduledSyncFallback()
     this.workerErrorCount = 0
     this.workerRuntimeErrorCount = 0
+    this.workerFallbackWarningShown = false
+  }
+
+  private warnAboutSynchronousFallback() {
+    if (this.workerFallbackWarningShown) return
+    this.workerFallbackWarningShown = true
+    console.warn(`Loan calculation Worker failed ${this.workerErrorCount} times; switching to synchronous calculation`)
   }
 
   calculate(snapshot: LoanCalculationSnapshot, onResult: (envelope: LoanCalculationEnvelope) => void) {
@@ -68,6 +76,7 @@ export class LoanCalculationRunner {
 
     if (!canUseLoanCalculationWorker() || this.workerErrorCount >= this.maxWorkerErrors) {
       if (canUseLoanCalculationWorker()) {
+        this.warnAboutSynchronousFallback()
         this.scheduleSynchronousFallback(snapshot, onResult)
       } else {
         onResult(calculateLoanSynchronously(snapshot))

@@ -46,6 +46,7 @@ describe('LoanCalculationRunner', () => {
   it('switches to synchronous calculation after three Worker runtime errors', async () => {
     const runner = new LoanCalculationRunner()
     const onResult = vi.fn()
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
 
     for (let attempt = 0; attempt < 3; attempt += 1) {
       runner.calculate(snapshot(`r${attempt}`), onResult)
@@ -64,6 +65,7 @@ describe('LoanCalculationRunner', () => {
 
     expect(RuntimeFailingWorker.instances).toHaveLength(3)
     await vi.runOnlyPendingTimersAsync()
+    expect(warn).toHaveBeenCalledWith('Loan calculation Worker failed 3 times; switching to synchronous calculation')
     expect(onResult).toHaveBeenCalledWith(expect.objectContaining({
       revision: 'r3',
       result: expect.objectContaining({ errors: [] })
