@@ -17,6 +17,9 @@ type WorkerResponse = {
   result: LoanCalculationResult
 }
 
+// After three consecutive Worker failures, stop recreating failing instances and use sync fallback.
+const MAX_WORKER_ERRORS = 3
+
 export const canUseLoanCalculationWorker = () => typeof Worker !== 'undefined'
 
 export const calculateLoanSynchronously = (snapshot: LoanCalculationSnapshot): LoanCalculationEnvelope => ({
@@ -31,7 +34,7 @@ export class LoanCalculationRunner {
   private syncFallbackRevision: string | null = null
   private workerErrorCount = 0
   private workerRuntimeErrorCount = 0
-  private readonly maxWorkerErrors = 3
+  private readonly maxWorkerErrors = MAX_WORKER_ERRORS
 
   private clearScheduledSyncFallback() {
     if (this.syncFallbackTimer !== null) clearTimeout(this.syncFallbackTimer)
