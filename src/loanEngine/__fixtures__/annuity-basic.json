@@ -1,0 +1,89 @@
+{
+  "description": "Basic annuity loan without early repayments.",
+  "input": {
+    "config": {
+      "principal": 120000,
+      "annualRate": 12,
+      "rateChanges": [],
+      "rateChangeMode": "nextPeriod",
+      "issueDate": "2024-01-01",
+      "firstPaymentDate": "2024-02-01",
+      "firstPaymentInterestOnly": false,
+      "termMonths": 12,
+      "paymentDay": 1,
+      "paymentType": "annuity",
+      "frequency": "monthly",
+      "currency": "RUB",
+      "rounding": "kopecks",
+      "closeThreshold": 0,
+      "oneTimeFee": 0,
+      "monthlyFee": 0,
+      "earlyRepaymentFeePercent": 0,
+      "interest": {
+        "method": "annuity",
+        "dayCountBasis": "actualActual",
+        "includePaymentDate": false,
+        "periodStart": "inclusive",
+        "balanceMoment": "startOfDay"
+      }
+    },
+    "repayments": [],
+    "gracePeriods": []
+  },
+  "expected": {
+    "summary": {
+      "rowCount": 13,
+      "closingDate": "2025-01-01",
+      "totalInterestPaid": 7942.26,
+      "totalCashFlow": 127942.26,
+      "totalFeePaid": 0
+    },
+    "rows": [
+      {
+        "date": "2024-01-01",
+        "number": 1,
+        "payment": 0,
+        "interestPaid": 0,
+        "principalPaid": 0,
+        "earlyPayment": 0,
+        "feePaid": 0,
+        "deferredInterestClosing": 0,
+        "cashFlowTotal": 0,
+        "closingBalance": 120000,
+        "eventTypes": ["loanIssued"],
+        "paymentRecalculated": false,
+        "isRegularPayment": false
+      },
+      {
+        "date": "2024-02-01",
+        "number": 2,
+        "payment": 10661.85,
+        "interestPaid": 1200,
+        "principalPaid": 9461.85,
+        "earlyPayment": 0,
+        "feePaid": 0,
+        "deferredInterestClosing": 0,
+        "cashFlowTotal": 10661.85,
+        "closingBalance": 110538.15,
+        "eventTypes": [],
+        "paymentRecalculated": false,
+        "isRegularPayment": true
+      },
+      {
+        "date": "2025-01-01",
+        "number": 13,
+        "payment": 10661.91,
+        "interestPaid": 105.56,
+        "principalPaid": 10556.35,
+        "earlyPayment": 0,
+        "feePaid": 0,
+        "deferredInterestClosing": 0,
+        "cashFlowTotal": 10661.91,
+        "closingBalance": 0,
+        "eventTypes": ["finalBalloon"],
+        "paymentRecalculated": false,
+        "isRegularPayment": false
+      }
+    ]
+  }
+}

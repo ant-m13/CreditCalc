@@ -1,0 +1,114 @@
+{
+  "description": "Full grace period with accrued interest capitalization.",
+  "input": {
+    "config": {
+      "principal": 120000,
+      "annualRate": 12,
+      "rateChanges": [],
+      "rateChangeMode": "nextPeriod",
+      "issueDate": "2024-01-01",
+      "firstPaymentDate": "2024-02-01",
+      "firstPaymentInterestOnly": false,
+      "termMonths": 12,
+      "paymentDay": 1,
+      "paymentType": "annuity",
+      "frequency": "monthly",
+      "currency": "RUB",
+      "rounding": "kopecks",
+      "closeThreshold": 0,
+      "oneTimeFee": 0,
+      "monthlyFee": 0,
+      "earlyRepaymentFeePercent": 0,
+      "interest": {
+        "method": "annuity",
+        "dayCountBasis": "actualActual",
+        "includePaymentDate": false,
+        "periodStart": "inclusive",
+        "balanceMoment": "startOfDay"
+      }
+    },
+    "repayments": [],
+    "gracePeriods": [
+      {
+        "id": "grace-1",
+        "startDate": "2024-02-01",
+        "endDate": "2024-02-01",
+        "type": "full",
+        "extendTerm": true,
+        "accrueInterest": true,
+        "capitalizeInterest": true
+      }
+    ]
+  },
+  "expected": {
+    "summary": {
+      "rowCount": 14,
+      "closingDate": "2025-02-01",
+      "totalInterestPaid": 8094.45,
+      "totalCashFlow": 129294.45,
+      "totalFeePaid": 0
+    },
+    "rows": [
+      {
+        "date": "2024-01-01",
+        "number": 1,
+        "payment": 0,
+        "interestPaid": 0,
+        "principalPaid": 0,
+        "earlyPayment": 0,
+        "feePaid": 0,
+        "deferredInterestClosing": 0,
+        "cashFlowTotal": 0,
+        "closingBalance": 120000,
+        "eventTypes": ["loanIssued"],
+        "paymentRecalculated": false,
+        "isRegularPayment": false
+      },
+      {
+        "date": "2024-02-01",
+        "number": 2,
+        "payment": 0,
+        "interestPaid": 0,
+        "principalPaid": 0,
+        "earlyPayment": 0,
+        "feePaid": 0,
+        "deferredInterestClosing": 0,
+        "cashFlowTotal": 0,
+        "closingBalance": 121200,
+        "eventTypes": ["graceFull"],
+        "paymentRecalculated": false,
+        "isRegularPayment": false
+      },
+      {
+        "date": "2024-03-01",
+        "number": 3,
+        "payment": 10661.85,
+        "interestPaid": 1212,
+        "principalPaid": 9449.85,
+        "earlyPayment": 0,
+        "feePaid": 0,
+        "deferredInterestClosing": 0,
+        "cashFlowTotal": 10661.85,
+        "closingBalance": 111750.15,
+        "eventTypes": [],
+        "paymentRecalculated": false,
+        "isRegularPayment": true
+      },
+      {
+        "date": "2025-02-01",
+        "number": 14,
+        "payment": 12014.1,
+        "interestPaid": 118.95,
+        "principalPaid": 11895.15,
+        "earlyPayment": 0,
+        "feePaid": 0,
+        "deferredInterestClosing": 0,
+        "cashFlowTotal": 12014.1,
+        "closingBalance": 0,
+        "eventTypes": ["finalBalloon"],
+        "paymentRecalculated": false,
+        "isRegularPayment": false
+      }
+    ]
+  }
+}
