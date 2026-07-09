@@ -1,4 +1,5 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react'
+import { PERSISTED_LOAN_STORAGE_KEY } from '../storageKeys'
 
 interface ErrorBoundaryState {
   message: string | null
@@ -9,8 +10,6 @@ interface ErrorBoundaryProps {
   children: ReactNode
   reloadPage?: () => void
 }
-
-const storageKey = 'ipoteka-calculator-v1'
 
 const errorMessage = (error: unknown) => error instanceof Error ? error.message : 'неизвестная ошибка'
 
@@ -29,7 +28,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
     let data = '{}'
 
     try {
-      data = window.localStorage.getItem(storageKey) ?? '{}'
+      data = window.localStorage.getItem(PERSISTED_LOAN_STORAGE_KEY) ?? '{}'
     } catch (error) {
       console.error('Failed to read localStorage recovery data', error)
       this.setState({ recoveryMessage: 'localStorage недоступен. Скачан пустой файл восстановления.' })
@@ -49,7 +48,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
 
   restartWithoutStorage = () => {
     try {
-      window.localStorage.removeItem(storageKey)
+      window.localStorage.removeItem(PERSISTED_LOAN_STORAGE_KEY)
     } catch (error) {
       console.error('Failed to clear localStorage during recovery', error)
       this.setState({ recoveryMessage: `Не удалось очистить localStorage: ${errorMessage(error)}. Откройте приложение в приватном окне или очистите данные сайта в настройках браузера.` })
