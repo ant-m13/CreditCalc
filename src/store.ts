@@ -24,6 +24,7 @@ import {
   withRepaymentSequence,
   withRuleSequence
 } from './storeNormalization'
+import { PERSISTED_LOAN_STORAGE_KEY } from './storageKeys'
 import type { LoanData, LoanImportData, LoanProfile, QuarantinedLoanRaw } from './storeTypes'
 
 export { defaultConfig } from './loanDefaults'
@@ -246,7 +247,7 @@ export const useLoanStore = create<LoanState>()(persist((set) => ({
     return { ...normalized, loans: s.loans.map(loan => loan.id === s.activeLoanId ? { ...loan, ...(name ? { name } : {}), ...normalized } : loan) }
   })
 }), {
-  name: 'ipoteka-calculator-v1',
+  name: PERSISTED_LOAN_STORAGE_KEY,
   storage: createJSONStorage(() => safeLocalStorage),
   version: 10,
   migrate: normalizePersistedState,

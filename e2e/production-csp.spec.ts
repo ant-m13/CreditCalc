@@ -37,6 +37,7 @@ test('production dist CSP позволяет рабочие inline styles при
   await expect(page.getByText('Сумма кредита')).toBeVisible()
 
   const csp = await page.locator('meta[http-equiv="Content-Security-Policy"]').getAttribute('content')
+  expect(csp).toContain("default-src 'self'")
   expect(csp).toContain("style-src-elem 'self'")
   expect(csp).toContain("style-src-attr 'unsafe-inline'")
 

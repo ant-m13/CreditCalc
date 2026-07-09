@@ -82,7 +82,9 @@ export function parseLoanBackupObject(raw: unknown): LoanBackupData {
   const interest = isObject(source.interest) ? source.interest : {}
   const importWarnings: string[] = []
   const currency = oneOf(source.currency, supportedCurrencies) ? source.currency : defaultConfig.currency
-  if (source.currency !== undefined && !oneOf(source.currency, supportedCurrencies)) {
+  if (source.currency === undefined) {
+    importWarnings.push(`В файле не указана валюта, используется ${defaultConfig.currency}`)
+  } else if (!oneOf(source.currency, supportedCurrencies)) {
     importWarnings.push(`Валюта ${String(source.currency)} не поддерживается и заменена на ${defaultConfig.currency}`)
   }
   const config = {

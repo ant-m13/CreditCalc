@@ -25,6 +25,10 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Audit production dependencies
+        run: pnpm audit --prod
+        continue-on-error: true
+
       - name: Install Playwright browser
         run: pnpm exec playwright install --with-deps chromium
 
@@ -36,6 +40,9 @@ jobs:
 
       - name: Run tests
         run: pnpm test
+
+      - name: Run coverage
+        run: pnpm test:coverage
 
       - name: Build site
         run: pnpm build

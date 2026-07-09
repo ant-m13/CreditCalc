@@ -1,0 +1,104 @@
+{
+  "description": "Daily actual/actual accrual through leap-year February.",
+  "input": {
+    "config": {
+      "principal": 365000,
+      "annualRate": 10,
+      "rateChanges": [],
+      "rateChangeMode": "nextPeriod",
+      "issueDate": "2024-02-01",
+      "firstPaymentDate": "2024-03-01",
+      "firstPaymentInterestOnly": false,
+      "termMonths": 3,
+      "paymentDay": 1,
+      "paymentType": "annuity",
+      "frequency": "monthly",
+      "currency": "RUB",
+      "rounding": "kopecks",
+      "closeThreshold": 0,
+      "oneTimeFee": 0,
+      "monthlyFee": 0,
+      "earlyRepaymentFeePercent": 0,
+      "interest": {
+        "method": "daily",
+        "dayCountBasis": "actualActual",
+        "includePaymentDate": false,
+        "periodStart": "inclusive",
+        "balanceMoment": "startOfDay"
+      }
+    },
+    "repayments": [],
+    "gracePeriods": []
+  },
+  "expected": {
+    "summary": {
+      "rowCount": 4,
+      "closingDate": "2024-05-01",
+      "totalInterestPaid": 5964.96,
+      "totalCashFlow": 370964.96,
+      "totalFeePaid": 0
+    },
+    "rows": [
+      {
+        "date": "2024-02-01",
+        "number": 1,
+        "payment": 0,
+        "interestPaid": 0,
+        "principalPaid": 0,
+        "earlyPayment": 0,
+        "feePaid": 0,
+        "deferredInterestClosing": 0,
+        "cashFlowTotal": 0,
+        "closingBalance": 365000,
+        "eventTypes": ["loanIssued"],
+        "paymentRecalculated": false,
+        "isRegularPayment": false
+      },
+      {
+        "date": "2024-03-01",
+        "number": 2,
+        "payment": 123700.05,
+        "interestPaid": 2892.08,
+        "principalPaid": 120807.97,
+        "earlyPayment": 0,
+        "feePaid": 0,
+        "deferredInterestClosing": 0,
+        "cashFlowTotal": 123700.05,
+        "closingBalance": 244192.03,
+        "eventTypes": [],
+        "paymentRecalculated": false,
+        "isRegularPayment": true
+      },
+      {
+        "date": "2024-04-01",
+        "number": 3,
+        "payment": 123700.05,
+        "interestPaid": 2068.29,
+        "principalPaid": 121631.76,
+        "earlyPayment": 0,
+        "feePaid": 0,
+        "deferredInterestClosing": 0,
+        "cashFlowTotal": 123700.05,
+        "closingBalance": 122560.27,
+        "eventTypes": [],
+        "paymentRecalculated": false,
+        "isRegularPayment": true
+      },
+      {
+        "date": "2024-05-01",
+        "number": 4,
+        "payment": 123564.86,
+        "interestPaid": 1004.59,
+        "principalPaid": 122560.27,
+        "earlyPayment": 0,
+        "feePaid": 0,
+        "deferredInterestClosing": 0,
+        "cashFlowTotal": 123564.86,
+        "closingBalance": 0,
+        "eventTypes": [],
+        "paymentRecalculated": false,
+        "isRegularPayment": true
+      }
+    ]
+  }
+}

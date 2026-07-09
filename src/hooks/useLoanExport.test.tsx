@@ -271,7 +271,7 @@ describe('useLoanExport', () => {
     expect(sharedCalculationMock.buildShareUrl).toHaveBeenCalled()
     await waitFor(() => expect(setImportStatus).toHaveBeenCalledWith({
       kind: 'success',
-      text: 'Ссылка на кредит «Экспорт» скопирована'
+      text: 'Ссылка на кредит «Экспорт» скопирована. Ссылка содержит параметры кредита, досрочные платежи и льготные периоды. Не отправляйте её тем, кому не доверяете.'
     }))
   })
 

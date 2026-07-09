@@ -1,0 +1,100 @@
+{
+  "description": "Monthly total payment mode with early repayment fee.",
+  "input": {
+    "config": {
+      "principal": 300000,
+      "annualRate": 12,
+      "rateChanges": [],
+      "rateChangeMode": "nextPeriod",
+      "issueDate": "2024-01-01",
+      "firstPaymentDate": "2024-02-01",
+      "firstPaymentInterestOnly": false,
+      "termMonths": 12,
+      "paymentDay": 1,
+      "paymentType": "annuity",
+      "frequency": "monthly",
+      "currency": "RUB",
+      "rounding": "kopecks",
+      "closeThreshold": 0,
+      "oneTimeFee": 0,
+      "monthlyFee": 0,
+      "earlyRepaymentFeePercent": 10,
+      "interest": {
+        "method": "annuity",
+        "dayCountBasis": "actualActual",
+        "includePaymentDate": false,
+        "periodStart": "inclusive",
+        "balanceMoment": "startOfDay"
+      }
+    },
+    "repayments": [
+      {
+        "id": "early-1",
+        "date": "2024-03-01",
+        "amount": 50000,
+        "amountMode": "totalWithFee",
+        "strategy": "reduceTerm",
+        "source": "own",
+        "sameDayOrder": "regularFirst",
+        "interestFirst": true
+      }
+    ],
+    "gracePeriods": []
+  },
+  "expected": {
+    "summary": {
+      "rowCount": 13,
+      "closingDate": "2025-01-01",
+      "totalInterestPaid": 17657.42,
+      "totalCashFlow": 319991.96,
+      "totalFeePaid": 2334.54
+    },
+    "rows": [
+      {
+        "date": "2024-01-01",
+        "number": 1,
+        "payment": 0,
+        "interestPaid": 0,
+        "principalPaid": 0,
+        "earlyPayment": 0,
+        "feePaid": 0,
+        "deferredInterestClosing": 0,
+        "cashFlowTotal": 0,
+        "closingBalance": 300000,
+        "eventTypes": ["loanIssued"],
+        "paymentRecalculated": false,
+        "isRegularPayment": false
+      },
+      {
+        "date": "2024-03-01",
+        "number": 3,
+        "payment": 26654.64,
+        "interestPaid": 2763.45,
+        "principalPaid": 44902.01,
+        "earlyPayment": 21010.82,
+        "feePaid": 2334.54,
+        "deferredInterestClosing": 0,
+        "cashFlowTotal": 50000,
+        "closingBalance": 231443.35,
+        "eventTypes": ["earlyReduceTerm"],
+        "paymentRecalculated": false,
+        "isRegularPayment": true
+      },
+      {
+        "date": "2024-12-01",
+        "number": 12,
+        "payment": 26654.64,
+        "interestPaid": 297.68,
+        "principalPaid": 26356.96,
+        "earlyPayment": 0,
+        "feePaid": 0,
+        "deferredInterestClosing": 0,
+        "cashFlowTotal": 26654.64,
+        "closingBalance": 3411.45,
+        "eventTypes": [],
+        "paymentRecalculated": false,
+        "isRegularPayment": true
+      }
+    ]
+  }
+}
