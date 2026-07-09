@@ -139,7 +139,7 @@ export function useLoanExport({ loans, activeLoanId, calculatedSchedule, calcula
       const snapshot = createSnapshotFromReadyCalculation(loan, calculatedExportsReady, calculationErrors)
       const url = await buildShareUrl(snapshot, window.location.href)
       await copyText(url)
-      setImportStatus({ kind: 'success', text: `Ссылка на кредит «${loan.name}» скопирована` })
+      setImportStatus({ kind: 'success', text: `Ссылка на кредит «${loan.name}» скопирована. Ссылка содержит параметры кредита, досрочные платежи и льготные периоды. Не отправляйте её тем, кому не доверяете.` })
     } catch (error) {
       setImportStatus({ kind: 'error', text: error instanceof Error ? error.message : 'Не удалось сформировать ссылку на расчёт' })
     }
