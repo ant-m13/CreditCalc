@@ -36,12 +36,12 @@ const scheduleRow = (patch: Partial<PaymentScheduleItem> = {}): PaymentScheduleI
 })
 
 function ScheduleProbe() {
-  const [rows, setRows] = useState(2)
+  const [rows, setRows] = useState(0)
   const schedule = [
     scheduleRow(),
     scheduleRow({ number: 2, date: '2026-08-15', openingBalance: 91000, closingBalance: 81800 })
   ]
-  return <Schedule schedule={schedule} baseSchedule={schedule} repayments={[]} currency="RUB" displayDecimals={2} rows={rows} setRows={setRows} more={() => setRows(value => value + 2)}/>
+  return <Schedule schedule={schedule} baseSchedule={schedule} repayments={[]} currency="RUB" displayDecimals={2} rows={rows} setRows={setRows}/>
 }
 
 describe('Schedule', () => {
@@ -52,5 +52,20 @@ describe('Schedule', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Перейти' }))
 
     expect(screen.getByText('Дата/месяц не найден')).toBeTruthy()
+  })
+
+  it('не монтирует весь большой график и переключает страницы', () => {
+    const large = Array.from({ length: 250 }, (_, index) => scheduleRow({ number: index + 1 }))
+    function LargeProbe() {
+      const [rows, setRows] = useState(0)
+      return <Schedule schedule={large} baseSchedule={large} repayments={[]} currency="RUB" displayDecimals={2} rows={rows} setRows={setRows}/>
+    }
+    const { container } = render(<LargeProbe/>)
+
+    expect(container.querySelectorAll('tr[id^="schedule-row-"]')).toHaveLength(100)
+    expect(container.querySelectorAll('article[id^="mobile-schedule-row-"]')).toHaveLength(100)
+    fireEvent.click(screen.getByRole('button', { name: /Далее/ }))
+    expect(container.querySelector('#schedule-row-101')).toBeTruthy()
+    expect(container.querySelector('#schedule-row-1')).toBeNull()
   })
 })
