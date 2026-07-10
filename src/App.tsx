@@ -38,6 +38,7 @@ function App() {
   const [earlyError, setEarlyError] = useState('')
   const [showGrace, setShowGrace] = useState(false)
   const [mobileNav, setMobileNav] = useState(false)
+  const [mobileViewport, setMobileViewport] = useState(false)
   const [printReportVisible, setPrintReportVisible] = useState(false)
   const [rows, setRows] = useState(0)
   const shellRef = useRef<HTMLDivElement>(null)
@@ -115,6 +116,14 @@ function App() {
     setImportStatus,
     onAccept: acceptSharedCalculation
   })
+
+  useEffect(() => {
+    const media = window.matchMedia('(max-width: 950px)')
+    const updateViewport = () => setMobileViewport(media.matches)
+    updateViewport()
+    media.addEventListener?.('change', updateViewport)
+    return () => media.removeEventListener?.('change', updateViewport)
+  }, [])
 
   useEffect(() => {
     setShowEarly(false)
@@ -230,7 +239,7 @@ function App() {
   }, [setImportStatus, store])
 
   return <div ref={shellRef} className="app-shell" data-theme={store.theme} data-ui-font={store.appFontSize} data-schedule-font={store.scheduleFontSize}>
-    <aside className={mobileNav ? 'sidebar open' : 'sidebar'}>
+    <aside className={mobileNav ? 'sidebar open' : 'sidebar'} inert={mobileViewport && !mobileNav ? true : undefined} aria-hidden={mobileViewport && !mobileNav ? true : undefined}>
       <div className="brand"><div className="brand-mark"><Landmark size={22}/></div><div><b>Кредитный калькулятор</b><span>версия {APP_VERSION}</span></div><button className="icon-btn close-nav" aria-label="Закрыть меню" onClick={() => setMobileNav(false)}><X/></button></div>
       <nav>{nav.map(([id, Icon, label]) => <button key={id} className={section === id ? 'active' : ''} aria-current={section === id ? 'page' : undefined} onClick={() => { setSection(id); setMobileNav(false) }}><Icon size={18}/><span>{label}</span>{id === 'early' && store.repayments.length > 0 && <em>{store.repayments.length}</em>}</button>)}</nav>
       <div className="sidebar-note"><ShieldCheck size={20}/><div><b>Расчёт локально</b><span>Ваши данные не покидают устройство</span></div></div>

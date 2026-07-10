@@ -408,4 +408,20 @@ describe('App smoke tests', () => {
     expect(await screen.findByText(/Дата, с которой новая ставка применяется внутри текущего процентного периода/)).toBeTruthy()
     expect(screen.getByText(/Годовая ставка, действующая точно с указанной даты/)).toBeTruthy()
   })
+
+  it('убирает скрытое мобильное меню из tab order', async () => {
+    vi.mocked(window.matchMedia).mockReturnValue({
+      matches: true, media: '(max-width: 950px)', onchange: null,
+      addListener: vi.fn(), removeListener: vi.fn(), addEventListener: vi.fn(), removeEventListener: vi.fn(), dispatchEvent: vi.fn()
+    })
+    const user = userEvent.setup()
+    const { container } = render(<App />)
+    const sidebar = container.querySelector('aside.sidebar')!
+
+    await waitFor(() => expect(sidebar.hasAttribute('inert')).toBe(true))
+    expect(sidebar.getAttribute('aria-hidden')).toBe('true')
+    await user.click(screen.getByRole('button', { name: 'Открыть меню' }))
+    expect(sidebar.hasAttribute('inert')).toBe(false)
+    expect(sidebar.hasAttribute('aria-hidden')).toBe(false)
+  })
 })
