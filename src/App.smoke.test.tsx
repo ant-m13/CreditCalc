@@ -397,4 +397,15 @@ describe('App smoke tests', () => {
     expect((await screen.findByRole('button', { name: 'CSV' }) as HTMLButtonElement).disabled).toBe(true)
     expect((screen.getByRole('button', { name: 'PDF / печать' }) as HTMLButtonElement).disabled).toBe(true)
   })
+
+  it('поясняет exact-date ставку без обещания следующего платёжного периода', async () => {
+    const user = userEvent.setup()
+    const exact = loan({ config: { ...defaultConfig, rateChangeMode: 'exactDate' } })
+    useLoanStore.setState({ ...exact, loans: [exact], activeLoanId: exact.id })
+    render(<App />)
+
+    await user.click(screen.getByRole('button', { name: 'Параметры' }))
+    expect(await screen.findByText(/Дата, с которой новая ставка применяется внутри текущего процентного периода/)).toBeTruthy()
+    expect(screen.getByText(/Годовая ставка, действующая точно с указанной даты/)).toBeTruthy()
+  })
 })
