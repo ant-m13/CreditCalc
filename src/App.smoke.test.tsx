@@ -424,4 +424,15 @@ describe('App smoke tests', () => {
     expect(sidebar.hasAttribute('inert')).toBe(false)
     expect(sidebar.hasAttribute('aria-hidden')).toBe(false)
   })
+
+  it('объявляет ошибку и остановку расчёта assistive-технологиям', async () => {
+    const invalidLoan = loan({ config: { ...defaultConfig, principal: 0 } })
+    useLoanStore.setState({ ...invalidLoan, loans: [invalidLoan], activeLoanId: invalidLoan.id })
+    render(<App />)
+
+    const error = await screen.findByRole('alert')
+    expect(error.getAttribute('aria-live')).toBe('assertive')
+    expect(error.getAttribute('aria-atomic')).toBe('true')
+    expect((await screen.findByRole('status')).textContent).toMatch(/Расчёт временно остановлен/)
+  })
 })
