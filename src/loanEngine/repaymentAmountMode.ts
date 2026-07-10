@@ -84,5 +84,6 @@ export function repaymentAmountModeContext(
   repayment: { amount: unknown; amountMode?: unknown; date: string; enabled?: unknown; sameDayOrder?: unknown },
   config: LoanConfig
 ): RepaymentAmountModeContext {
+  if (repayment.amountMode === 'extra') return repaymentAmountModeContextForRegularDate(repayment, false)
   return repaymentAmountModeContextForRegularDate(repayment, isRegularPaymentDate(repayment.date, config))
 }

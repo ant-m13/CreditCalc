@@ -1,8 +1,8 @@
 import { supportedCurrencies, type EarlyRepayment, type GracePeriod, type LoanConfig } from './types'
 import { differenceInCalendarDays, parseISO } from 'date-fns'
 import { MAX_CALENDAR_DAYS, MAX_CALENDAR_YEARS, MAX_EARLY_REPAYMENTS, MAX_GRACE_PERIODS, MAX_RATE_CHANGES, MAX_TERM_MONTHS } from './limits'
-import { contractualFinalPaymentDate, preparePaymentCalendar, totalPaymentPeriods } from './dates'
-import { repaymentAmountModeContext, repaymentAmountModeContextForRegularDate, repaymentAmountModeValidationErrors } from './repaymentAmountMode'
+import { contractualFinalPaymentDate, preparePaymentCalendar, regularPaymentDateMatches, totalPaymentPeriods } from './dates'
+import { repaymentAmountModeContextForRegularDate, repaymentAmountModeValidationErrors } from './repaymentAmountMode'
 import { isISODate } from '../utils/dateValidation'
 
 const finite = (value: unknown) => typeof value === 'number' && Number.isFinite(value)
@@ -100,6 +100,9 @@ export function validateLoan(config: LoanConfig) {
 export function validateScenario(config: LoanConfig, repayments: EarlyRepayment[], gracePeriods: GracePeriod[]) {
   const errors = validateLoan(config)
   const configDatesValid = isISODate(config.issueDate) && isISODate(config.firstPaymentDate) && config.firstPaymentDate > config.issueDate
+  const regularDates = errors.length === 0
+    ? regularPaymentDateMatches(repayments.filter(item => isISODate(item.date) && item.amountMode !== 'extra').map(item => item.date), config)
+    : new Set<string>()
   if (repayments.length > MAX_EARLY_REPAYMENTS) errors.push(`Количество досрочных платежей не должно превышать ${MAX_EARLY_REPAYMENTS}`)
   if (gracePeriods.length > MAX_GRACE_PERIODS) errors.push(`Количество льготных периодов не должно превышать ${MAX_GRACE_PERIODS}`)
   const totalRepaymentsByDate = new Map<string, number>()
@@ -115,7 +118,9 @@ export function validateScenario(config: LoanConfig, repayments: EarlyRepayment[
     if (!repaymentDateValid) errors.push(`Досрочный платёж №${index + 1}: дата должна быть корректной`)
     else if (isISODate(config.issueDate) && repayment.date < config.issueDate) errors.push(`Досрочный платёж №${index + 1}: дата раньше выдачи кредита`)
     else if (isISODate(config.issueDate) && exceedsCalendarHorizon(config.issueDate, repayment.date)) errors.push(horizonError(`Досрочный платёж №${index + 1}`))
-    const amountModeContext = repaymentDateValid && configDatesValid ? repaymentAmountModeContext(repayment, config) : repaymentAmountModeContextForRegularDate(repayment, false)
+    const amountModeContext = repaymentDateValid && configDatesValid
+      ? repaymentAmountModeContextForRegularDate(repayment, regularDates.has(repayment.date))
+      : repaymentAmountModeContextForRegularDate(repayment, false)
     errors.push(...repaymentAmountModeValidationErrors(amountModeContext, `Досрочный платёж №${index + 1}`, { includeTotalDateErrors: repaymentDateValid }))
     if (repaymentDateValid && amountModeContext.countsAsTotalWithFee) totalRepaymentsByDate.set(repayment.date, (totalRepaymentsByDate.get(repayment.date) ?? 0) + 1)
   })

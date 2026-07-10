@@ -18,13 +18,20 @@ export function nextPaymentDate(date: string, config: LoanConfig) {
 }
 
 export function isRegularPaymentDate(date: string, config: LoanConfig, maxSteps = 10000) {
-  if (date < config.firstPaymentDate) return false
+  return regularPaymentDateMatches([date], config, maxSteps).has(date)
+}
+
+export function regularPaymentDateMatches(dates: Iterable<string>, config: LoanConfig, maxSteps = MAX_SCHEDULE_ROWS) {
+  const targets = new Set([...dates].filter(date => date >= config.firstPaymentDate))
+  const matches = new Set<string>()
+  if (targets.size === 0) return matches
+  const lastTarget = [...targets].sort().at(-1)!
   let cursor = config.firstPaymentDate
-  for (let step = 0; step < maxSteps && cursor <= date; step += 1) {
-    if (cursor === date) return true
+  for (let step = 0; step < maxSteps && cursor <= lastTarget; step += 1) {
+    if (targets.has(cursor)) matches.add(cursor)
     cursor = nextPaymentDate(cursor, config)
   }
-  return false
+  return matches
 }
 
 export const totalPaymentPeriods = (config: LoanConfig) =>

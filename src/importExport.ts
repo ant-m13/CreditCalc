@@ -1,5 +1,5 @@
 import type { EarlyRepayment, GracePeriod, LoanConfig, RateChange } from './loanEngine'
-import { repaymentAmountModeContext, repaymentAmountModeValidationErrors, sortRateChanges, supportedCurrencies } from './loanEngine'
+import { regularPaymentDateMatches, repaymentAmountModeContextForRegularDate, repaymentAmountModeValidationErrors, sortRateChanges, supportedCurrencies } from './loanEngine'
 import { defaultConfig } from './loanDefaults'
 import type { RepaymentRule } from './repaymentRules'
 import { assertLoanCandidateValid } from './loanCandidate'
@@ -125,6 +125,9 @@ export function parseLoanBackupObject(raw: unknown): LoanBackupData {
   const repaymentsRaw = raw.repayments ?? []
   if (!Array.isArray(repaymentsRaw)) throw new Error('Список досрочных платежей повреждён')
   if (repaymentsRaw.length > MAX_EARLY_REPAYMENTS) throw new Error(`Слишком много досрочных платежей. Максимум: ${MAX_EARLY_REPAYMENTS}`)
+  const regularRepaymentDates = regularPaymentDateMatches(repaymentsRaw.flatMap(item =>
+    isObject(item) && isISODate(item.date) && item.amountMode !== 'extra' ? [item.date] : []
+  ), config)
   const repayments = repaymentsRaw.map((item, index) => {
     if (!isObject(item) || typeof item.id !== 'string' || !isISODate(item.date) || !finite(item.amount) || !oneOf(item.strategy, ['reduceTerm', 'reducePayment', 'full', 'custom']) || !oneOf(item.source, ['own', 'subsidy', 'insurance', 'other']) || !oneOf(item.sameDayOrder, ['regularFirst', 'earlyFirst']) || typeof item.interestFirst !== 'boolean') throw new Error(`Ошибка в досрочном платеже №${index + 1}`)
     if (item.enabled !== undefined && typeof item.enabled !== 'boolean') throw new Error(`Ошибка в досрочном платеже №${index + 1}`)
@@ -133,13 +136,12 @@ export function parseLoanBackupObject(raw: unknown): LoanBackupData {
     ensureTextLength(item.comment, `Комментарий досрочного платежа №${index + 1}`)
     const sameDaySequence = typeof item.sameDaySequence === 'number' && Number.isInteger(item.sameDaySequence) && item.sameDaySequence >= 0 ? item.sameDaySequence : undefined
     if (item.sameDaySequence !== undefined && sameDaySequence === undefined) throw new Error(`Ошибка в досрочном платеже №${index + 1}`)
-    const context = repaymentAmountModeContext({
+    const context = repaymentAmountModeContextForRegularDate({
       amount: item.amount,
       amountMode: item.amountMode,
-      date: item.date,
       enabled: item.enabled,
       sameDayOrder: item.sameDayOrder
-    }, config)
+    }, regularRepaymentDates.has(item.date))
     const label = `Ошибка в досрочном платеже №${index + 1}`
     const amountModeErrors = repaymentAmountModeValidationErrors(context, label, {
       invalidMode: label,

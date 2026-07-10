@@ -3,7 +3,7 @@ import { addDays, parseISO } from 'date-fns'
 import { accrueInterestSegmentsRaw, periodsPerYear } from './accrual'
 import { calculateAnnuityPayment } from './calculateAnnuityPayment'
 import { periodDays } from './calculateInterest'
-import { extendedPaymentPeriods, iso, isRegularPaymentDate, nextPaymentDate, preparePaymentCalendar, totalPaymentPeriods, type PreparedPaymentCalendar } from './dates'
+import { extendedPaymentPeriods, iso, nextPaymentDate, preparePaymentCalendar, regularPaymentDateMatches, totalPaymentPeriods, type PreparedPaymentCalendar } from './dates'
 import { activeGrace } from './gracePeriod'
 import { MAX_EARLY_REPAYMENTS, MAX_GRACE_PERIODS, MAX_SCHEDULE_ROWS } from './limits'
 import { createRateTimeline } from './rateChanges'
@@ -83,6 +83,10 @@ export function generateBaseSchedule(config: LoanConfig, options: Options = {}):
   const validationErrors = validateScenario(config, allRepayments, gracePeriods)
   if (validationErrors.length > 0) throw new Error(validationErrors.join(' · '))
   const paymentCalendar = options.paymentCalendar ?? preparePaymentCalendar(config, gracePeriods)
+  const regularRepaymentDates = regularPaymentDateMatches(
+    allRepayments.filter(item => item.amountMode !== 'extra').map(item => item.date),
+    config
+  )
   const configuredPeriods = totalPaymentPeriods(config)
   const maxPeriods = configuredPeriods + extendedPaymentPeriods(config, gracePeriods, paymentCalendar)
   const rateTimeline = createRateTimeline(config)
@@ -550,7 +554,7 @@ export function generateBaseSchedule(config: LoanConfig, options: Options = {}):
       new Decimal(0),
       periodsAfterCurrentPayment(currentRemainingPeriods),
       payment,
-      isRegularPaymentDate(early.date, config),
+      regularRepaymentDates.has(early.date),
       { afterCurrentPayment: true, allowPartialRegularPayment: true }
     )
     ignoredAfterCloseOutcomes.push(applied.outcome)

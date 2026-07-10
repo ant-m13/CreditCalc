@@ -3,7 +3,8 @@ import {
   nextPaymentDate,
   nextSameDaySequence,
   normalizeStoredRepaymentAmountMode,
-  repaymentAmountModeContext,
+  regularPaymentDateMatches,
+  repaymentAmountModeContextForRegularDate,
   sortRateChanges,
   sortRepaymentsByApplicationOrder,
   supportedCurrencies,
@@ -193,6 +194,9 @@ const normalizeConfig = (config: Partial<LoanConfig> | undefined): LoanConfig =>
 
 const normalizeRepayments = (value: unknown, config: LoanConfig): EarlyRepayment[] => {
   if (!Array.isArray(value)) return []
+  const regularRepaymentDates = regularPaymentDateMatches(value.flatMap(item =>
+    isObject(item) && isISODate(item.date) && item.amountMode !== 'extra' ? [item.date] : []
+  ), config)
   const usedSequences = new Map<string, Set<number>>()
   const nextSequence = (date: string, candidate: number) => {
     const used = usedSequences.get(date) ?? new Set<number>()
@@ -206,13 +210,12 @@ const normalizeRepayments = (value: unknown, config: LoanConfig): EarlyRepayment
     if (!isObject(item) || typeof item.id !== 'string' || !isISODate(item.date)) return []
     const amount = optionalFiniteNumber(item.amount, 0)
     if (amount === undefined) return []
-    const context = repaymentAmountModeContext({
+    const context = repaymentAmountModeContextForRegularDate({
       amount,
       amountMode: item.amountMode,
-      date: item.date,
       enabled: item.enabled,
       sameDayOrder: item.sameDayOrder
-    }, config)
+    }, regularRepaymentDates.has(item.date))
     const amountMode = normalizeStoredRepaymentAmountMode(context)
     const sequenceCandidate = typeof item.sameDaySequence === 'number' && Number.isInteger(item.sameDaySequence) && item.sameDaySequence >= 0 ? item.sameDaySequence : index
     return [{
