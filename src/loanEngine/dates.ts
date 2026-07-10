@@ -53,6 +53,7 @@ export const preparePaymentCalendar = (config: LoanConfig, gracePeriods: GracePe
   let remainingContractualPayments = configuredPeriods
   let cursor = config.firstPaymentDate
   let intervalIndex = 0
+  let isFirstPaymentDate = true
   const isExtendingGraceDate = (date: string) => {
     while (intervalIndex < intervals.length && intervals[intervalIndex].endDate < date) intervalIndex += 1
     const interval = intervals[intervalIndex]
@@ -64,7 +65,9 @@ export const preparePaymentCalendar = (config: LoanConfig, gracePeriods: GracePe
       throw new Error(`Календарь платежей не помещается в допустимое количество строк (${MAX_SCHEDULE_ROWS})`)
     }
     dates.push(cursor)
-    if (!isExtendingGraceDate(cursor)) remainingContractualPayments -= 1
+    const isInterestOnlyStub = isFirstPaymentDate && config.firstPaymentInterestOnly
+    if (!isInterestOnlyStub && !isExtendingGraceDate(cursor)) remainingContractualPayments -= 1
+    isFirstPaymentDate = false
     cursor = nextPaymentDate(cursor, config)
   }
   return { dates, extendedPeriods: dates.length - configuredPeriods }

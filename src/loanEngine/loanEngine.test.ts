@@ -362,6 +362,30 @@ describe('loan engine', () => {
     expect(interestOnlyFirst.eventTypes).toContain('firstInterestOnly')
   })
 
+  it('считает первый процентный аннуитетный платёж дополнительным stub-периодом', () => {
+    const stubConfig: LoanConfig = { ...config, principal: 120_000, annualRate: 12, termMonths: 12, issueDate: '2024-01-01', firstPaymentDate: '2024-02-01', paymentDay: 1, firstPaymentInterestOnly: true }
+    const schedule = generateBaseSchedule(stubConfig)
+    const amortizingRows = schedule.filter(row => row.principalPaid > 0)
+    const finalRow = schedule.at(-1)!
+
+    expect(scheduledPaymentDates(stubConfig)).toHaveLength(13)
+    expect(finalRow.date).toBe('2025-02-01')
+    expect(amortizingRows).toHaveLength(12)
+    expect(finalRow.principalPaid).toBeLessThanOrEqual(Math.max(...amortizingRows.slice(0, -1).map(row => row.payment)))
+    expect(finalRow.closingBalance).toBe(0)
+  })
+
+  it('не создаёт скрытый balloon для daily accrual после процентного stub-периода', () => {
+    const stubConfig: LoanConfig = { ...config, principal: 365_000, annualRate: 10, termMonths: 12, issueDate: '2024-01-15', firstPaymentDate: '2024-02-01', paymentDay: 1, firstPaymentInterestOnly: true, interest: { ...config.interest, method: 'daily', dayCountBasis: 'actualActual', includePaymentDate: true, periodStart: 'exclusive' } }
+    const schedule = generateBaseSchedule(stubConfig)
+    const regularPayment = schedule.find(row => row.isRegularPayment)?.payment ?? 0
+    const finalRow = schedule.at(-1)!
+
+    expect(finalRow.date).toBe('2025-02-01')
+    expect(finalRow.principalPaid).toBeLessThanOrEqual(regularPayment * 1.05)
+    expect(finalRow.closingBalance).toBe(0)
+  })
+
   it('совпадает с банковским графиком при начислении со следующего дня по дату платежа', () => {
     const bank:LoanConfig={...config,principal:2375000,annualRate:8.1,issueDate:'2020-11-21',firstPaymentDate:'2020-12-21',firstPaymentInterestOnly:false,termMonths:240,paymentDay:21,interest:{...config.interest,method:'daily',dayCountBasis:'actualActual',includePaymentDate:true,periodStart:'exclusive',balanceMoment:'startOfDay'}}
     const expected = [

@@ -7,6 +7,7 @@ import earlyRepaymentBetweenPayments from './__fixtures__/early-repayment-betwee
 import rateChangeExactDate from './__fixtures__/rate-change-exact-date.json'
 import graceFullCapitalized from './__fixtures__/grace-full-capitalized.json'
 import monthlyTotalWithFee from './__fixtures__/monthly-total-with-fee.json'
+import firstInterestOnlyStub from './__fixtures__/first-interest-only-stub.json'
 
 interface GoldenSummary {
   rowCount: number
@@ -52,7 +53,8 @@ const fixtures = [
   earlyRepaymentBetweenPayments,
   rateChangeExactDate,
   graceFullCapitalized,
-  monthlyTotalWithFee
+  monthlyTotalWithFee,
+  firstInterestOnlyStub
 ] as unknown as GoldenFixture[]
 
 const round2 = (value: number) => {

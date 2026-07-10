@@ -1,0 +1,89 @@
+{
+  "description": "first interest-only payment is an additional daily-accrual stub period",
+  "input": {
+    "config": {
+      "principal": 365000,
+      "annualRate": 10,
+      "rateChanges": [],
+      "rateChangeMode": "nextPeriod",
+      "issueDate": "2024-01-15",
+      "firstPaymentDate": "2024-02-01",
+      "firstPaymentInterestOnly": true,
+      "termMonths": 12,
+      "paymentDay": 1,
+      "paymentType": "annuity",
+      "frequency": "monthly",
+      "currency": "RUB",
+      "rounding": "kopecks",
+      "closeThreshold": 0,
+      "oneTimeFee": 0,
+      "monthlyFee": 0,
+      "earlyRepaymentFeePercent": 0,
+      "interest": {
+        "method": "daily",
+        "dayCountBasis": "actualActual",
+        "includePaymentDate": true,
+        "periodStart": "exclusive",
+        "balanceMoment": "startOfDay"
+      }
+    },
+    "repayments": [],
+    "gracePeriods": []
+  },
+  "expected": {
+    "summary": {
+      "rowCount": 14,
+      "closingDate": "2025-02-01",
+      "totalInterestPaid": 21666.43,
+      "totalCashFlow": 386666.43,
+      "totalFeePaid": 0
+    },
+    "rows": [
+      {
+        "date": "2024-02-01",
+        "number": 2,
+        "payment": 1695.36,
+        "interestPaid": 1695.36,
+        "principalPaid": 0,
+        "earlyPayment": 0,
+        "feePaid": 0,
+        "deferredInterestClosing": 0,
+        "cashFlowTotal": 1695.36,
+        "closingBalance": 365000,
+        "eventTypes": ["firstInterestOnly"],
+        "paymentRecalculated": false,
+        "isRegularPayment": false
+      },
+      {
+        "date": "2024-03-01",
+        "number": 3,
+        "payment": 32089.3,
+        "interestPaid": 2892.08,
+        "principalPaid": 29197.22,
+        "earlyPayment": 0,
+        "feePaid": 0,
+        "deferredInterestClosing": 0,
+        "cashFlowTotal": 32089.3,
+        "closingBalance": 335802.78,
+        "eventTypes": [],
+        "paymentRecalculated": false,
+        "isRegularPayment": true
+      },
+      {
+        "date": "2025-02-01",
+        "number": 14,
+        "payment": 31988.77,
+        "interestPaid": 269.4,
+        "principalPaid": 31719.37,
+        "earlyPayment": 0,
+        "feePaid": 0,
+        "deferredInterestClosing": 0,
+        "cashFlowTotal": 31988.77,
+        "closingBalance": 0,
+        "eventTypes": [],
+        "paymentRecalculated": false,
+        "isRegularPayment": true
+      }
+    ]
+  }
+}

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Plus, Trash2 } from 'lucide-react'
 import { addYears, format, parseISO } from 'date-fns'
-import { nextPaymentDate, sortRateChanges, type LoanConfig, type RateChange } from '../loanEngine'
+import { contractualFinalPaymentDate, sortRateChanges, type LoanConfig, type RateChange } from '../loanEngine'
 import { MAX_RATE_CHANGES } from '../loanEngine/limits'
 import { currencySymbol } from '../formatters'
 import { createId } from '../utils/createId'
@@ -96,9 +96,7 @@ export function Settings({
   const [rateError, setRateError] = useState('')
   const [configError, setConfigError] = useState('')
   const rateChanges = config.rateChanges ?? []
-  const configuredPeriods = config.frequency === 'biweekly' ? Math.max(1, Math.round(config.termMonths * 26 / 12)) : config.frequency === 'quarterly' ? Math.max(1, Math.round(config.termMonths / 3)) : config.termMonths
-  let contractFinalDate = config.firstPaymentDate
-  for (let index = 1; index < configuredPeriods && isISODate(contractFinalDate); index += 1) contractFinalDate = nextPaymentDate(contractFinalDate, config)
+  const contractFinalDate = isISODate(config.firstPaymentDate) ? contractualFinalPaymentDate(config) : config.firstPaymentDate
   const hasRateAfterContractEnd = isISODate(contractFinalDate) && rateChanges.some(change => isISODate(change.date) && change.date > contractFinalDate)
   useEffect(() => setConfigError(''), [config])
   const commitConfig = (patch: Partial<LoanConfig>) => {
@@ -184,7 +182,7 @@ export function Settings({
         <div className="setting-item"><Field label="Годовая ставка" help="Процентная ставка банка. Влияет на начисленные проценты, долю тела в каждом платеже, переплату и срок после досрочных погашений."><div className="with-suffix"><NumberInput value={config.annualRate} min="0" max="100" step="0.1" onCommit={annualRate => commitConfig({ annualRate })}/><i>%</i></div></Field></div>
         <div className="setting-item"><Field label="Дата выдачи" help="День выдачи кредита и старт первого процентного периода. От него зависит количество дней до первого платежа."><DateCommitInput value={config.issueDate} applyLabel="Применить дату выдачи" onCommit={issueDate => commitConfig({ issueDate })} validate={issueDate => isAfterDateHorizon(issueDate, config.firstPaymentDate) ? `Первый платёж должен быть в пределах ${MAX_DATE_SPAN_YEARS} лет от даты выдачи` : ''}/></Field></div>
         <div className="setting-item"><Field label="Первый платёж" help="Первая плановая дата списания. Задает первый расчетный период и дальнейший календарь платежей."><DateCommitInput value={config.firstPaymentDate} applyLabel="Применить дату первого платежа" onCommit={firstPaymentDate => commitConfig({ firstPaymentDate })} validate={firstPaymentDate => isAfterDateHorizon(config.issueDate, firstPaymentDate) ? `Первый платёж должен быть в пределах ${MAX_DATE_SPAN_YEARS} лет от даты выдачи` : ''}/></Field></div>
-        <div className="setting-item"><label className="toggle-row"><div><b className="setting-title">Первый платёж только проценты<SettingHelp text="Если банк в первый платеж списывает только проценты, включите настройку. Тело кредита начнет гаситься со следующего планового платежа."/></b><span>Без погашения тела кредита</span></div><input type="checkbox" checked={config.firstPaymentInterestOnly} onChange={e => commitConfig({ firstPaymentInterestOnly: e.target.checked })}/></label></div>
+        <div className="setting-item"><label className="toggle-row"><div><b className="setting-title">Первый платёж только проценты<SettingHelp text="Первое списание считается дополнительным stub-периодом: оно погашает только проценты и не уменьшает число последующих амортизирующих платежей. Договорная дата закрытия сдвигается на один платёжный период."/></b><span>Дополнительный период без погашения тела</span></div><input type="checkbox" checked={config.firstPaymentInterestOnly} onChange={e => commitConfig({ firstPaymentInterestOnly: e.target.checked })}/></label></div>
         <div className="setting-item"><Field label="Срок кредита" help="Договорной срок. Используется для расчета регулярного платежа и для сравнения, сколько месяцев экономят досрочные погашения."><div className="term-control"><NumberInput min="1" step={termUnit === 'years' ? .25 : 1} value={termUnit === 'years' ? Number((config.termMonths / 12).toFixed(2)) : config.termMonths} onCommit={value => commitConfig({ termMonths: Math.max(1, Math.round(value * (termUnit === 'years' ? 12 : 1))) })}/><select aria-label="Единица срока" value={termUnit} onChange={e => setTermUnit(e.target.value as 'months' | 'years')}><option value="months">месяцев</option><option value="years">лет</option></select></div></Field></div>
         <div className="setting-item"><Field label="День платежа" help="День месяца для следующих платежей. Меняет длину процентных периодов и даты строк графика."><NumberInput min="1" max="31" step="1" value={config.paymentDay} onCommit={paymentDay => commitConfig({ paymentDay })}/></Field></div>
         <div className="setting-item"><Field label="Тип платежа" help="Аннуитет держит платеж почти постоянным, дифференцированный гасит равную часть тела. Меняет весь график и эффект досрочных платежей."><select value={config.paymentType} onChange={e => commitConfig({ paymentType: e.target.value as LoanConfig['paymentType'] })}><option value="annuity">Аннуитетный</option><option value="differentiated">Дифференцированный</option></select></Field></div>
