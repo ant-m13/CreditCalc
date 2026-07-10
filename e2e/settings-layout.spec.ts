@@ -25,3 +25,23 @@ test('desktop-подсказка даты платежа не перекрыва
   expect(helpBox!.x).toBeGreaterThanOrEqual(sidebarBox!.x + sidebarBox!.width)
   expect(helpBox!.x + helpBox!.width).toBeLessThanOrEqual(1280)
 })
+
+test('desktop-меню сворачивается до панели иконок и разворачивается обратно', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 720 })
+  await page.goto('/')
+
+  await page.getByRole('button', { name: 'Свернуть меню' }).click()
+  await expect(page.locator('.app-shell')).toHaveClass(/sidebar-collapsed/)
+  await expect(page.getByRole('button', { name: 'Параметры' })).toHaveAttribute('title', 'Параметры')
+  await expect.poll(async () => (await page.locator('aside.sidebar').boundingBox())?.width).toBe(76)
+  await page.getByRole('button', { name: 'Параметры' }).click()
+  await expect(page.getByRole('heading', { name: 'Параметры', level: 1 })).toBeVisible()
+
+  await page.getByRole('button', { name: 'Развернуть меню' }).click()
+  await expect(page.locator('.app-shell')).not.toHaveClass(/sidebar-collapsed/)
+  await expect.poll(async () => (await page.locator('aside.sidebar').boundingBox())?.width).toBe(238)
+
+  await page.setViewportSize({ width: 900, height: 720 })
+  await expect(page.getByRole('button', { name: 'Свернуть меню' })).toBeHidden()
+  await expect(page.getByRole('button', { name: 'Открыть меню' })).toBeVisible()
+})

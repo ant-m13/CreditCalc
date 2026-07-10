@@ -1,6 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import { flushSync } from 'react-dom'
-import { ArrowDownToLine, CalendarDays, History, Landmark, Menu, Moon, Plus, Printer, ReceiptText, Settings2, ShieldCheck, Sun, TrendingDown, X } from 'lucide-react'
+import { ArrowDownToLine, CalendarDays, History, Landmark, Menu, Moon, PanelLeftClose, PanelLeftOpen, Plus, Printer, ReceiptText, Settings2, ShieldCheck, Sun, TrendingDown, X } from 'lucide-react'
 import { isRegularPaymentDate, validateScenario, type EarlyRepayment } from './loanEngine'
 import { useLoanStore } from './store'
 import { FontControls } from './components/FontControls'
@@ -40,6 +40,7 @@ function App() {
   const [showGrace, setShowGrace] = useState(false)
   const [mobileNav, setMobileNav] = useState(false)
   const [mobileViewport, setMobileViewport] = useState(false)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [printReportVisible, setPrintReportVisible] = useState(false)
   const [rows, setRows] = useState(0)
   const shellRef = useRef<HTMLDivElement>(null)
@@ -235,10 +236,10 @@ function App() {
     setImportStatus({ kind: 'success', text: 'Raw-данные карантина удалены' })
   }, [setImportStatus, store])
 
-  return <div ref={shellRef} className="app-shell" data-theme={store.theme} data-ui-font={store.appFontSize} data-schedule-font={store.scheduleFontSize}>
-    <aside className={mobileNav ? 'sidebar open' : 'sidebar'} inert={mobileViewport && !mobileNav ? true : undefined} aria-hidden={mobileViewport && !mobileNav ? true : undefined}>
-      <div className="brand"><div className="brand-mark"><Landmark size={22}/></div><div><b>Кредитный калькулятор</b><span>версия {APP_VERSION}</span></div><button className="icon-btn close-nav" aria-label="Закрыть меню" onClick={() => setMobileNav(false)}><X/></button></div>
-      <nav>{nav.map(([id, Icon, label]) => <button key={id} className={section === id ? 'active' : ''} aria-current={section === id ? 'page' : undefined} onClick={() => { setSection(id); setMobileNav(false) }}><Icon size={18}/><span>{label}</span>{id === 'early' && store.repayments.length > 0 && <em>{store.repayments.length}</em>}</button>)}</nav>
+  return <div ref={shellRef} className={sidebarCollapsed ? 'app-shell sidebar-collapsed' : 'app-shell'} data-theme={store.theme} data-ui-font={store.appFontSize} data-schedule-font={store.scheduleFontSize}>
+    <aside id="primary-sidebar" className={mobileNav ? 'sidebar open' : 'sidebar'} inert={mobileViewport && !mobileNav ? true : undefined} aria-hidden={mobileViewport && !mobileNav ? true : undefined}>
+      <div className="brand"><div className="brand-mark"><Landmark size={22}/></div><div className="brand-copy"><b>Кредитный калькулятор</b><span>версия {APP_VERSION}</span></div><button className="icon-btn sidebar-collapse" aria-label={sidebarCollapsed ? 'Развернуть меню' : 'Свернуть меню'} aria-controls="primary-sidebar" aria-expanded={!sidebarCollapsed} onClick={() => setSidebarCollapsed(value => !value)}>{sidebarCollapsed ? <PanelLeftOpen/> : <PanelLeftClose/>}</button><button className="icon-btn close-nav" aria-label="Закрыть меню" onClick={() => setMobileNav(false)}><X/></button></div>
+      <nav aria-label="Основная навигация">{nav.map(([id, Icon, label]) => <button key={id} className={section === id ? 'active' : ''} aria-label={label} aria-current={section === id ? 'page' : undefined} title={sidebarCollapsed ? label : undefined} onClick={() => { setSection(id); setMobileNav(false) }}><Icon size={18}/><span>{label}</span>{id === 'early' && store.repayments.length > 0 && <em>{store.repayments.length}</em>}</button>)}</nav>
       <div className="sidebar-note"><ShieldCheck size={20}/><div><b>Расчёт локально</b><span>Ваши данные не покидают устройство</span></div></div>
     </aside>
     <main>

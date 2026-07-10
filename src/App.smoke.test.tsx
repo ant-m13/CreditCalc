@@ -435,4 +435,23 @@ describe('App smoke tests', () => {
     expect(error.getAttribute('aria-atomic')).toBe('true')
     expect((await screen.findByRole('status')).textContent).toMatch(/Расчёт временно остановлен/)
   })
+
+  it('сворачивает desktop-меню до иконок и разворачивает обратно', async () => {
+    const user = userEvent.setup()
+    const { container } = render(<App />)
+    const shell = container.querySelector('.app-shell')!
+
+    const collapse = screen.getByRole('button', { name: 'Свернуть меню' })
+    expect(collapse.getAttribute('aria-expanded')).toBe('true')
+    await user.click(collapse)
+
+    expect(shell.classList.contains('sidebar-collapsed')).toBe(true)
+    expect(screen.getByRole('button', { name: 'Параметры' }).getAttribute('title')).toBe('Параметры')
+    const expand = screen.getByRole('button', { name: 'Развернуть меню' })
+    expect(expand.getAttribute('aria-expanded')).toBe('false')
+    await user.click(expand)
+
+    expect(shell.classList.contains('sidebar-collapsed')).toBe(false)
+    expect(screen.getByRole('button', { name: 'Свернуть меню' })).toBeTruthy()
+  })
 })
