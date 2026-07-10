@@ -4,6 +4,8 @@ import { generateBaseSchedule } from './generateBaseSchedule'
 import type { ComparisonResult, EarlyRepayment, GracePeriod, LoanConfig, PaymentScheduleItem, RepaymentStrategy, ScenarioResult } from './types'
 import { validateScenario } from './validation'
 import { periodDays } from './calculateInterest'
+import Decimal from 'decimal.js'
+import { finiteFinancialNumber } from './financialSafety'
 
 const isIgnoredOnlyRow = (row: PaymentScheduleItem) => row.eventTypes.length > 0 && row.eventTypes.every(type => type === 'earlyIgnored')
 const isDebtClosedRow = (row: PaymentScheduleItem) => row.closingBalance === 0 && (row.deferredInterestClosing ?? 0) === 0
@@ -12,8 +14,8 @@ const financialClosingRow = (schedule: PaymentScheduleItem[]) => [...schedule].r
 function toResult(id: string, name: string, strategy: ScenarioResult['strategy'], schedule: ReturnType<typeof generateBaseSchedule>, config: LoanConfig, base?: ScenarioResult): ScenarioResult {
   const last = schedule.at(-1)
   const closingRow = financialClosingRow(schedule) ?? last
-  const totalInterest = schedule.reduce((s, x) => s + x.interest, 0)
-  const totalPaid = schedule.reduce((s, x) => s + (x.cashFlowTotal ?? x.payment + x.earlyPayment + x.fee), 0)
+  const totalInterest = finiteFinancialNumber(schedule.reduce((sum, row) => sum.add(row.interest), new Decimal(0)), 'Итог процентов')
+  const totalPaid = finiteFinancialNumber(schedule.reduce((sum, row) => sum.add(row.cashFlowTotal ?? row.payment + row.earlyPayment + row.fee), new Decimal(0)), 'Итог выплат')
   const closingDate = closingRow?.date ?? config.issueDate
   let recalculationIndex = -1
   schedule.forEach((row, index) => { if (row.paymentRecalculated) recalculationIndex = index })
@@ -31,7 +33,7 @@ function toResult(id: string, name: string, strategy: ScenarioResult['strategy']
     monthlyPayment,
     totalPaid,
     totalInterest,
-    overpayment: Math.max(0, totalPaid - config.principal),
+    overpayment: finiteFinancialNumber(Decimal.max(0, new Decimal(totalPaid).minus(config.principal)), 'Итог переплаты'),
     closingDate,
     termMonths,
     termDays,

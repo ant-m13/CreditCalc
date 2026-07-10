@@ -1,6 +1,6 @@
 import { supportedCurrencies, type EarlyRepayment, type GracePeriod, type LoanConfig } from './types'
 import { differenceInCalendarDays, parseISO } from 'date-fns'
-import { MAX_CALENDAR_DAYS, MAX_CALENDAR_YEARS, MAX_EARLY_REPAYMENTS, MAX_GRACE_PERIODS, MAX_RATE_CHANGES, MAX_TERM_MONTHS } from './limits'
+import { MAX_CALENDAR_DAYS, MAX_CALENDAR_YEARS, MAX_EARLY_REPAYMENTS, MAX_FINANCIAL_RESULT, MAX_GRACE_PERIODS, MAX_MONEY_AMOUNT, MAX_PERCENT, MAX_RATE_CHANGES, MAX_TERM_MONTHS } from './limits'
 import { contractualFinalPaymentDate, preparePaymentCalendar, regularPaymentDateMatches, totalPaymentPeriods } from './dates'
 import { repaymentAmountModeContextForRegularDate, repaymentAmountModeValidationErrors } from './repaymentAmountMode'
 import { isISODate } from '../utils/dateValidation'
@@ -37,8 +37,8 @@ const contractCanExceedFourDigitCalendar = (config: LoanConfig) => {
 
 export function validateLoan(config: LoanConfig) {
   const errors: string[] = []
-  if (!finite(config.principal) || !(config.principal > 0)) errors.push('Сумма кредита должна быть больше нуля')
-  if (!finite(config.annualRate) || config.annualRate < 0 || config.annualRate > 100) errors.push('Ставка должна быть от 0 до 100%')
+  if (!finite(config.principal) || !(config.principal > 0) || config.principal > MAX_MONEY_AMOUNT) errors.push(`Сумма кредита должна быть больше нуля и не превышать ${MAX_MONEY_AMOUNT}`)
+  if (!finite(config.annualRate) || config.annualRate < 0 || config.annualRate > MAX_PERCENT) errors.push(`Ставка должна быть от 0 до ${MAX_PERCENT}%`)
   if (config.rateChangeMode !== 'nextPeriod' && config.rateChangeMode !== 'exactDate') errors.push('Режим изменения ставки повреждён')
   if (typeof config.firstPaymentInterestOnly !== 'boolean') errors.push('Настройка первого платежа повреждена')
   if (!oneOf(config.paymentType, paymentTypes)) errors.push('Тип платежа повреждён')
@@ -50,9 +50,9 @@ export function validateLoan(config: LoanConfig) {
   if (finite(config.termMonths) && config.termMonths > MAX_TERM_MONTHS) errors.push(`Срок не должен превышать ${MAX_TERM_MONTHS} месяцев`)
   if (!finite(config.paymentDay) || config.paymentDay < 1 || config.paymentDay > 31) errors.push('День платежа должен быть от 1 до 31')
   if (finite(config.paymentDay) && !Number.isInteger(config.paymentDay)) errors.push('День платежа должен быть целым числом')
-  if (!finite(config.closeThreshold) || config.closeThreshold < 0) errors.push('Порог закрытия не может быть отрицательным')
-  if (!finite(config.oneTimeFee) || !finite(config.monthlyFee) || !finite(config.earlyRepaymentFeePercent) || config.oneTimeFee < 0 || config.monthlyFee < 0 || config.earlyRepaymentFeePercent < 0) errors.push('Комиссии не могут быть отрицательными')
-  if (finite(config.earlyRepaymentFeePercent) && config.earlyRepaymentFeePercent > 100) errors.push('Комиссия за досрочное погашение должна быть от 0 до 100%')
+  if (!finite(config.closeThreshold) || config.closeThreshold < 0 || config.closeThreshold > MAX_MONEY_AMOUNT) errors.push(`Порог закрытия должен быть от 0 до ${MAX_MONEY_AMOUNT}`)
+  if (!finite(config.oneTimeFee) || !finite(config.monthlyFee) || !finite(config.earlyRepaymentFeePercent) || config.oneTimeFee < 0 || config.monthlyFee < 0 || config.earlyRepaymentFeePercent < 0 || config.oneTimeFee > MAX_MONEY_AMOUNT || config.monthlyFee > MAX_MONEY_AMOUNT) errors.push(`Комиссии должны быть от 0 до ${MAX_MONEY_AMOUNT}`)
+  if (finite(config.earlyRepaymentFeePercent) && config.earlyRepaymentFeePercent > MAX_PERCENT) errors.push(`Комиссия за досрочное погашение должна быть от 0 до ${MAX_PERCENT}%`)
   if (!isISODate(config.issueDate)) errors.push('Дата выдачи должна быть корректной календарной датой')
   if (!isISODate(config.firstPaymentDate)) errors.push('Дата первого платежа должна быть корректной календарной датой')
   if (isISODate(config.issueDate) && isISODate(config.firstPaymentDate) && config.firstPaymentDate <= config.issueDate) errors.push('Первый платёж должен быть после даты выдачи')
@@ -83,7 +83,7 @@ export function validateLoan(config: LoanConfig) {
     const rateChangeDates = new Set<string>()
     config.rateChanges.forEach((change, index) => {
       if (typeof change.id !== 'string' || !change.id.trim()) errors.push(`Изменение ставки №${index + 1}: ID повреждён`)
-      if (!finite(change.annualRate) || change.annualRate < 0 || change.annualRate > 100) errors.push(`Изменение ставки №${index + 1}: ставка должна быть от 0 до 100%`)
+      if (!finite(change.annualRate) || change.annualRate < 0 || change.annualRate > MAX_PERCENT) errors.push(`Изменение ставки №${index + 1}: ставка должна быть от 0 до ${MAX_PERCENT}%`)
       if (!isISODate(change.date)) {
         errors.push(`Изменение ставки №${index + 1}: дата должна быть корректной`)
       } else {
@@ -109,6 +109,7 @@ export function validateScenario(config: LoanConfig, repayments: EarlyRepayment[
   repayments.forEach((repayment, index) => {
     if (repayment.enabled !== undefined && typeof repayment.enabled !== 'boolean') errors.push(`Досрочный платёж №${index + 1}: признак активности повреждён`)
     if (!finite(repayment.amount) || repayment.amount < 0) errors.push(`Досрочный платёж №${index + 1}: сумма не может быть отрицательной`)
+    else if (repayment.amount > MAX_MONEY_AMOUNT) errors.push(`Досрочный платёж №${index + 1}: сумма не должна превышать ${MAX_MONEY_AMOUNT}`)
     if (repayment.sameDaySequence !== undefined && (!Number.isInteger(repayment.sameDaySequence) || repayment.sameDaySequence < 0)) errors.push(`Досрочный платёж №${index + 1}: порядок применения повреждён`)
     if (!oneOf(repayment.strategy, repaymentStrategies)) errors.push(`Досрочный платёж №${index + 1}: стратегия повреждена`)
     if (!oneOf(repayment.source, repaymentSources)) errors.push(`Досрочный платёж №${index + 1}: источник повреждён`)
@@ -127,6 +128,8 @@ export function validateScenario(config: LoanConfig, repayments: EarlyRepayment[
   totalRepaymentsByDate.forEach((count, date) => {
     if (count > 1) errors.push(`На дату ${date} можно указать только одну общую сумму списания с учётом комиссии`)
   })
+  const requestedTotal = repayments.reduce((sum, repayment) => sum + repayment.amount, 0)
+  if (!Number.isFinite(requestedTotal) || requestedTotal > MAX_FINANCIAL_RESULT) errors.push(`Сумма всех досрочных платежей не должна превышать ${MAX_FINANCIAL_RESULT}`)
   const sortedGrace = [...gracePeriods].sort((a, b) => a.startDate.localeCompare(b.startDate))
   sortedGrace.forEach((period, index) => {
     if (!isISODate(period.startDate)) errors.push(`Льготный период №${index + 1}: дата начала должна быть корректной`)
@@ -139,7 +142,7 @@ export function validateScenario(config: LoanConfig, repayments: EarlyRepayment[
     if (typeof period.extendTerm !== 'boolean') errors.push(`Льготный период №${index + 1}: правило продления срока повреждено`)
     if (typeof period.accrueInterest !== 'boolean') errors.push(`Льготный период №${index + 1}: правило начисления процентов повреждено`)
     if (typeof period.capitalizeInterest !== 'boolean') errors.push(`Льготный период №${index + 1}: правило капитализации процентов повреждено`)
-    if (period.paymentAmount !== undefined && (!finite(period.paymentAmount) || period.paymentAmount < 0)) errors.push(`Льготный период №${index + 1}: индивидуальный платёж должен быть неотрицательным`)
+    if (period.paymentAmount !== undefined && (!finite(period.paymentAmount) || period.paymentAmount < 0 || period.paymentAmount > MAX_MONEY_AMOUNT)) errors.push(`Льготный период №${index + 1}: индивидуальный платёж должен быть от 0 до ${MAX_MONEY_AMOUNT}`)
     if (index > 0 && isISODate(period.startDate) && isISODate(sortedGrace[index - 1].endDate) && period.startDate <= sortedGrace[index - 1].endDate) errors.push('Льготные периоды не должны пересекаться')
   })
   if (errors.length === 0) {

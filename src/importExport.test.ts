@@ -217,6 +217,11 @@ describe('импорт резервной копии', () => {
     expect(() => parseLoanBackup(JSON.stringify({ config: { ...defaultConfig, paymentDay: 15.7 }, repayments: [], gracePeriods: [] }))).toThrow('недопустимые числа')
   })
 
+  it('отклоняет Number.MAX_VALUE и чрезмерные суммы операций', () => {
+    expect(() => parseLoanBackup(JSON.stringify({ config: { ...defaultConfig, principal: Number.MAX_VALUE } }))).toThrow('недопустимые числа')
+    expect(() => parseLoanBackup(JSON.stringify({ config: defaultConfig, repayments: [{ ...repayment, amount: Number.MAX_VALUE }] }))).toThrow('досрочном платеже')
+  })
+
   it('отклоняет комиссию за досрочное погашение выше 100%', () => {
     expect(() => parseLoanBackup(JSON.stringify({ config: { ...defaultConfig, earlyRepaymentFeePercent: 150 }, repayments: [], gracePeriods: [] }))).toThrow('недопустимые числа')
   })

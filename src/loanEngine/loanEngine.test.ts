@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { calculateAnnuityPayment, calculateDebtAtDate, calculateInterest, compareScenarios, createRateTimeline, extendedPaymentPeriods, generateBaseSchedule, nextPaymentDate, scheduledPaymentDates, sortRepaymentsByApplicationOrder, validateScenario } from '.'
-import { MAX_RATE_CHANGES } from './limits'
+import { MAX_MONEY_AMOUNT, MAX_RATE_CHANGES } from './limits'
 import type { EarlyRepayment, GracePeriod, LoanConfig } from './types'
 
 const config: LoanConfig = {
@@ -12,6 +12,18 @@ const config: LoanConfig = {
 const early = (patch: Partial<EarlyRepayment> = {}): EarlyRepayment => ({ id: 'e1', date: '2024-08-15', amount: 300_000, amountMode: 'extra', strategy: 'reduceTerm', source: 'own', sameDayOrder: 'regularFirst', interestFirst: true, ...patch })
 
 describe('loan engine', () => {
+  it('отклоняет нефинитные и чрезмерные денежные значения до построения графика', () => {
+    expect(validateScenario({ ...config, principal: Number.MAX_VALUE }, [], []).join(' ')).toContain(String(MAX_MONEY_AMOUNT))
+    expect(validateScenario(config, [early({ amount: Number.POSITIVE_INFINITY })], []).join(' ')).toContain(String(MAX_MONEY_AMOUNT))
+    expect(() => generateBaseSchedule({ ...config, principal: Number.MAX_VALUE })).toThrow(String(MAX_MONEY_AMOUNT))
+  })
+
+  it('не возвращает нефинитные числа в допустимом граничном графике', () => {
+    const schedule = generateBaseSchedule({ ...config, principal: MAX_MONEY_AMOUNT, annualRate: 100, termMonths: 12 })
+    const serialized = JSON.stringify(schedule)
+    expect(serialized).not.toMatch(/(?:NaN|Infinity)/)
+    expect(schedule.every(row => [row.payment, row.interest, row.principal, row.cashFlowTotal, row.closingBalance].every(Number.isFinite))).toBe(true)
+  })
   it('рассчитывает аннуитетный платёж', () => expect(calculateAnnuityPayment(1_000_000, 12, 12).toNumber()).toBeCloseTo(88848.79, 2))
   it('строит базовый график с выдачей и закрывает долг', () => { const s=generateBaseSchedule(config); expect(s[0]).toMatchObject({number:1,date:'2024-01-01',payment:0,interest:0,principal:0,closingBalance:3000000}); expect(s.length).toBeLessThanOrEqual(121); expect(s.at(-1)?.closingBalance).toBe(0) })
   it('добавляет пояснение формулы для строк платежей', () => { const row=generateBaseSchedule(config).find(x=>x.payment>0)!; expect(row.audit).toMatchObject({periodStart:'2024-01-01',periodEnd:'2024-02-15',dayCountBasis:'actualActual',rounding:'kopecks'}); expect(row.audit!.interestBeforeRounding).toBeGreaterThan(0) })

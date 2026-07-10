@@ -12,6 +12,7 @@ import { money, num } from './rounding'
 import { sortRepaymentsByApplicationOrder } from './repaymentOrder'
 import type { EarlyRepayment, GracePeriod, LoanConfig, PaymentScheduleItem, RepaymentApplicationOutcome, RepaymentStrategy, ScheduleEventType } from './types'
 import { validateScenario } from './validation'
+import { assertFiniteScheduleItem } from './financialSafety'
 
 interface Options { earlyRepayments?: EarlyRepayment[]; gracePeriods?: GracePeriod[]; forcedStrategy?: RepaymentStrategy; paymentCalendar?: PreparedPaymentCalendar; scenarioAlreadyValidated?: boolean }
 
@@ -134,10 +135,12 @@ export function generateBaseSchedule(config: LoanConfig, options: Options = {}):
     isRegularPayment: false,
     isGracePayment: false
   }]
+  assertFiniteScheduleItem(schedule[0])
   const pushScheduleRow = (row: PaymentScheduleItem) => {
     if (schedule.length >= MAX_SCHEDULE_ROWS) {
       throw new Error(`График не закрывает кредит в допустимое количество строк (${MAX_SCHEDULE_ROWS})`)
     }
+    assertFiniteScheduleItem(row)
     schedule.push(row)
   }
   const appendPendingRateChange = (labels: string[], types: ScheduleEventType[]) => {

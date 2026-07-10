@@ -3,7 +3,7 @@ import { regularPaymentDateMatches, repaymentAmountModeContextForRegularDate, re
 import { defaultConfig } from './loanDefaults'
 import type { RepaymentRule } from './repaymentRules'
 import { assertLoanCandidateValid } from './loanCandidate'
-import { MAX_EARLY_REPAYMENTS, MAX_GRACE_PERIODS, MAX_RATE_CHANGES, MAX_REPAYMENT_RULES, MAX_RULE_SKIP_MONTHS, MAX_TERM_MONTHS, MAX_TEXT_FIELD_LENGTH } from './loanEngine/limits'
+import { MAX_EARLY_REPAYMENTS, MAX_GRACE_PERIODS, MAX_MONEY_AMOUNT, MAX_PERCENT, MAX_RATE_CHANGES, MAX_REPAYMENT_RULES, MAX_RULE_SKIP_MONTHS, MAX_TERM_MONTHS, MAX_TEXT_FIELD_LENGTH } from './loanEngine/limits'
 import { isISODate, isISOYearMonth } from './utils/dateValidation'
 
 export interface LoanBackupData {
@@ -25,7 +25,7 @@ export interface LoanBackupData {
 
 const isObject = (value: unknown): value is Record<string, unknown> => Boolean(value) && typeof value === 'object' && !Array.isArray(value)
 const oneOf = <T extends string>(value: unknown, values: readonly T[]): value is T => typeof value === 'string' && values.includes(value as T)
-const finite = (value: unknown, minimum = 0) => typeof value === 'number' && Number.isFinite(value) && value >= minimum
+const finite = (value: unknown, minimum = 0, maximum = MAX_MONEY_AMOUNT) => typeof value === 'number' && Number.isFinite(value) && value >= minimum && value <= maximum
 const integer = (value: unknown, minimum = 0) => finite(value, minimum) && Number.isInteger(value)
 const positive = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value) && value > 0
 const hexColor = (value: unknown): value is string => typeof value === 'string' && /^#[0-9a-fA-F]{6}$/.test(value)
@@ -124,7 +124,7 @@ export function parseLoanBackupObject(raw: unknown): LoanBackupData {
       balanceMoment: explicitOneOfOrDefault(interest.balanceMoment, balanceMoments, defaultConfig.interest.balanceMoment, 'Момент остатка для процентов')
     }
   } as LoanConfig
-  if (!positive(config.principal) || !finite(config.annualRate) || config.annualRate > 100 || !integer(config.termMonths, 1) || config.termMonths > MAX_TERM_MONTHS || !integer(config.paymentDay, 1) || config.paymentDay > 31 || !finite(config.closeThreshold) || !finite(config.oneTimeFee) || !finite(config.monthlyFee) || !finite(config.earlyRepaymentFeePercent) || config.earlyRepaymentFeePercent > 100) throw new Error('Параметры кредита содержат недопустимые числа')
+  if (!positive(config.principal) || config.principal > MAX_MONEY_AMOUNT || !finite(config.annualRate, 0, MAX_PERCENT) || !integer(config.termMonths, 1) || config.termMonths > MAX_TERM_MONTHS || !integer(config.paymentDay, 1) || config.paymentDay > 31 || !finite(config.closeThreshold) || !finite(config.oneTimeFee) || !finite(config.monthlyFee) || !finite(config.earlyRepaymentFeePercent, 0, MAX_PERCENT)) throw new Error('Параметры кредита содержат недопустимые числа')
   if (!isISODate(config.issueDate) || !isISODate(config.firstPaymentDate)) throw new Error('Проверьте даты выдачи и первого платежа')
   if (config.firstPaymentDate <= config.issueDate) throw new Error('Первый платёж должен быть после даты выдачи')
   config.rateChangeMode = explicitOneOfOrDefault(source.rateChangeMode, ['nextPeriod', 'exactDate'], defaultConfig.rateChangeMode, 'Режим изменения ставки')
@@ -133,7 +133,7 @@ export function parseLoanBackupObject(raw: unknown): LoanBackupData {
   if (!Array.isArray(rateChangesRaw)) throw new Error('История ставок повреждена')
   if (rateChangesRaw.length > MAX_RATE_CHANGES) throw new Error(`Слишком много изменений ставки. Максимум: ${MAX_RATE_CHANGES}`)
   const rateChanges = sortRateChanges(rateChangesRaw.map((item, index): RateChange => {
-    if (!isObject(item) || typeof item.id !== 'string' || !isISODate(item.date) || typeof item.annualRate !== 'number' || !Number.isFinite(item.annualRate) || item.annualRate < 0 || item.annualRate > 100) throw new Error(`Ошибка в изменении ставки №${index + 1}`)
+    if (!isObject(item) || typeof item.id !== 'string' || !isISODate(item.date) || typeof item.annualRate !== 'number' || !Number.isFinite(item.annualRate) || item.annualRate < 0 || item.annualRate > MAX_PERCENT) throw new Error(`Ошибка в изменении ставки №${index + 1}`)
     if (item.date <= config.issueDate) throw new Error(`Ошибка в изменении ставки №${index + 1}: дата должна быть после выдачи кредита`)
     return { id: item.id, date: item.date, annualRate: item.annualRate }
   }))
@@ -204,7 +204,7 @@ export function parseLoanBackupObject(raw: unknown): LoanBackupData {
     if (item.endDate < item.startDate) throw new Error(`Ошибка в правиле досрочных платежей №${index + 1}: окончание раньше начала`)
     if (item.type === 'paymentPercent' ? item.percent === undefined : item.amount === undefined) throw new Error(`Ошибка в правиле досрочных платежей №${index + 1}`)
     if (item.amount !== undefined && !finite(item.amount)) throw new Error(`Ошибка в правиле досрочных платежей №${index + 1}`)
-    if (item.percent !== undefined && !finite(item.percent)) throw new Error(`Ошибка в правиле досрочных платежей №${index + 1}`)
+    if (item.percent !== undefined && !finite(item.percent, 0, MAX_PERCENT)) throw new Error(`Ошибка в правиле досрочных платежей №${index + 1}`)
     if (item.enabled !== undefined && typeof item.enabled !== 'boolean') throw new Error(`Ошибка в правиле досрочных платежей №${index + 1}`)
     if (item.comment !== undefined && typeof item.comment !== 'string') throw new Error(`Ошибка в правиле досрочных платежей №${index + 1}`)
     const ruleSequence = typeof item.ruleSequence === 'number' && Number.isInteger(item.ruleSequence) && item.ruleSequence >= 0 ? item.ruleSequence : undefined
