@@ -20,6 +20,7 @@ import { useLoanImport } from './hooks/useLoanImport'
 import { useSharedCalculation } from './hooks/useSharedCalculation'
 import { useStorageStatus } from './hooks/useStorageStatus'
 import { createQuarantineExport } from './quarantineExport'
+import { downloadBlob } from './download'
 
 const Overview = lazy(() => import('./components/Overview').then(module => ({ default: module.Overview })))
 const Settings = lazy(() => import('./components/Settings').then(module => ({ default: module.Settings })))
@@ -222,11 +223,7 @@ function App() {
   const downloadQuarantinedLoans = useCallback(() => {
     try {
       const body = JSON.stringify(createQuarantineExport(store.quarantinedLoansRaw), null, 2)
-      const anchor = document.createElement('a')
-      anchor.href = URL.createObjectURL(new Blob([body], { type: 'application/json' }))
-      anchor.download = `credit-quarantine-${new Date().toISOString().slice(0, 10)}.json`
-      anchor.click()
-      URL.revokeObjectURL(anchor.href)
+      downloadBlob(new Blob([body], { type: 'application/json' }), `credit-quarantine-${new Date().toISOString().slice(0, 10)}.json`)
       setImportStatus({ kind: 'success', text: 'Повреждённые данные скачаны' })
     } catch (error) {
       setImportStatus({ kind: 'error', text: error instanceof Error ? error.message : 'Не удалось скачать повреждённые данные' })

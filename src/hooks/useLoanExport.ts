@@ -6,6 +6,7 @@ import { buildShareUrl, createLoanSnapshot, decodeSharedCalculation, encodeShare
 import { loanToBackupData, type LoanProfile } from '../store'
 import type { ImportStatus } from './useLoanImport'
 import { assertPortableJsonSize } from '../portabilityLimits'
+import { downloadBlob } from '../download'
 
 interface UseLoanExportOptions {
   loans: LoanProfile[]
@@ -90,11 +91,7 @@ export function useLoanExport({ loans, activeLoanId, calculatedSchedule, calcula
       }, (_key, value) => typeof value === 'number' && !Number.isFinite(value) ? String(value) : value, 2)
       assertPortableJsonSize(body)
       const safeName = loan.name.toLowerCase().replace(/[^a-zа-яё0-9]+/gi, '-').replace(/^-|-$/g, '') || 'credit'
-      const anchor = document.createElement('a')
-      anchor.href = URL.createObjectURL(new Blob([body], { type: 'application/json' }))
-      anchor.download = `credit-${safeName}.recovery.json`
-      anchor.click()
-      URL.revokeObjectURL(anchor.href)
+      downloadBlob(new Blob([body], { type: 'application/json' }), `credit-${safeName}.recovery.json`)
       setImportStatus({ kind: 'success', text: 'Raw recovery backup исходных параметров сохранён; файл не является подтверждённым расчётом' })
     } catch (error) {
       setImportStatus({ kind: 'error', text: error instanceof Error ? error.message : 'Не удалось сохранить raw recovery backup' })
@@ -160,11 +157,7 @@ export function useLoanExport({ loans, activeLoanId, calculatedSchedule, calcula
     }
 
     const safeName = loan.name.toLowerCase().replace(/[^a-zа-яё0-9]+/gi, '-').replace(/^-|-$/g, '') || 'credit'
-    const anchor = document.createElement('a')
-    anchor.href = URL.createObjectURL(new Blob([body], { type }))
-    anchor.download = `credit-${safeName}.${ext}`
-    anchor.click()
-    URL.revokeObjectURL(anchor.href)
+    downloadBlob(new Blob([body], { type }), `credit-${safeName}.${ext}`)
   }, [activeLoan, calculatedExportsReady, calculatedSchedule, calculationErrors, readyCalculationSnapshot, setImportStatus])
 
   const copyShareLink = useCallback(async () => {

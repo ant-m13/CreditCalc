@@ -1,5 +1,6 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react'
 import { PERSISTED_LOAN_STORAGE_KEY } from '../storageKeys'
+import { downloadBlob } from '../download'
 
 interface ErrorBoundaryState {
   message: string | null
@@ -35,11 +36,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
     }
 
     try {
-      const anchor = document.createElement('a')
-      anchor.href = URL.createObjectURL(new Blob([data], { type: 'application/json' }))
-      anchor.download = `credit-calculator-recovery-${new Date().toISOString().slice(0, 10)}.json`
-      anchor.click()
-      URL.revokeObjectURL(anchor.href)
+      downloadBlob(new Blob([data], { type: 'application/json' }), `credit-calculator-recovery-${new Date().toISOString().slice(0, 10)}.json`)
     } catch (error) {
       console.error('Failed to download recovery data', error)
       this.setState({ recoveryMessage: `Не удалось скачать файл восстановления: ${errorMessage(error)}.` })
