@@ -44,6 +44,8 @@
 
 ### CI/CD и релизный процесс
 
+- Production dependency audit стал блокирующей проверкой в PR, auto-release, Pages deploy и release-dist workflows.
+
 ### Внутренние изменения
 
 ## 1.6.9 — 09.07.2026
