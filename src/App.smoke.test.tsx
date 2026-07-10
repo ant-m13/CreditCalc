@@ -352,4 +352,24 @@ describe('App smoke tests', () => {
     const nextAmount = screen.getByText('Регулярные досрочные платежи').closest('section')?.querySelector('input[type="number"]') as HTMLInputElement | null
     expect(nextAmount?.value).toBe('20000')
   })
+
+  it('скрывает предупреждение карантина без удаления raw и удаляет только после подтверждения', async () => {
+    const user = userEvent.setup()
+    useLoanStore.setState({
+      storageRecoveryReport: ['Повреждённая запись помещена в карантин'],
+      quarantinedLoansRaw: [{ id: 'bad', name: 'Сбой', reason: 'ошибка', raw: { secret: 'raw' } }]
+    })
+    render(<App />)
+
+    await user.click(screen.getByRole('button', { name: 'Скрыть уведомление' }))
+    expect(useLoanStore.getState().quarantinedLoansRaw).toHaveLength(1)
+    expect(screen.getByText(/В карантине 1/)).toBeTruthy()
+
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValueOnce(false).mockReturnValueOnce(true)
+    await user.click(screen.getByRole('button', { name: 'Удалить данные' }))
+    expect(useLoanStore.getState().quarantinedLoansRaw).toHaveLength(1)
+    await user.click(screen.getByRole('button', { name: 'Удалить данные' }))
+    expect(useLoanStore.getState().quarantinedLoansRaw).toEqual([])
+    expect(confirm).toHaveBeenCalledTimes(2)
+  })
 })

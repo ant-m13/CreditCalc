@@ -219,6 +219,11 @@ function App() {
       setImportStatus({ kind: 'error', text: error instanceof Error ? error.message : 'Не удалось скачать повреждённые данные' })
     }
   }, [setImportStatus, store.quarantinedLoansRaw])
+  const deleteQuarantinedLoans = useCallback(() => {
+    if (!window.confirm('Удалить raw-данные карантина без возможности восстановления? Сначала скачайте резервную копию, если она может понадобиться.')) return
+    store.deleteQuarantinedLoans()
+    setImportStatus({ kind: 'success', text: 'Raw-данные карантина удалены' })
+  }, [setImportStatus, store])
 
   return <div ref={shellRef} className="app-shell" data-theme={store.theme} data-ui-font={store.appFontSize} data-schedule-font={store.scheduleFontSize}>
     <aside className={mobileNav ? 'sidebar open' : 'sidebar'}>
@@ -230,7 +235,7 @@ function App() {
       <header><button className="icon-btn menu-btn" aria-label="Открыть меню" onClick={() => setMobileNav(true)}><Menu/></button><div className="header-title"><p>Финансовый план · v{APP_VERSION}</p><h1>{section === 'overview' ? 'Ваш кредит' : nav.find(x => x[0] === section)?.[2]}</h1></div><LoanSwitcher loans={store.loans} activeLoanId={store.activeLoanId} switchLoan={store.switchLoan} createLoan={store.createLoan} renameLoan={store.renameLoan} removeLoan={store.removeLoan}/><button className="icon-btn theme-toggle" onClick={toggleNightTheme} title={store.theme === 'night' ? 'Вернуть светлую тему' : 'Включить ночной режим'} aria-label={store.theme === 'night' ? 'Вернуть светлую тему' : 'Включить ночной режим'}>{store.theme === 'night' ? <Sun/> : <Moon/>}</button><FontControls fontSize={store.appFontSize} setFontSize={store.setAppFontSize}/><div className="header-actions"><span className={storageStatus.kind === 'saved' ? 'status-dot' : 'status-dot warning'}><i/> {storageStatus.kind === 'failed' ? 'Сохранение не удалось' : storageStatus.kind === 'nearQuota' ? 'Мало места' : 'Данные сохранены'}</span><button className="ghost print-action" onClick={printCalculated} disabled={isStale} title={isStale ? STALE_EXPORT_MESSAGE : undefined}><Printer size={16}/> Печать</button><button className="primary add-payment-action" onClick={() => openEarly()}><Plus size={17}/> Досрочный платёж</button></div></header>
       <div className="content">
         {storageWarning && <div className="alert alert-with-actions"><span>{storageWarning}</span><button className="ghost compact" onClick={() => download('json')}>Скачать JSON</button>{storageStatus.kind === 'failed' && <button className="ghost compact" onClick={store.retryStorageSave}>Повторить</button>}</div>}
-        {(store.storageRecoveryReport.length > 0 || store.quarantinedLoansRaw.length > 0) && <div className="alert alert-with-actions"><span>{store.storageRecoveryReport.length > 0 ? store.storageRecoveryReport.join(' · ') : `В карантине ${store.quarantinedLoansRaw.length} повреждённых записей localStorage.`}</span>{store.quarantinedLoansRaw.length > 0 && <button className="ghost compact" onClick={downloadQuarantinedLoans}>Скачать повреждённые данные</button>}<button className="ghost compact" onClick={store.clearStorageRecoveryReport}>Скрыть</button></div>}
+        {(store.storageRecoveryReport.length > 0 || store.quarantinedLoansRaw.length > 0) && <div className="alert alert-with-actions"><span>{store.storageRecoveryReport.length > 0 ? store.storageRecoveryReport.join(' · ') : `В карантине ${store.quarantinedLoansRaw.length} повреждённых записей localStorage.`}</span>{store.quarantinedLoansRaw.length > 0 && <><button className="ghost compact" onClick={downloadQuarantinedLoans}>Скачать raw backup</button><button className="ghost compact danger" onClick={deleteQuarantinedLoans}>Удалить данные</button></>}<button className="ghost compact" onClick={store.dismissStorageRecoveryReport}>Скрыть уведомление</button></div>}
         {isStale && <div className="alert">Пересчитываем график. На экране пока показан предыдущий согласованный расчёт.</div>}
         {errors.length > 0 && <div className="alert">{errors.join(' · ')}</div>}
         <SectionErrorBoundary resetKey={section}>

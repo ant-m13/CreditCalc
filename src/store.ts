@@ -104,7 +104,8 @@ interface LoanState extends LoanData {
   setUseCustomAccentColor: (enabled: boolean) => void
   resetCustomAccentColor: () => void
   retryStorageSave: () => void
-  clearStorageRecoveryReport: () => void
+  dismissStorageRecoveryReport: () => void
+  deleteQuarantinedLoans: () => void
   switchLoan: (id: string) => void
   createLoan: (name?: string) => void
   renameLoan: (id: string, name: string) => void
@@ -211,7 +212,8 @@ export const useLoanStore = create<LoanState>()(persist((set) => ({
   setUseCustomAccentColor: (useCustomAccentColor) => set(s => syncActive(s, { useCustomAccentColor })),
   resetCustomAccentColor: () => set(s => syncActive(s, { customAccentColor: defaultAccentColor, useCustomAccentColor: false })),
   retryStorageSave: () => set(s => ({ activeLoanId: s.activeLoanId, loans: s.loans })),
-  clearStorageRecoveryReport: () => set({ storageRecoveryReport: [], quarantinedLoansRaw: [] }),
+  dismissStorageRecoveryReport: () => set({ storageRecoveryReport: [] }),
+  deleteQuarantinedLoans: () => set({ quarantinedLoansRaw: [] }),
   switchLoan: (id) => set(s => switchToLoan(s, id)),
   createLoan: (name = 'Новый кредит') => set(s => {
     assertCanAddLoan(s.loans.length)
