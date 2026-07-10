@@ -19,6 +19,11 @@ interface ScheduleProps {
 
 const SCHEDULE_PAGE_SIZE = 100
 
+export const getScheduleScrollBehavior = (): ScrollBehavior =>
+  typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    ? 'auto'
+    : 'smooth'
+
 const rowTotal = (row: PaymentScheduleItem) => row.cashFlowTotal ?? row.payment + row.earlyPayment + row.fee
 const rowFee = (row: PaymentScheduleItem) => row.feePaid ?? row.fee
 const rowDeferredInterest = (row: PaymentScheduleItem) => row.deferredInterestClosing ?? 0
@@ -169,7 +174,7 @@ export function Schedule({ schedule, baseSchedule, repayments, currency, display
     if (pendingRow === null) return
     const timer = window.setTimeout(() => {
       const target = document.getElementById(`mobile-schedule-row-${pendingRow}`) ?? document.getElementById(`schedule-row-${pendingRow}`)
-      target?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      target?.scrollIntoView({ behavior: getScheduleScrollBehavior(), block: 'center' })
       setPendingRow(null)
     }, 80)
     return () => window.clearTimeout(timer)

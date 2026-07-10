@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 import { useState } from 'react'
 import { fireEvent, render, screen } from '@testing-library/react'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import type { PaymentScheduleItem } from '../loanEngine'
-import { Schedule } from './Schedule'
+import { getScheduleScrollBehavior, Schedule } from './Schedule'
 
 const scheduleRow = (patch: Partial<PaymentScheduleItem> = {}): PaymentScheduleItem => ({
   number: 1,
@@ -45,6 +45,14 @@ function ScheduleProbe() {
 }
 
 describe('Schedule', () => {
+  it('отключает плавную прокрутку при reduced motion', () => {
+    vi.stubGlobal('matchMedia', vi.fn().mockReturnValue({ matches: true }))
+
+    expect(getScheduleScrollBehavior()).toBe('auto')
+
+    vi.unstubAllGlobals()
+  })
+
   it('показывает сообщение, если дата или месяц не найдены', () => {
     render(<ScheduleProbe/>)
 
