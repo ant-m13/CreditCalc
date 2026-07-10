@@ -38,4 +38,14 @@ describe('Overview debt metrics', () => {
     expect(principalCard.querySelector('b')?.textContent).toContain('7')
     expect(principalCard.textContent).toContain('Будущий основной долг после выдачи')
   })
+
+  it('показывает законный final balloon в обзоре', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2024-01-15T12:00:00Z'))
+    const balloonConfig = { ...defaultConfig, principal: 120_000, annualRate: 12, issueDate: '2024-01-01', firstPaymentDate: '2024-02-01', firstPaymentInterestOnly: false, paymentDay: 1, termMonths: 12, closeThreshold: 0, interest: { ...defaultConfig.interest, method: 'annuity' as const } }
+    const result = buildLoanCalculation({ config: balloonConfig, repayments: [], repaymentRules: [], gracePeriods: [], selectedScenario: 'combined' })
+    render(<Overview config={balloonConfig} displayDecimals={2} repayments={[]} gracePeriods={[]} comparison={result.comparison!} selected={result.selected!} chartData={[]} onSelect={vi.fn()} onOpen={vi.fn()}/>)
+
+    expect(screen.getByText(/Финальный платёж по выбранным настройкам/)).toBeTruthy()
+  })
 })
