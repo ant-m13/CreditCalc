@@ -37,6 +37,7 @@ const dayCountBases = ['365', '366', '360', 'actual365', 'actualActual'] as cons
 const periodStarts = ['inclusive', 'exclusive'] as const
 const balanceMoments = ['startOfDay', 'endOfDay'] as const
 const scenarioIds = ['base', 'reduceTerm', 'reducePayment', 'combined'] as const
+export const SUPPORTED_BACKUP_VERSIONS = [1] as const
 const oneOfOrDefault = <T extends string>(value: unknown, values: readonly T[], fallback: T): T => oneOf(value, values) ? value : fallback
 const booleanOrDefault = (value: unknown, fallback: boolean) => typeof value === 'boolean' ? value : fallback
 const ensureTextLength = (value: unknown, label: string) => {
@@ -77,6 +78,9 @@ export function parseLoanBackup(text: string): LoanBackupData {
 
 export function parseLoanBackupObject(raw: unknown): LoanBackupData {
   if (!isObject(raw) || !isObject(raw.config)) throw new Error('В файле отсутствуют параметры кредита')
+  if (raw.version !== undefined && !SUPPORTED_BACKUP_VERSIONS.includes(raw.version as 1)) {
+    throw new Error(`Версия JSON-резервной копии ${String(raw.version)} не поддерживается. Поддерживается версия 1`)
+  }
 
   const source = raw.config
   const interest = isObject(source.interest) ? source.interest : {}

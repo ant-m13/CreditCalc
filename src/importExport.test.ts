@@ -6,6 +6,16 @@ import { defaultConfig } from './store'
 const repayment = { id: 'early-1', date: defaultConfig.firstPaymentDate, amount: 8704.99, amountMode: 'extra', strategy: 'reduceTerm', source: 'own', sameDayOrder: 'regularFirst', interestFirst: true }
 
 describe('импорт резервной копии', () => {
+  it('принимает текущую версию JSON и legacy-файл без поля version', () => {
+    expect(parseLoanBackup(JSON.stringify({ version: 1, config: defaultConfig }))).toMatchObject({ config: defaultConfig })
+    expect(parseLoanBackup(JSON.stringify({ config: defaultConfig }))).toMatchObject({ config: defaultConfig })
+  })
+
+  it('отклоняет явно указанную неизвестную версию JSON', () => {
+    expect(() => parseLoanBackup(JSON.stringify({ version: 2, config: defaultConfig }))).toThrow('Версия JSON-резервной копии 2 не поддерживается')
+    expect(() => parseLoanBackup(JSON.stringify({ version: '1', config: defaultConfig }))).toThrow('Версия JSON-резервной копии 1 не поддерживается')
+  })
+
   it('восстанавливает расчёт и настройки интерфейса', () => {
     const result = parseLoanBackup(JSON.stringify({ config: defaultConfig, repayments: [repayment], gracePeriods: [], selectedScenario: 'reducePayment', settings: { termUnit: 'years', displayDecimals: 0, theme: 'ocean' } }))
     expect(result.repayments[0].amount).toBe(8704.99)
