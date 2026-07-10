@@ -112,7 +112,7 @@ describe('ссылка на расчёт', () => {
     expect(() => parseLoanSnapshot({ ...snapshot(), version: 2 })).toThrow('Версия ссылки')
   })
 
-  it('нормализует устаревший payload ссылки с неизвестными полями расчёта', async () => {
+  it('отклоняет payload ссылки с явно повреждёнными полями расчёта', async () => {
     const legacy = {
       ...snapshot(),
       config: {
@@ -130,12 +130,7 @@ describe('ссылка на расчёт', () => {
         }
       }
     }
-    const decoded = await decodeSharedCalculation(await encodeSharedCalculation(legacy as never))
-    expect(decoded.config.firstPaymentInterestOnly).toBe(defaultConfig.firstPaymentInterestOnly)
-    expect(decoded.config.paymentType).toBe(defaultConfig.paymentType)
-    expect(decoded.config.frequency).toBe(defaultConfig.frequency)
-    expect(decoded.config.rounding).toBe(defaultConfig.rounding)
-    expect(decoded.config.interest).toEqual(defaultConfig.interest)
+    await expect(decodeSharedCalculation(await encodeSharedCalculation(legacy as never))).rejects.toThrow('недопустимое значение')
   })
 
   it('восстанавливает старый payload ссылки без новых полей расчёта', async () => {

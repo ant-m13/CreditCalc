@@ -38,8 +38,16 @@ const periodStarts = ['inclusive', 'exclusive'] as const
 const balanceMoments = ['startOfDay', 'endOfDay'] as const
 const scenarioIds = ['base', 'reduceTerm', 'reducePayment', 'combined'] as const
 export const SUPPORTED_BACKUP_VERSIONS = [1] as const
-const oneOfOrDefault = <T extends string>(value: unknown, values: readonly T[], fallback: T): T => oneOf(value, values) ? value : fallback
-const booleanOrDefault = (value: unknown, fallback: boolean) => typeof value === 'boolean' ? value : fallback
+const explicitOneOfOrDefault = <T extends string>(value: unknown, values: readonly T[], fallback: T, label: string): T => {
+  if (value === undefined) return fallback
+  if (oneOf(value, values)) return value
+  throw new Error(`${label} содержит недопустимое значение`)
+}
+const explicitBooleanOrDefault = (value: unknown, fallback: boolean, label: string) => {
+  if (value === undefined) return fallback
+  if (typeof value === 'boolean') return value
+  throw new Error(`${label} содержит недопустимое значение`)
+}
 const ensureTextLength = (value: unknown, label: string) => {
   if (typeof value === 'string' && value.length > MAX_TEXT_FIELD_LENGTH) throw new Error(`${label} слишком длинное. Максимум: ${MAX_TEXT_FIELD_LENGTH} символов`)
 }
@@ -83,36 +91,43 @@ export function parseLoanBackupObject(raw: unknown): LoanBackupData {
   }
 
   const source = raw.config
+  if (source.interest !== undefined && !isObject(source.interest)) throw new Error('Правила начисления процентов повреждены')
   const interest = isObject(source.interest) ? source.interest : {}
   const importWarnings: string[] = []
-  const currency = oneOf(source.currency, supportedCurrencies) ? source.currency : defaultConfig.currency
+  let currency: LoanConfig['currency']
   if (source.currency === undefined) {
+    currency = defaultConfig.currency
     importWarnings.push(`В файле не указана валюта, используется ${defaultConfig.currency}`)
-  } else if (!oneOf(source.currency, supportedCurrencies)) {
-    importWarnings.push(`Валюта ${String(source.currency)} не поддерживается и заменена на ${defaultConfig.currency}`)
+  } else if (oneOf(source.currency, supportedCurrencies)) {
+    currency = source.currency
+  } else if (source.currency === 'RUR') {
+    currency = 'RUB'
+    importWarnings.push('Legacy-код валюты RUR преобразован в RUB без конвертации суммы')
+  } else {
+    throw new Error(`Валюта ${String(source.currency)} не поддерживается`)
   }
   const config = {
     ...defaultConfig,
     ...source,
-    firstPaymentInterestOnly: booleanOrDefault(source.firstPaymentInterestOnly, defaultConfig.firstPaymentInterestOnly),
-    paymentType: oneOfOrDefault(source.paymentType, paymentTypes, defaultConfig.paymentType),
-    frequency: oneOfOrDefault(source.frequency, frequencies, defaultConfig.frequency),
+    firstPaymentInterestOnly: explicitBooleanOrDefault(source.firstPaymentInterestOnly, defaultConfig.firstPaymentInterestOnly, 'Настройка первого платежа'),
+    paymentType: explicitOneOfOrDefault(source.paymentType, paymentTypes, defaultConfig.paymentType, 'Тип платежа'),
+    frequency: explicitOneOfOrDefault(source.frequency, frequencies, defaultConfig.frequency, 'Частота платежей'),
     currency,
-    rounding: oneOfOrDefault(source.rounding, roundingModes, defaultConfig.rounding),
+    rounding: explicitOneOfOrDefault(source.rounding, roundingModes, defaultConfig.rounding, 'Режим округления'),
     interest: {
       ...defaultConfig.interest,
       ...interest,
-      method: oneOfOrDefault(interest.method, interestMethods, defaultConfig.interest.method),
-      dayCountBasis: oneOfOrDefault(interest.dayCountBasis, dayCountBases, defaultConfig.interest.dayCountBasis),
-      includePaymentDate: booleanOrDefault(interest.includePaymentDate, defaultConfig.interest.includePaymentDate),
-      periodStart: oneOfOrDefault(interest.periodStart, periodStarts, defaultConfig.interest.periodStart),
-      balanceMoment: oneOfOrDefault(interest.balanceMoment, balanceMoments, defaultConfig.interest.balanceMoment)
+      method: explicitOneOfOrDefault(interest.method, interestMethods, defaultConfig.interest.method, 'Метод начисления процентов'),
+      dayCountBasis: explicitOneOfOrDefault(interest.dayCountBasis, dayCountBases, defaultConfig.interest.dayCountBasis, 'База расчёта дней'),
+      includePaymentDate: explicitBooleanOrDefault(interest.includePaymentDate, defaultConfig.interest.includePaymentDate, 'Правило включения даты платежа'),
+      periodStart: explicitOneOfOrDefault(interest.periodStart, periodStarts, defaultConfig.interest.periodStart, 'Начало процентного периода'),
+      balanceMoment: explicitOneOfOrDefault(interest.balanceMoment, balanceMoments, defaultConfig.interest.balanceMoment, 'Момент остатка для процентов')
     }
   } as LoanConfig
   if (!positive(config.principal) || !finite(config.annualRate) || config.annualRate > 100 || !integer(config.termMonths, 1) || config.termMonths > MAX_TERM_MONTHS || !integer(config.paymentDay, 1) || config.paymentDay > 31 || !finite(config.closeThreshold) || !finite(config.oneTimeFee) || !finite(config.monthlyFee) || !finite(config.earlyRepaymentFeePercent) || config.earlyRepaymentFeePercent > 100) throw new Error('Параметры кредита содержат недопустимые числа')
   if (!isISODate(config.issueDate) || !isISODate(config.firstPaymentDate)) throw new Error('Проверьте даты выдачи и первого платежа')
   if (config.firstPaymentDate <= config.issueDate) throw new Error('Первый платёж должен быть после даты выдачи')
-  if (!oneOf(config.rateChangeMode, ['nextPeriod', 'exactDate'])) throw new Error('Файл содержит неизвестный режим изменения ставки')
+  config.rateChangeMode = explicitOneOfOrDefault(source.rateChangeMode, ['nextPeriod', 'exactDate'], defaultConfig.rateChangeMode, 'Режим изменения ставки')
 
   const rateChangesRaw = source.rateChanges === undefined ? [] : source.rateChanges
   if (!Array.isArray(rateChangesRaw)) throw new Error('История ставок повреждена')
@@ -153,6 +168,8 @@ export function parseLoanBackupObject(raw: unknown): LoanBackupData {
     })
     const amountMode = context.normalizedAmountMode
     if (amountModeErrors.length || amountMode === null) throw new Error(amountModeErrors[0] ?? label)
+    if (item.amountMode === undefined) importWarnings.push(`${label}: отсутствующий legacy amountMode преобразован в ${amountMode}`)
+    else if (item.amountMode === 'total') importWarnings.push(`${label}: legacy amountMode total преобразован в totalWithFee`)
     const enabled = item.enabled ?? true
     return { ...item, enabled, amountMode, sameDaySequence: sameDaySequence ?? index, sameDayOrder: amountMode === 'totalWithFee' ? 'regularFirst' : item.sameDayOrder } as unknown as EarlyRepayment
   })
