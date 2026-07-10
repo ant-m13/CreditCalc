@@ -13,7 +13,7 @@ import { sortRepaymentsByApplicationOrder } from './repaymentOrder'
 import type { EarlyRepayment, GracePeriod, LoanConfig, PaymentScheduleItem, RepaymentApplicationOutcome, RepaymentStrategy, ScheduleEventType } from './types'
 import { validateScenario } from './validation'
 
-interface Options { earlyRepayments?: EarlyRepayment[]; gracePeriods?: GracePeriod[]; forcedStrategy?: RepaymentStrategy; paymentCalendar?: PreparedPaymentCalendar }
+interface Options { earlyRepayments?: EarlyRepayment[]; gracePeriods?: GracePeriod[]; forcedStrategy?: RepaymentStrategy; paymentCalendar?: PreparedPaymentCalendar; scenarioAlreadyValidated?: boolean }
 
 const clampDebtBalance = (value: Decimal.Value) => Decimal.max(0, new Decimal(value))
 
@@ -80,8 +80,10 @@ export function generateBaseSchedule(config: LoanConfig, options: Options = {}):
   const gracePeriods = options.gracePeriods ?? []
   if (allRepayments.length > MAX_EARLY_REPAYMENTS) throw new Error(`Слишком много досрочных платежей. Максимум: ${MAX_EARLY_REPAYMENTS}`)
   if (gracePeriods.length > MAX_GRACE_PERIODS) throw new Error(`Слишком много льготных периодов. Максимум: ${MAX_GRACE_PERIODS}`)
-  const validationErrors = validateScenario(config, allRepayments, gracePeriods)
-  if (validationErrors.length > 0) throw new Error(validationErrors.join(' · '))
+  if (!options.scenarioAlreadyValidated) {
+    const validationErrors = validateScenario(config, allRepayments, gracePeriods)
+    if (validationErrors.length > 0) throw new Error(validationErrors.join(' · '))
+  }
   const paymentCalendar = options.paymentCalendar ?? preparePaymentCalendar(config, gracePeriods)
   const regularRepaymentDates = regularPaymentDateMatches(
     allRepayments.filter(item => item.amountMode !== 'extra').map(item => item.date),

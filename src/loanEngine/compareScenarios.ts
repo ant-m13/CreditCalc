@@ -65,19 +65,23 @@ function addCumulativeSavings(schedule: ReturnType<typeof generateBaseSchedule>,
   })
 }
 
-export function compareScenarios(config: LoanConfig, repayments: EarlyRepayment[], gracePeriods: GracePeriod[] = [], preparedCalendar?: PreparedPaymentCalendar): ComparisonResult {
-  const validationErrors = validateScenario(config, repayments, gracePeriods)
-  if (validationErrors.length > 0) throw new Error(validationErrors.join(' · '))
+interface CompareScenarioOptions { scenarioAlreadyValidated?: boolean }
+
+export function compareScenarios(config: LoanConfig, repayments: EarlyRepayment[], gracePeriods: GracePeriod[] = [], preparedCalendar?: PreparedPaymentCalendar, options: CompareScenarioOptions = {}): ComparisonResult {
+  if (!options.scenarioAlreadyValidated) {
+    const validationErrors = validateScenario(config, repayments, gracePeriods)
+    if (validationErrors.length > 0) throw new Error(validationErrors.join(' · '))
+  }
   const paymentCalendar = preparedCalendar ?? preparePaymentCalendar(config, gracePeriods)
-  const base = toResult('base', 'Без досрочных', 'base', generateBaseSchedule(config, { gracePeriods, paymentCalendar }), config)
+  const base = toResult('base', 'Без досрочных', 'base', generateBaseSchedule(config, { gracePeriods, paymentCalendar, scenarioAlreadyValidated: true }), config)
   const make = (strategy: RepaymentStrategy, name: string) => {
     const mapped = repayments.map(r => ({ ...r, strategy }))
-    const schedule = addCumulativeSavings(generateBaseSchedule(config, { earlyRepayments: mapped, gracePeriods, forcedStrategy: strategy, paymentCalendar }), base.schedule)
+    const schedule = addCumulativeSavings(generateBaseSchedule(config, { earlyRepayments: mapped, gracePeriods, forcedStrategy: strategy, paymentCalendar, scenarioAlreadyValidated: true }), base.schedule)
     return toResult(strategy, name, strategy, schedule, config, base)
   }
   const term = make('reduceTerm', 'Сократить срок')
   const payment = make('reducePayment', 'Снизить платёж')
-  const combinedSchedule = addCumulativeSavings(generateBaseSchedule(config, { earlyRepayments: repayments, gracePeriods, paymentCalendar }), base.schedule)
+  const combinedSchedule = addCumulativeSavings(generateBaseSchedule(config, { earlyRepayments: repayments, gracePeriods, paymentCalendar, scenarioAlreadyValidated: true }), base.schedule)
   const combined = toResult('combined', 'По операциям', 'combined', combinedSchedule, config, base)
   const scenarios = [base, term, payment, combined]
   return {
