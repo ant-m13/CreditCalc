@@ -45,6 +45,7 @@
 
 ### CI/CD и релизный процесс
 
+- Версия приложения повышена до 1.7.0.
 - Production dependency audit стал блокирующей проверкой в PR, auto-release, Pages deploy и release-dist workflows.
 - Проверка и сборка релиза выполняются с `contents: read`, публикация Release и Pages вынесена в зависимые jobs с минимальными write-полномочиями, а checkout credentials отключены вне шага push тега.
 - Auto-release, release-dist и Pages deploy проверяют, что существующий version tag указывает на ожидаемый commit и соответствует версии `package.json`; конфликтующий тег останавливает выпуск.

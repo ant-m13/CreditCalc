@@ -166,11 +166,11 @@ pnpm test
 pnpm test:coverage
 pnpm build
 git add package.json CHANGELOG.md README.md docs src .github
-git commit -m "Release v1.6.9"
-git push origin release/1.6.9
+git commit -m "Release v1.7.0"
+git push origin release/1.7.0
 ```
 
-После merge release-ветки в `main` workflow сам создаст тег, релиз и запустит публикацию GitHub Pages из release-тега. Ручной запуск `release-dist.yml` или `deploy-pages.yml` тоже возможен, но нужно указать существующий тег, например `v1.6.9`.
+После merge release-ветки в `main` workflow сам создаст тег, релиз и запустит публикацию GitHub Pages из release-тега. Ручной запуск `release-dist.yml` или `deploy-pages.yml` тоже возможен, но нужно указать существующий тег, например `v1.7.0`.
 
 Архив релиза содержит готовую папку `dist` и подходит для размещения на любом статическом хостинге.
 
