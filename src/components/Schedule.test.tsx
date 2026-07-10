@@ -56,7 +56,7 @@ describe('Schedule', () => {
   it('показывает сообщение, если дата или месяц не найдены', () => {
     render(<ScheduleProbe/>)
 
-    fireEvent.change(screen.getByPlaceholderText('Дата, месяц или год'), { target: { value: '2030-01' } })
+    fireEvent.change(screen.getByRole('textbox', { name: 'Дата или месяц для перехода по графику' }), { target: { value: '2030-01' } })
     fireEvent.click(screen.getByRole('button', { name: 'Перейти' }))
 
     expect(screen.getByText('Дата/месяц не найден')).toBeTruthy()
