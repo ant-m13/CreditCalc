@@ -41,4 +41,17 @@ describe('release workflows', () => {
       expect(workflow.match(/persist-credentials: false/g)).toHaveLength(disabledCredentialCount)
     }
   })
+
+  it('отклоняет существующие version tags на неожиданной ревизии', () => {
+    const autoRelease = readWorkflow('auto-release.yml')
+    const releaseDist = readWorkflow('release-dist.yml')
+    const deployPages = readWorkflow('deploy-pages.yml')
+
+    expect(autoRelease).toContain('if [[ "$TAG_SHA" != "$GITHUB_SHA" ]]')
+    expect(autoRelease).not.toContain('Checkout existing tag for repair runs')
+    expect(releaseDist).toContain('if [[ "$RELEASE_TAG" != "$EXPECTED_TAG" ]]')
+    expect(releaseDist).toContain('if [[ "$TAG_SHA" != "$HEAD_SHA" ]]')
+    expect(deployPages).toContain('if [[ "$TAG_SHA" != "$HEAD_SHA" ]]')
+    expect(deployPages).toContain('if [[ -n "$EXPECTED_SHA" && "$HEAD_SHA" != "$EXPECTED_SHA" ]]')
+  })
 })

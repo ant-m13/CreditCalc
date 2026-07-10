@@ -39,7 +39,25 @@ jobs:
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+          fetch-depth: 0
           persist-credentials: false
+
+      - name: Verify release revision
+        shell: bash
+        run: |
+          VERSION="$(node -p "require('./package.json').version")"
+          EXPECTED_TAG="v$VERSION"
+          HEAD_SHA="$(git rev-parse HEAD)"
+          TAG_SHA="$(git rev-list -n 1 "$RELEASE_TAG")"
+
+          if [[ "$RELEASE_TAG" != "$EXPECTED_TAG" ]]; then
+            echo "Тег $RELEASE_TAG не соответствует версии package.json: $EXPECTED_TAG"
+            exit 1
+          fi
+          if [[ "$TAG_SHA" != "$HEAD_SHA" ]]; then
+            echo "Тег $RELEASE_TAG указывает на $TAG_SHA вместо checkout-ревизии $HEAD_SHA"
+            exit 1
+          fi
 
       - name: Set up Node.js
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4

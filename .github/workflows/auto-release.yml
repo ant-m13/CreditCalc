@@ -55,8 +55,14 @@ jobs:
 
           if git ls-remote --exit-code --tags origin \
             "refs/tags/$TAG" >/dev/null 2>&1; then
+            git fetch --no-tags origin "refs/tags/$TAG:refs/tags/$TAG"
+            TAG_SHA="$(git rev-list -n 1 "$TAG")"
+            if [[ "$TAG_SHA" != "$GITHUB_SHA" ]]; then
+              echo "Тег $TAG уже указывает на $TAG_SHA вместо ожидаемого $GITHUB_SHA"
+              exit 1
+            fi
             echo "exists=true" >> "$GITHUB_OUTPUT"
-            echo "Тег $TAG уже существует — выпуск пропущен."
+            echo "Тег $TAG уже существует на ожидаемой ревизии."
           else
             echo "exists=false" >> "$GITHUB_OUTPUT"
             echo "Будет создан тег $TAG."
@@ -71,13 +77,6 @@ jobs:
             echo "В CHANGELOG.md отсутствует раздел для версии $VERSION"
             exit 1
           fi
-
-      - name: Checkout existing tag for repair runs
-        if: steps.version.outputs.exists == 'true'
-        shell: bash
-        env:
-          TAG: ${{ steps.version.outputs.tag }}
-        run: git checkout "$TAG"
 
       - name: Enable pnpm
         run: corepack enable

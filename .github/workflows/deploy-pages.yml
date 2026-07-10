@@ -82,7 +82,41 @@ jobs:
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           ref: ${{ steps.release.outputs.tag }}
+          fetch-depth: 0
           persist-credentials: false
+
+      - name: Verify release revision
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_SHA: ${{ github.sha }}
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+          WORKFLOW_SHA: ${{ github.event.workflow_run.head_sha || '' }}
+        run: |
+          VERSION="$(node -p "require('./package.json').version")"
+          EXPECTED_TAG="v$VERSION"
+          HEAD_SHA="$(git rev-parse HEAD)"
+          TAG_SHA="$(git rev-list -n 1 "$RELEASE_TAG")"
+
+          if [[ "$RELEASE_TAG" != "$EXPECTED_TAG" ]]; then
+            echo "Тег $RELEASE_TAG не соответствует версии package.json: $EXPECTED_TAG"
+            exit 1
+          fi
+          if [[ "$TAG_SHA" != "$HEAD_SHA" ]]; then
+            echo "Тег $RELEASE_TAG указывает на $TAG_SHA вместо checkout-ревизии $HEAD_SHA"
+            exit 1
+          fi
+
+          EXPECTED_SHA=""
+          if [[ "$EVENT_NAME" == "workflow_run" ]]; then
+            EXPECTED_SHA="$WORKFLOW_SHA"
+          elif [[ "$EVENT_NAME" == "push" ]]; then
+            EXPECTED_SHA="$EVENT_SHA"
+          fi
+          if [[ -n "$EXPECTED_SHA" && "$HEAD_SHA" != "$EXPECTED_SHA" ]]; then
+            echo "Тег $RELEASE_TAG указывает на $HEAD_SHA вместо ожидаемой ревизии события $EXPECTED_SHA"
+            exit 1
+          fi
 
       - name: Read deployment revision
         id: revision
