@@ -85,6 +85,7 @@ function App() {
     calculatedSchedule: selected?.schedule ?? null,
     calculatedExportsReady: !isStale,
     calculationErrors: errors,
+    readyCalculationSnapshot: isStale ? null : calculationSnapshot,
     setImportStatus
   })
   const {

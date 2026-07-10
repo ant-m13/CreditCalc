@@ -1,7 +1,7 @@
 import { useCallback } from 'react'
 import type { LoanBackupData } from '../importExport'
 import type { PaymentScheduleItem } from '../loanEngine'
-import { buildLoanCalculation } from '../loanCalculation'
+import type { LoanCalculationSnapshot } from '../loanCalculationRunner'
 import { buildShareUrl, createLoanSnapshot, decodeSharedCalculation, encodeSharedCalculation, looksLikeSharedCalculationUrl, normalizeSharedCalculationPayload } from '../shareCalculation'
 import { loanToBackupData, type LoanProfile } from '../store'
 import type { ImportStatus } from './useLoanImport'
@@ -12,6 +12,7 @@ interface UseLoanExportOptions {
   calculatedSchedule: PaymentScheduleItem[] | null
   calculatedExportsReady: boolean
   calculationErrors: string[]
+  readyCalculationSnapshot: LoanCalculationSnapshot | null
   setImportStatus: (status: ImportStatus | null) => void
 }
 
@@ -52,23 +53,27 @@ const exportRequiredFields = (loan: LoanProfile) => [
   { label: 'момент остатка для процентов', value: loan.config.interest?.balanceMoment }
 ]
 
-const createSnapshotFromReadyCalculation = (loan: LoanProfile, calculatedExportsReady: boolean, calculationErrors: string[]) => {
+export const createSnapshotFromReadyCalculation = (loan: LoanProfile, calculatedExportsReady: boolean, calculationErrors: string[], readyCalculationSnapshot: LoanCalculationSnapshot | null) => {
   const missing = exportRequiredFields(loan).filter(field => !hasText(field.value)).map(field => field.label)
   if (missing.length > 0) throw new Error(`Заполните обязательные поля перед экспортом: ${missing.join(', ')}`)
   if (!calculatedExportsReady) throw new Error(STALE_EXPORT_MESSAGE)
   if (calculationErrors.length > 0) throw new Error(calculationErrors.join(' · '))
-  const verificationErrors = buildLoanCalculation({
-    config: loan.config,
-    repayments: loan.repayments,
-    repaymentRules: loan.repaymentRules,
-    gracePeriods: loan.gracePeriods,
-    selectedScenario: loan.selectedScenario
-  }).errors
-  if (verificationErrors.length > 0) throw new Error(verificationErrors.join(' · '))
-  return createLoanSnapshot(loanToBackupData(loan))
+  const ready = readyCalculationSnapshot
+  if (!ready || !ready.revision || ready.loanId !== loan.id || ready.config !== loan.config || ready.repayments !== loan.repayments || ready.repaymentRules !== loan.repaymentRules || ready.gracePeriods !== loan.gracePeriods || ready.selectedScenario !== loan.selectedScenario || ready.displayDecimals !== loan.displayDecimals) {
+    throw new Error(STALE_EXPORT_MESSAGE)
+  }
+  return createLoanSnapshot({
+    ...loanToBackupData(loan),
+    config: ready.config,
+    repayments: ready.repayments,
+    repaymentRules: ready.repaymentRules,
+    gracePeriods: ready.gracePeriods,
+    selectedScenario: ready.selectedScenario,
+    displayDecimals: ready.displayDecimals
+  })
 }
 
-export function useLoanExport({ loans, activeLoanId, calculatedSchedule, calculatedExportsReady, calculationErrors, setImportStatus }: UseLoanExportOptions) {
+export function useLoanExport({ loans, activeLoanId, calculatedSchedule, calculatedExportsReady, calculationErrors, readyCalculationSnapshot, setImportStatus }: UseLoanExportOptions) {
   const activeLoan = useCallback(() => loans.find(item => item.id === activeLoanId) ?? loans[0], [loans, activeLoanId])
   const print = useCallback(() => window.print(), [])
 
@@ -83,7 +88,7 @@ export function useLoanExport({ loans, activeLoanId, calculatedSchedule, calcula
     if (kind === 'json') {
       let snapshot: ReturnType<typeof createLoanSnapshot>
       try {
-        snapshot = createSnapshotFromReadyCalculation(loan, calculatedExportsReady, calculationErrors)
+        snapshot = createSnapshotFromReadyCalculation(loan, calculatedExportsReady, calculationErrors, readyCalculationSnapshot)
       } catch (error) {
         setImportStatus({ kind: 'error', text: error instanceof Error ? error.message : 'Не удалось проверить расчёт перед экспортом' })
         return
@@ -130,26 +135,26 @@ export function useLoanExport({ loans, activeLoanId, calculatedSchedule, calcula
     anchor.download = `credit-${safeName}.${ext}`
     anchor.click()
     URL.revokeObjectURL(anchor.href)
-  }, [activeLoan, calculatedExportsReady, calculatedSchedule, calculationErrors, setImportStatus])
+  }, [activeLoan, calculatedExportsReady, calculatedSchedule, calculationErrors, readyCalculationSnapshot, setImportStatus])
 
   const copyShareLink = useCallback(async () => {
     try {
       const loan = activeLoan()
       if (!loan) return
-      const snapshot = createSnapshotFromReadyCalculation(loan, calculatedExportsReady, calculationErrors)
+      const snapshot = createSnapshotFromReadyCalculation(loan, calculatedExportsReady, calculationErrors, readyCalculationSnapshot)
       const url = await buildShareUrl(snapshot, window.location.href)
       await copyText(url)
       setImportStatus({ kind: 'success', text: `Ссылка на кредит «${loan.name}» скопирована. Ссылка содержит параметры кредита, досрочные платежи и льготные периоды. Не отправляйте её тем, кому не доверяете.` })
     } catch (error) {
       setImportStatus({ kind: 'error', text: error instanceof Error ? error.message : 'Не удалось сформировать ссылку на расчёт' })
     }
-  }, [activeLoan, calculatedExportsReady, calculationErrors, setImportStatus])
+  }, [activeLoan, calculatedExportsReady, calculationErrors, readyCalculationSnapshot, setImportStatus])
 
   const createParameterCode = useCallback(async () => {
     const loan = activeLoan()
     if (!loan) throw new Error('Не выбран кредит')
-    return encodeSharedCalculation(createSnapshotFromReadyCalculation(loan, calculatedExportsReady, calculationErrors))
-  }, [activeLoan, calculatedExportsReady, calculationErrors])
+    return encodeSharedCalculation(createSnapshotFromReadyCalculation(loan, calculatedExportsReady, calculationErrors, readyCalculationSnapshot))
+  }, [activeLoan, calculatedExportsReady, calculationErrors, readyCalculationSnapshot])
 
   const decodeParameterCode = useCallback((code: string): Promise<LoanBackupData> =>
     decodeSharedCalculation(normalizeSharedCalculationPayload(code)), [])
