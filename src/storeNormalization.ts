@@ -462,5 +462,7 @@ export const normalizePersistedState = (persisted: unknown): Partial<LoanPersist
   if (!recoveredLoans.length && rawLoans.length) storageRecoveryReport.push('Все повреждённые кредиты отклонены, создан новый пустой расчёт.')
   const activeLoanId = typeof state.activeLoanId === 'string' && loans.some(loan => loan.id === state.activeLoanId) ? state.activeLoanId : loans[0].id
   const active = loans.find(loan => loan.id === activeLoanId) ?? loans[0]
-  return { loans, activeLoanId, ...publicData(active), storageRecoveryReport, quarantinedLoansRaw: quarantinedLoansRaw.slice(0, MAX_LOANS) }
+  const persistedRevision = typeof state.persistedRevision === 'number' && Number.isSafeInteger(state.persistedRevision) && state.persistedRevision >= 0 ? state.persistedRevision : 0
+  const persistedUpdatedAt = typeof state.persistedUpdatedAt === 'string' ? state.persistedUpdatedAt : ''
+  return { loans, activeLoanId, ...publicData(active), storageRecoveryReport, quarantinedLoansRaw: quarantinedLoansRaw.slice(0, MAX_LOANS), persistedRevision, persistedUpdatedAt }
 }

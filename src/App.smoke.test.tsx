@@ -3,7 +3,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from './App'
-import { defaultConfig, useLoanStore, type LoanProfile } from './store'
+import { defaultConfig, STORAGE_CONFLICT_EVENT, useLoanStore, type LoanProfile } from './store'
 import { APP_VERSION } from './version'
 
 const sharedLinkMock = vi.hoisted(() => ({
@@ -371,5 +371,17 @@ describe('App smoke tests', () => {
     await user.click(screen.getByRole('button', { name: 'Удалить данные' }))
     expect(useLoanStore.getState().quarantinedLoansRaw).toEqual([])
     expect(confirm).toHaveBeenCalledTimes(2)
+  })
+
+  it('показывает конфликт вкладок и не предлагает неявный merge', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    act(() => window.dispatchEvent(new CustomEvent(STORAGE_CONFLICT_EVENT, { detail: { revision: 12, updatedAt: '2026-07-10T10:00:00.000Z' } })))
+
+    expect(screen.getByRole('alert').textContent).toContain('Автоматическое объединение финансовых данных отключено')
+    expect(screen.getByRole('button', { name: 'Загрузить новую версию' })).toBeTruthy()
+    await user.click(screen.getByRole('button', { name: 'Перезаписать из этой вкладки' }))
+    expect(screen.queryByText(/Автоматическое объединение/)).toBeNull()
   })
 })

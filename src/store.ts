@@ -33,9 +33,36 @@ export type { LoanProfile } from './storeTypes'
 
 export const STORAGE_ERROR_EVENT = 'credit-calculator-storage-error'
 export const STORAGE_STATUS_EVENT = 'credit-calculator-storage-status'
+export const STORAGE_CONFLICT_EVENT = 'credit-calculator-storage-conflict'
 export const MAX_PERSISTED_STATE_BYTES = 4_000_000
 
 export type StorageStatusKind = 'saved' | 'nearQuota' | 'failed'
+export interface StorageConflictDetail { revision: number; updatedAt: string }
+
+let lastKnownPersistedRevision = 0
+let pendingExternalRevision = 0
+
+const persistedMetadata = (value: string | null): StorageConflictDetail => {
+  if (!value) return { revision: 0, updatedAt: '' }
+  try {
+    const parsed = JSON.parse(value) as { state?: { persistedRevision?: unknown; persistedUpdatedAt?: unknown } }
+    const revision = typeof parsed.state?.persistedRevision === 'number' && Number.isSafeInteger(parsed.state.persistedRevision) && parsed.state.persistedRevision >= 0 ? parsed.state.persistedRevision : 0
+    const updatedAt = typeof parsed.state?.persistedUpdatedAt === 'string' ? parsed.state.persistedUpdatedAt : ''
+    return { revision, updatedAt }
+  } catch {
+    return { revision: 0, updatedAt: '' }
+  }
+}
+
+const withPersistedMetadata = (value: string, revision: number, updatedAt: string) => {
+  const parsed = JSON.parse(value) as { state?: Record<string, unknown> }
+  return JSON.stringify({ ...parsed, state: { ...(parsed.state ?? {}), persistedRevision: revision, persistedUpdatedAt: updatedAt } })
+}
+
+const notifyStorageConflict = (detail: StorageConflictDetail) => {
+  pendingExternalRevision = Math.max(pendingExternalRevision, detail.revision)
+  if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent<StorageConflictDetail>(STORAGE_CONFLICT_EVENT, { detail }))
+}
 
 const notifyStorageStatus = (kind: StorageStatusKind, message: string) => {
   if (typeof window === 'undefined') return
@@ -52,7 +79,9 @@ const safeLocalStorage = {
   getItem: (name: string) => {
     if (typeof window === 'undefined') return null
     try {
-      return window.localStorage.getItem(name)
+      const value = window.localStorage.getItem(name)
+      lastKnownPersistedRevision = persistedMetadata(value).revision
+      return value
     } catch (error) {
       notifyStorageError(error)
       return null
@@ -61,8 +90,18 @@ const safeLocalStorage = {
   setItem: (name: string, value: string) => {
     if (typeof window === 'undefined') return
     try {
-      const isNearQuota = new TextEncoder().encode(value).byteLength > MAX_PERSISTED_STATE_BYTES
-      window.localStorage.setItem(name, value)
+      const current = window.localStorage.getItem(name)
+      const currentMetadata = persistedMetadata(current)
+      if (currentMetadata.revision > lastKnownPersistedRevision) {
+        notifyStorageConflict(currentMetadata)
+        return
+      }
+      const revision = Math.max(lastKnownPersistedRevision, currentMetadata.revision) + 1
+      const updatedAt = new Date().toISOString()
+      const stampedValue = withPersistedMetadata(value, revision, updatedAt)
+      const isNearQuota = new TextEncoder().encode(stampedValue).byteLength > MAX_PERSISTED_STATE_BYTES
+      window.localStorage.setItem(name, stampedValue)
+      lastKnownPersistedRevision = revision
       notifyStorageStatus(
         isNearQuota ? 'nearQuota' : 'saved',
         isNearQuota ? 'Сохранённые данные приближаются к лимиту браузера. Экспортируйте расчёт в JSON' : 'Данные сохранены'
@@ -75,6 +114,8 @@ const safeLocalStorage = {
     if (typeof window === 'undefined') return
     try {
       window.localStorage.removeItem(name)
+      lastKnownPersistedRevision = 0
+      pendingExternalRevision = 0
     } catch (error) {
       notifyStorageError(error)
     }
@@ -104,6 +145,7 @@ interface LoanState extends LoanData {
   setUseCustomAccentColor: (enabled: boolean) => void
   resetCustomAccentColor: () => void
   retryStorageSave: () => void
+  overwriteExternalStorageChanges: () => void
   dismissStorageRecoveryReport: () => void
   deleteQuarantinedLoans: () => void
   switchLoan: (id: string) => void
@@ -212,6 +254,11 @@ export const useLoanStore = create<LoanState>()(persist((set) => ({
   setUseCustomAccentColor: (useCustomAccentColor) => set(s => syncActive(s, { useCustomAccentColor })),
   resetCustomAccentColor: () => set(s => syncActive(s, { customAccentColor: defaultAccentColor, useCustomAccentColor: false })),
   retryStorageSave: () => set(s => ({ activeLoanId: s.activeLoanId, loans: s.loans })),
+  overwriteExternalStorageChanges: () => {
+    lastKnownPersistedRevision = Math.max(lastKnownPersistedRevision, pendingExternalRevision)
+    pendingExternalRevision = 0
+    set(s => ({ activeLoanId: s.activeLoanId, loans: s.loans }))
+  },
   dismissStorageRecoveryReport: () => set({ storageRecoveryReport: [] }),
   deleteQuarantinedLoans: () => set({ quarantinedLoansRaw: [] }),
   switchLoan: (id) => set(s => switchToLoan(s, id)),
@@ -251,7 +298,15 @@ export const useLoanStore = create<LoanState>()(persist((set) => ({
 }), {
   name: PERSISTED_LOAN_STORAGE_KEY,
   storage: createJSONStorage(() => safeLocalStorage),
-  version: 10,
+  version: 11,
   migrate: normalizePersistedState,
   merge: (persisted, current) => ({ ...current, ...normalizePersistedState(persisted) })
 }))
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('storage', event => {
+    if (event.key !== PERSISTED_LOAN_STORAGE_KEY || !event.newValue) return
+    const metadata = persistedMetadata(event.newValue)
+    if (metadata.revision > lastKnownPersistedRevision) notifyStorageConflict(metadata)
+  })
+}
