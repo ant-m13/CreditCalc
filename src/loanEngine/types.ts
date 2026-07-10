@@ -1,12 +1,14 @@
-export type PaymentType = 'annuity' | 'differentiated'
-export type Frequency = 'monthly' | 'biweekly' | 'quarterly'
-export type RepaymentStrategy = 'reduceTerm' | 'reducePayment' | 'full' | 'custom'
-export type EarlySource = 'own' | 'subsidy' | 'insurance' | 'other'
-export type DayCountBasis = '365' | '366' | '360' | 'actual365' | 'actualActual'
-export type RoundingMode = 'kopecks' | 'rubles' | 'bank'
-export type RateChangeMode = 'nextPeriod' | 'exactDate'
-export type EarlyRepaymentAmountMode = 'extra' | 'totalWithFee'
-export const supportedCurrencies = ['RUB', 'USD', 'EUR', 'CNY'] as const
+import { balanceMoments, dayCountBases, frequencies, graceTypes, interestMethods, paymentTypes, periodStarts, rateChangeModes, repaymentAmountModes, repaymentOperationSources, repaymentSources, repaymentStrategies, roundingModes, sameDayOrders, supportedCurrencies } from '../portableSchemas'
+
+export { supportedCurrencies } from '../portableSchemas'
+export type PaymentType = typeof paymentTypes[number]
+export type Frequency = typeof frequencies[number]
+export type RepaymentStrategy = typeof repaymentStrategies[number]
+export type EarlySource = typeof repaymentSources[number]
+export type DayCountBasis = typeof dayCountBases[number]
+export type RoundingMode = typeof roundingModes[number]
+export type RateChangeMode = typeof rateChangeModes[number]
+export type EarlyRepaymentAmountMode = typeof repaymentAmountModes[number]
 export type LoanCurrency = typeof supportedCurrencies[number]
 export type ScheduleEventType =
   | 'loanIssued'
@@ -43,11 +45,11 @@ export interface RateChange {
 }
 
 export interface InterestConfig {
-  method: 'annuity' | 'daily'
+  method: typeof interestMethods[number]
   dayCountBasis: DayCountBasis
   includePaymentDate: boolean
-  periodStart: 'inclusive' | 'exclusive'
-  balanceMoment: 'startOfDay' | 'endOfDay'
+  periodStart: typeof periodStarts[number]
+  balanceMoment: typeof balanceMoments[number]
 }
 
 export interface LoanConfig {
@@ -78,11 +80,11 @@ export interface EarlyRepayment {
   enabled?: boolean
   amountMode?: EarlyRepaymentAmountMode
   sameDaySequence?: number
-  operationSource?: 'manual' | 'rule'
+  operationSource?: typeof repaymentOperationSources[number]
   sourceRuleId?: string
   strategy: RepaymentStrategy
   source: EarlySource
-  sameDayOrder: 'regularFirst' | 'earlyFirst'
+  sameDayOrder: typeof sameDayOrders[number]
   interestFirst: boolean
   comment?: string
 }
@@ -104,7 +106,7 @@ export interface GracePeriod {
   id: string
   startDate: string
   endDate: string
-  type: 'full' | 'interestOnly' | 'reduced' | 'custom'
+  type: typeof graceTypes[number]
   paymentAmount?: number
   extendTerm: boolean
   accrueInterest: boolean

@@ -7,7 +7,6 @@ import {
   repaymentAmountModeContextForRegularDate,
   sortRateChanges,
   sortRepaymentsByApplicationOrder,
-  supportedCurrencies,
   validateScenario,
   type EarlyRepayment,
   type GracePeriod,
@@ -22,30 +21,13 @@ import { sortRepaymentRulesByApplicationOrder, validateRepaymentRuleStructure, t
 import type { LoanData, LoanImportData, LoanPersistedState, LoanProfile, QuarantinedLoanRaw, ThemeName } from './storeTypes'
 import { createId } from './utils/createId'
 import { isISODate, isISOYearMonth } from './utils/dateValidation'
+import { balanceMoments, dayCountBases, fontSizes, frequencies, graceTypes, interestMethods, isOneOf, paymentTypes, periodStarts, rateChangeModes, repaymentRuleTypes, repaymentSources, repaymentStrategies, roundingModes, sameDayOrders, scenarioIds, supportedCurrencies, termUnits, themeNames } from './portableSchemas'
 
 export const MAX_LOANS = 100
 export const defaultAccentColor = '#0b9873'
 
-const themeNames: readonly ThemeName[] = ['emerald', 'ocean', 'violet', 'graphite', 'warm', 'night']
-const paymentTypes = ['annuity', 'differentiated'] as const
-const frequencies = ['monthly', 'biweekly', 'quarterly'] as const
-const roundingModes = ['kopecks', 'rubles', 'bank'] as const
-const interestMethods = ['annuity', 'daily'] as const
-const rateChangeModes = ['nextPeriod', 'exactDate'] as const
-const dayCountBases = ['365', '366', '360', 'actual365', 'actualActual'] as const
-const periodStarts = ['inclusive', 'exclusive'] as const
-const balanceMoments = ['startOfDay', 'endOfDay'] as const
-const repaymentStrategies = ['reduceTerm', 'reducePayment', 'full', 'custom'] as const
-const repaymentSources = ['own', 'subsidy', 'insurance', 'other'] as const
-const sameDayOrders = ['regularFirst', 'earlyFirst'] as const
-const repaymentRuleTypes = ['weeklyFixed', 'monthlyFixed', 'bimonthlyFixed', 'quarterlyFixed', 'semiannualFixed', 'annualFixed', 'annualBonus', 'paymentPercent', 'monthlyTotalPayment'] as const
-const graceTypes = ['full', 'interestOnly', 'reduced', 'custom'] as const
-const scenarioIds = ['base', 'reduceTerm', 'reducePayment', 'combined'] as const
-const termUnits = ['months', 'years'] as const
-const fontSizes = ['normal', 'large', 'xlarge'] as const
-
 const oneOf = <T extends string>(value: unknown, values: readonly T[], fallback: T): T =>
-  typeof value === 'string' && values.includes(value as T) ? value as T : fallback
+  isOneOf(value, values) ? value : fallback
 
 const finiteNumber = (value: unknown, fallback: number, min = 0, max = Number.POSITIVE_INFINITY) =>
   typeof value === 'number' && Number.isFinite(value) ? Math.min(max, Math.max(min, value)) : fallback
@@ -82,7 +64,7 @@ const createSeedRepayments = (config: LoanConfig): EarlyRepayment[] => [{
 }]
 
 const normalizeTheme = (value: unknown): ThemeName =>
-  typeof value === 'string' && themeNames.includes(value as ThemeName) ? value as ThemeName : 'emerald'
+  isOneOf(value, themeNames) ? value : 'emerald'
 
 export const normalizeAccentColor = (value: unknown): string =>
   typeof value === 'string' && /^#[0-9a-fA-F]{6}$/.test(value) ? value : defaultAccentColor

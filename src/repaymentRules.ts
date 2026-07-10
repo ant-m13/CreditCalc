@@ -3,17 +3,9 @@ import { generateBaseSchedule, scheduledPaymentDates, sortRepaymentsByApplicatio
 import { MAX_GENERATED_REPAYMENTS, MAX_MONEY_AMOUNT, MAX_PERCENT, MAX_RULE_SKIP_MONTHS, MAX_TEXT_FIELD_LENGTH } from './loanEngine/limits'
 import { num } from './loanEngine/rounding'
 import { isISODate, isISOYearMonth } from './utils/dateValidation'
+import { isOneOf, repaymentRuleTypes, repaymentSources, repaymentStrategies, sameDayOrders } from './portableSchemas'
 
-export type RepaymentRuleType =
-  | 'weeklyFixed'
-  | 'monthlyFixed'
-  | 'bimonthlyFixed'
-  | 'quarterlyFixed'
-  | 'semiannualFixed'
-  | 'annualFixed'
-  | 'annualBonus'
-  | 'paymentPercent'
-  | 'monthlyTotalPayment'
+export type RepaymentRuleType = typeof repaymentRuleTypes[number]
 
 export interface RepaymentRule {
   id: string
@@ -32,14 +24,6 @@ export interface RepaymentRule {
   skipMonths: string[]
   comment?: string
 }
-
-const repaymentRuleTypes: readonly RepaymentRuleType[] = ['weeklyFixed', 'monthlyFixed', 'bimonthlyFixed', 'quarterlyFixed', 'semiannualFixed', 'annualFixed', 'annualBonus', 'paymentPercent', 'monthlyTotalPayment']
-const repaymentStrategies = ['reduceTerm', 'reducePayment', 'full', 'custom'] as const
-const repaymentSources = ['own', 'subsidy', 'insurance', 'other'] as const
-const sameDayOrders = ['regularFirst', 'earlyFirst'] as const
-
-const isOneOf = <T extends string>(value: unknown, values: readonly T[]): value is T =>
-  typeof value === 'string' && values.includes(value as T)
 
 export const validateRepaymentRuleStructure = (rule: RepaymentRule): string[] => {
   const errors: string[] = []

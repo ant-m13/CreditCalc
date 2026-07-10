@@ -1,10 +1,11 @@
 import type { EarlyRepayment, GracePeriod, LoanConfig, RateChange } from './loanEngine'
-import { regularPaymentDateMatches, repaymentAmountModeContextForRegularDate, repaymentAmountModeValidationErrors, sortRateChanges, supportedCurrencies } from './loanEngine'
+import { regularPaymentDateMatches, repaymentAmountModeContextForRegularDate, repaymentAmountModeValidationErrors, sortRateChanges } from './loanEngine'
 import { defaultConfig } from './loanDefaults'
 import type { RepaymentRule } from './repaymentRules'
 import { assertLoanCandidateValid } from './loanCandidate'
 import { MAX_EARLY_REPAYMENTS, MAX_GRACE_PERIODS, MAX_MONEY_AMOUNT, MAX_PERCENT, MAX_RATE_CHANGES, MAX_REPAYMENT_RULES, MAX_RULE_SKIP_MONTHS, MAX_TERM_MONTHS, MAX_TEXT_FIELD_LENGTH } from './loanEngine/limits'
 import { isISODate, isISOYearMonth } from './utils/dateValidation'
+import { balanceMoments, dayCountBases, fontSizes, frequencies, graceTypes, interestMethods, isOneOf as oneOf, paymentTypes, periodStarts, rateChangeModes, repaymentOperationSources, repaymentRuleTypes, repaymentSources, repaymentStrategies, roundingModes, sameDayOrders, scenarioIds, supportedCurrencies, termUnits, themeNames } from './portableSchemas'
 
 export interface LoanBackupData {
   name?: string
@@ -24,19 +25,10 @@ export interface LoanBackupData {
 }
 
 const isObject = (value: unknown): value is Record<string, unknown> => Boolean(value) && typeof value === 'object' && !Array.isArray(value)
-const oneOf = <T extends string>(value: unknown, values: readonly T[]): value is T => typeof value === 'string' && values.includes(value as T)
 const finite = (value: unknown, minimum = 0, maximum = MAX_MONEY_AMOUNT) => typeof value === 'number' && Number.isFinite(value) && value >= minimum && value <= maximum
 const integer = (value: unknown, minimum = 0) => finite(value, minimum) && Number.isInteger(value)
 const positive = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value) && value > 0
 const hexColor = (value: unknown): value is string => typeof value === 'string' && /^#[0-9a-fA-F]{6}$/.test(value)
-const paymentTypes = ['annuity', 'differentiated'] as const
-const frequencies = ['monthly', 'biweekly', 'quarterly'] as const
-const roundingModes = ['kopecks', 'rubles', 'bank'] as const
-const interestMethods = ['annuity', 'daily'] as const
-const dayCountBases = ['365', '366', '360', 'actual365', 'actualActual'] as const
-const periodStarts = ['inclusive', 'exclusive'] as const
-const balanceMoments = ['startOfDay', 'endOfDay'] as const
-const scenarioIds = ['base', 'reduceTerm', 'reducePayment', 'combined'] as const
 export const SUPPORTED_BACKUP_VERSIONS = [1] as const
 const explicitOneOfOrDefault = <T extends string>(value: unknown, values: readonly T[], fallback: T, label: string): T => {
   if (value === undefined) return fallback
@@ -127,7 +119,7 @@ export function parseLoanBackupObject(raw: unknown): LoanBackupData {
   if (!positive(config.principal) || config.principal > MAX_MONEY_AMOUNT || !finite(config.annualRate, 0, MAX_PERCENT) || !integer(config.termMonths, 1) || config.termMonths > MAX_TERM_MONTHS || !integer(config.paymentDay, 1) || config.paymentDay > 31 || !finite(config.closeThreshold) || !finite(config.oneTimeFee) || !finite(config.monthlyFee) || !finite(config.earlyRepaymentFeePercent, 0, MAX_PERCENT)) throw new Error('Параметры кредита содержат недопустимые числа')
   if (!isISODate(config.issueDate) || !isISODate(config.firstPaymentDate)) throw new Error('Проверьте даты выдачи и первого платежа')
   if (config.firstPaymentDate <= config.issueDate) throw new Error('Первый платёж должен быть после даты выдачи')
-  config.rateChangeMode = explicitOneOfOrDefault(source.rateChangeMode, ['nextPeriod', 'exactDate'], defaultConfig.rateChangeMode, 'Режим изменения ставки')
+  config.rateChangeMode = explicitOneOfOrDefault(source.rateChangeMode, rateChangeModes, defaultConfig.rateChangeMode, 'Режим изменения ставки')
 
   const rateChangesRaw = source.rateChanges === undefined ? [] : source.rateChanges
   if (!Array.isArray(rateChangesRaw)) throw new Error('История ставок повреждена')
@@ -148,9 +140,9 @@ export function parseLoanBackupObject(raw: unknown): LoanBackupData {
     isObject(item) && isISODate(item.date) && item.amountMode !== 'extra' ? [item.date] : []
   ), config)
   const repayments = repaymentsRaw.map((item, index) => {
-    if (!isObject(item) || typeof item.id !== 'string' || !isISODate(item.date) || !finite(item.amount) || !oneOf(item.strategy, ['reduceTerm', 'reducePayment', 'full', 'custom']) || !oneOf(item.source, ['own', 'subsidy', 'insurance', 'other']) || !oneOf(item.sameDayOrder, ['regularFirst', 'earlyFirst']) || typeof item.interestFirst !== 'boolean') throw new Error(`Ошибка в досрочном платеже №${index + 1}`)
+    if (!isObject(item) || typeof item.id !== 'string' || !isISODate(item.date) || !finite(item.amount) || !oneOf(item.strategy, repaymentStrategies) || !oneOf(item.source, repaymentSources) || !oneOf(item.sameDayOrder, sameDayOrders) || typeof item.interestFirst !== 'boolean') throw new Error(`Ошибка в досрочном платеже №${index + 1}`)
     if (item.enabled !== undefined && typeof item.enabled !== 'boolean') throw new Error(`Ошибка в досрочном платеже №${index + 1}`)
-    if (item.operationSource !== undefined && !oneOf(item.operationSource, ['manual', 'rule'])) throw new Error(`Ошибка в досрочном платеже №${index + 1}: источник операции повреждён`)
+    if (item.operationSource !== undefined && !oneOf(item.operationSource, repaymentOperationSources)) throw new Error(`Ошибка в досрочном платеже №${index + 1}: источник операции повреждён`)
     if (item.sourceRuleId !== undefined && typeof item.sourceRuleId !== 'string') throw new Error(`Ошибка в досрочном платеже №${index + 1}: ID правила повреждён`)
     ensureTextLength(item.comment, `Комментарий досрочного платежа №${index + 1}`)
     const sameDaySequence = typeof item.sameDaySequence === 'number' && Number.isInteger(item.sameDaySequence) && item.sameDaySequence >= 0 ? item.sameDaySequence : undefined
@@ -181,7 +173,7 @@ export function parseLoanBackupObject(raw: unknown): LoanBackupData {
   if (!Array.isArray(graceRaw)) throw new Error('Список льготных периодов повреждён')
   if (graceRaw.length > MAX_GRACE_PERIODS) throw new Error(`Слишком много льготных периодов. Максимум: ${MAX_GRACE_PERIODS}`)
   const gracePeriods = graceRaw.map((item, index) => {
-    if (!isObject(item) || typeof item.id !== 'string' || !isISODate(item.startDate) || !isISODate(item.endDate) || !oneOf(item.type, ['full', 'interestOnly', 'reduced', 'custom']) || typeof item.extendTerm !== 'boolean' || typeof item.accrueInterest !== 'boolean' || typeof item.capitalizeInterest !== 'boolean') throw new Error(`Ошибка в льготном периоде №${index + 1}`)
+    if (!isObject(item) || typeof item.id !== 'string' || !isISODate(item.startDate) || !isISODate(item.endDate) || !oneOf(item.type, graceTypes) || typeof item.extendTerm !== 'boolean' || typeof item.accrueInterest !== 'boolean' || typeof item.capitalizeInterest !== 'boolean') throw new Error(`Ошибка в льготном периоде №${index + 1}`)
     if (item.endDate < item.startDate) throw new Error(`Ошибка в льготном периоде №${index + 1}: окончание раньше начала`)
     if (item.paymentAmount !== undefined && !finite(item.paymentAmount)) throw new Error(`Ошибка в льготном периоде №${index + 1}`)
     return item as unknown as GracePeriod
@@ -196,7 +188,7 @@ export function parseLoanBackupObject(raw: unknown): LoanBackupData {
   if (!Array.isArray(rulesRaw)) throw new Error('Список правил досрочных платежей повреждён')
   if (rulesRaw.length > MAX_REPAYMENT_RULES) throw new Error(`Слишком много правил досрочных платежей. Максимум: ${MAX_REPAYMENT_RULES}`)
   const repaymentRules = rulesRaw.map((item, index) => {
-    if (!isObject(item) || typeof item.id !== 'string' || typeof item.name !== 'string' || !oneOf(item.type, ['weeklyFixed', 'monthlyFixed', 'bimonthlyFixed', 'quarterlyFixed', 'semiannualFixed', 'annualFixed', 'annualBonus', 'paymentPercent', 'monthlyTotalPayment']) || !isISODate(item.startDate) || !isISODate(item.endDate) || !oneOf(item.strategy, ['reduceTerm', 'reducePayment', 'full', 'custom']) || !oneOf(item.source, ['own', 'subsidy', 'insurance', 'other']) || !oneOf(item.sameDayOrder, ['regularFirst', 'earlyFirst']) || typeof item.interestFirst !== 'boolean' || !Array.isArray(item.skipMonths)) throw new Error(`Ошибка в правиле досрочных платежей №${index + 1}`)
+    if (!isObject(item) || typeof item.id !== 'string' || typeof item.name !== 'string' || !oneOf(item.type, repaymentRuleTypes) || !isISODate(item.startDate) || !isISODate(item.endDate) || !oneOf(item.strategy, repaymentStrategies) || !oneOf(item.source, repaymentSources) || !oneOf(item.sameDayOrder, sameDayOrders) || typeof item.interestFirst !== 'boolean' || !Array.isArray(item.skipMonths)) throw new Error(`Ошибка в правиле досрочных платежей №${index + 1}`)
     if (item.skipMonths.length > MAX_RULE_SKIP_MONTHS) throw new Error(`Ошибка в правиле досрочных платежей №${index + 1}: слишком много месяцев пропуска. Максимум: ${MAX_RULE_SKIP_MONTHS}`)
     if (!item.skipMonths.every(isISOYearMonth)) throw new Error(`Ошибка в правиле досрочных платежей №${index + 1}`)
     ensureTextLength(item.name, `Название правила досрочных платежей №${index + 1}`)
@@ -221,11 +213,11 @@ export function parseLoanBackupObject(raw: unknown): LoanBackupData {
   const selectedCandidate = typeof raw.selectedScenario === 'string' ? raw.selectedScenario : scenarioFromLegacyExport ?? 'reduceTerm'
   if (!oneOf(selectedCandidate, scenarioIds)) throw new Error('Файл содержит неизвестный сценарий')
   const selectedScenario = selectedCandidate
-  const termUnit = oneOf(settings.termUnit, ['months', 'years']) ? settings.termUnit : 'months'
+  const termUnit = oneOf(settings.termUnit, termUnits) ? settings.termUnit : 'months'
   const displayDecimals = settings.displayDecimals === 0 ? 0 : 2
-  const appFontSize = oneOf(settings.appFontSize, ['normal', 'large', 'xlarge']) ? settings.appFontSize : 'normal'
-  const scheduleFontSize = oneOf(settings.scheduleFontSize, ['normal', 'large', 'xlarge']) ? settings.scheduleFontSize : 'large'
-  const theme = oneOf(settings.theme, ['emerald', 'ocean', 'violet', 'graphite', 'warm', 'night']) ? settings.theme : 'emerald'
+  const appFontSize = oneOf(settings.appFontSize, fontSizes) ? settings.appFontSize : 'normal'
+  const scheduleFontSize = oneOf(settings.scheduleFontSize, fontSizes) ? settings.scheduleFontSize : 'large'
+  const theme = oneOf(settings.theme, themeNames) ? settings.theme : 'emerald'
   const customAccentColor = hexColor(settings.customAccentColor) ? settings.customAccentColor : '#0b9873'
   const useCustomAccentColor = typeof settings.useCustomAccentColor === 'boolean' ? settings.useCustomAccentColor : false
   const result: LoanBackupData = { name, config, repayments, repaymentRules, gracePeriods, selectedScenario, termUnit, displayDecimals, appFontSize, scheduleFontSize, theme, customAccentColor, useCustomAccentColor, ...(importWarnings.length ? { importWarnings } : {}) }

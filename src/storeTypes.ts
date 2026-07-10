@@ -1,7 +1,8 @@
 import type { EarlyRepayment, GracePeriod, LoanConfig } from './loanEngine'
 import type { RepaymentRule } from './repaymentRules'
+import type { themeNames } from './portableSchemas'
 
-export type ThemeName = 'emerald' | 'ocean' | 'violet' | 'graphite' | 'warm' | 'night'
+export type ThemeName = typeof themeNames[number]
 
 export interface LoanProfile {
   id: string

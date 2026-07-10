@@ -4,20 +4,9 @@ import { MAX_CALENDAR_DAYS, MAX_CALENDAR_YEARS, MAX_EARLY_REPAYMENTS, MAX_FINANC
 import { contractualFinalPaymentDate, preparePaymentCalendar, regularPaymentDateMatches, totalPaymentPeriods } from './dates'
 import { repaymentAmountModeContextForRegularDate, repaymentAmountModeValidationErrors } from './repaymentAmountMode'
 import { isISODate } from '../utils/dateValidation'
+import { balanceMoments, dayCountBases, frequencies, graceTypes, interestMethods, isOneOf as oneOf, paymentTypes, periodStarts, rateChangeModes, repaymentSources, repaymentStrategies, roundingModes, sameDayOrders } from '../portableSchemas'
 
 const finite = (value: unknown) => typeof value === 'number' && Number.isFinite(value)
-const oneOf = <T extends string>(value: unknown, values: readonly T[]) => typeof value === 'string' && values.includes(value as T)
-const paymentTypes = ['annuity', 'differentiated'] as const
-const frequencies = ['monthly', 'biweekly', 'quarterly'] as const
-const roundingModes = ['kopecks', 'rubles', 'bank'] as const
-const interestMethods = ['annuity', 'daily'] as const
-const dayCountBases = ['365', '366', '360', 'actual365', 'actualActual'] as const
-const periodStarts = ['inclusive', 'exclusive'] as const
-const balanceMoments = ['startOfDay', 'endOfDay'] as const
-const repaymentStrategies = ['reduceTerm', 'reducePayment', 'full', 'custom'] as const
-const repaymentSources = ['own', 'subsidy', 'insurance', 'other'] as const
-const sameDayOrders = ['regularFirst', 'earlyFirst'] as const
-const graceTypes = ['full', 'interestOnly', 'reduced', 'custom'] as const
 
 const daysFromIssue = (issueDate: string, date: string) => differenceInCalendarDays(parseISO(date), parseISO(issueDate))
 const exceedsCalendarHorizon = (issueDate: string, date: string) => daysFromIssue(issueDate, date) > MAX_CALENDAR_DAYS
@@ -39,7 +28,7 @@ export function validateLoan(config: LoanConfig) {
   const errors: string[] = []
   if (!finite(config.principal) || !(config.principal > 0) || config.principal > MAX_MONEY_AMOUNT) errors.push(`Сумма кредита должна быть больше нуля и не превышать ${MAX_MONEY_AMOUNT}`)
   if (!finite(config.annualRate) || config.annualRate < 0 || config.annualRate > MAX_PERCENT) errors.push(`Ставка должна быть от 0 до ${MAX_PERCENT}%`)
-  if (config.rateChangeMode !== 'nextPeriod' && config.rateChangeMode !== 'exactDate') errors.push('Режим изменения ставки повреждён')
+  if (!oneOf(config.rateChangeMode, rateChangeModes)) errors.push('Режим изменения ставки повреждён')
   if (typeof config.firstPaymentInterestOnly !== 'boolean') errors.push('Настройка первого платежа повреждена')
   if (!oneOf(config.paymentType, paymentTypes)) errors.push('Тип платежа повреждён')
   if (!oneOf(config.frequency, frequencies)) errors.push('Частота платежей повреждена')
