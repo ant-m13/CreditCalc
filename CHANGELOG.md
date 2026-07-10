@@ -45,6 +45,7 @@
 ### CI/CD и релизный процесс
 
 - Production dependency audit стал блокирующей проверкой в PR, auto-release, Pages deploy и release-dist workflows.
+- Проверка и сборка релиза выполняются с `contents: read`, публикация Release и Pages вынесена в зависимые jobs с минимальными write-полномочиями, а checkout credentials отключены вне шага push тега.
 
 ### Внутренние изменения
 

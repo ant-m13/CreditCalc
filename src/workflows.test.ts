@@ -13,4 +13,32 @@ describe('release workflows', () => {
     expect(workflow).toContain('run: pnpm audit --prod')
     expect(workflow).not.toMatch(/continue-on-error:\s*true/)
   })
+
+  it('отделяет read-only проверку от публикации с повышенными правами', () => {
+    const autoRelease = readWorkflow('auto-release.yml')
+    const releaseDist = readWorkflow('release-dist.yml')
+    const deployPages = readWorkflow('deploy-pages.yml')
+
+    expect(autoRelease).toMatch(/\n {2}verify:\n {4}permissions:\n {6}contents: read/)
+    expect(autoRelease).toMatch(/\n {2}publish:\n {4}needs: verify\n {4}permissions:\n {6}contents: write/)
+    expect(releaseDist).toMatch(/\n {2}verify:\n {4}permissions:\n {6}contents: read/)
+    expect(releaseDist).toMatch(/\n {2}publish:\n {4}needs: verify\n {4}permissions:\n {6}contents: write/)
+    expect(deployPages).toMatch(/\n {2}build:\n {4}permissions:\n {6}contents: read/)
+    expect(deployPages).toMatch(/\n {2}deploy:\n {4}needs: build\n {4}permissions:\n {6}pages: write\n {6}id-token: write/)
+  })
+
+  it('не сохраняет checkout credentials там, где workflow не выполняет push', () => {
+    const expected = new Map([
+      ['pr-checks.yml', [1, 1]],
+      ['auto-release.yml', [2, 1]],
+      ['deploy-pages.yml', [2, 2]],
+      ['release-dist.yml', [1, 1]]
+    ])
+
+    for (const [name, [checkoutCount, disabledCredentialCount]] of expected) {
+      const workflow = readWorkflow(name)
+      expect(workflow.match(/uses: actions\/checkout@/g)).toHaveLength(checkoutCount)
+      expect(workflow.match(/persist-credentials: false/g)).toHaveLength(disabledCredentialCount)
+    }
+  })
 })
