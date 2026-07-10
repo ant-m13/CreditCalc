@@ -5,6 +5,7 @@ import type { LoanCalculationSnapshot } from '../loanCalculationRunner'
 import { buildShareUrl, createLoanSnapshot, decodeSharedCalculation, encodeSharedCalculation, looksLikeSharedCalculationUrl, normalizeSharedCalculationPayload } from '../shareCalculation'
 import { loanToBackupData, type LoanProfile } from '../store'
 import type { ImportStatus } from './useLoanImport'
+import { assertPortableJsonSize } from '../portabilityLimits'
 
 interface UseLoanExportOptions {
   loans: LoanProfile[]
@@ -94,6 +95,12 @@ export function useLoanExport({ loans, activeLoanId, calculatedSchedule, calcula
         return
       }
       body = JSON.stringify({ ...snapshot, exportedAt: new Date().toISOString() }, null, 2)
+      try {
+        assertPortableJsonSize(body)
+      } catch (error) {
+        setImportStatus({ kind: 'error', text: error instanceof Error ? error.message : 'JSON-файл слишком большой' })
+        return
+      }
       type = 'application/json'
     } else {
       if (!calculatedExportsReady) {

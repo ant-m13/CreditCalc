@@ -88,7 +88,7 @@ export function ExportPanel({
   const readJson = async (file: File) => {
     setLocalStatus(null)
     try {
-      if (file.size > MAX_PORTABLE_JSON_BYTES) throw new Error('JSON-файл слишком большой. Максимальный размер — 2 МБ')
+      if (file.size > MAX_PORTABLE_JSON_BYTES) throw new Error('JSON-файл превышает единый лимит переносимых данных (8 МБ)')
       setPending({
         title: 'Загрузить кредит из файла?',
         description: `Файл «${file.name}» прочитан. Проверьте краткое содержимое и выберите, как загрузить кредит.`,

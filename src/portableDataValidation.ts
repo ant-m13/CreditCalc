@@ -1,6 +1,7 @@
 import { parseLoanBackupObject, type LoanBackupData } from './importExport'
+import { assertPortableJsonSize } from './portabilityLimits'
 
-export const MAX_PORTABLE_JSON_BYTES = 2 * 1024 * 1024
+export { MAX_PORTABLE_JSON_BYTES } from './portabilityLimits'
 
 type PortableValidationRequest = { requestId: number; raw: unknown }
 type PortableValidationResponse = { requestId: number; data?: LoanBackupData; error?: string }
@@ -9,9 +10,7 @@ const isObject = (value: unknown): value is Record<string, unknown> =>
   Boolean(value) && typeof value === 'object' && !Array.isArray(value)
 
 export const parsePortableJsonEnvelope = (text: string) => {
-  if (new TextEncoder().encode(text).byteLength > MAX_PORTABLE_JSON_BYTES) {
-    throw new Error('JSON-файл слишком большой. Максимальный размер — 2 МБ')
-  }
+  assertPortableJsonSize(text)
   let raw: unknown
   try {
     raw = JSON.parse(text)
