@@ -1,12 +1,11 @@
 import { useRef, useState } from 'react'
 import { ArrowDownToLine, Check, CircleHelp, Clipboard, ClipboardPaste, FileJson, KeyRound, Landmark, Link2, Printer, ReceiptText, Upload, X } from 'lucide-react'
-import { parseLoanBackup, type LoanBackupData } from '../importExport'
+import type { LoanBackupData } from '../importExport'
 import { formatMoney, shortDate, fmtMonthsFull } from '../formatters'
 import { useModalDialog } from '../hooks/useModalDialog'
 import { rateChangeModeName, scenarioName } from '../labels'
 import { Field } from './ui'
-
-const MAX_JSON_IMPORT_SIZE = 2 * 1024 * 1024
+import { MAX_PORTABLE_JSON_BYTES, validatePortableJson } from '../portableDataValidation'
 
 type Status = { kind: 'success' | 'error'; text: string }
 
@@ -89,13 +88,13 @@ export function ExportPanel({
   const readJson = async (file: File) => {
     setLocalStatus(null)
     try {
-      if (file.size > MAX_JSON_IMPORT_SIZE) throw new Error('JSON-файл слишком большой. Максимальный размер — 2 МБ')
+      if (file.size > MAX_PORTABLE_JSON_BYTES) throw new Error('JSON-файл слишком большой. Максимальный размер — 2 МБ')
       setPending({
         title: 'Загрузить кредит из файла?',
         description: `Файл «${file.name}» прочитан. Проверьте краткое содержимое и выберите, как загрузить кредит.`,
         sourceLabel: 'JSON-файл',
         actionSource: `файла «${file.name}»`,
-        data: parseLoanBackup(await file.text())
+        data: await validatePortableJson(await file.text())
       })
     } catch (error) {
       setLocalStatus({ kind: 'error', text: error instanceof Error ? error.message : 'Не удалось загрузить файл' })
