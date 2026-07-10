@@ -109,7 +109,7 @@ function ExportProbe({
   const readySnapshot = readyCalculationSnapshot === undefined
     ? calculatedExportsReady ? calculationSnapshot(activeLoan) : null
     : readyCalculationSnapshot
-  const { download, copyShareLink, createParameterCode } = useLoanExport({
+  const { download, downloadRecovery, copyShareLink, createParameterCode } = useLoanExport({
     loans: [activeLoan],
     activeLoanId: activeLoan.id,
     calculatedSchedule,
@@ -120,6 +120,7 @@ function ExportProbe({
   })
   return <>
     <button onClick={() => download(kind)}>Export</button>
+    <button onClick={downloadRecovery}>Recovery</button>
     <button onClick={() => void copyShareLink()}>Link</button>
     <button onClick={() => void createParameterCode()
       .then(code => setImportStatus({ kind: 'success', text: code }))
@@ -213,6 +214,19 @@ describe('useLoanExport', () => {
       kind: 'error',
       text: 'Полный расчёт остановлен'
     })
+  })
+
+  it('exports an explicitly marked raw recovery backup after calculation failure', async () => {
+    const user = userEvent.setup()
+    const brokenLoan = { ...loan, config: { ...loan.config, principal: Number.POSITIVE_INFINITY } }
+    render(<ExportProbe calculatedSchedule={null} activeLoan={brokenLoan} calculationErrors={['Расчёт остановлен']} calculatedExportsReady={false}/>)
+
+    await user.click(screen.getByRole('button', { name: 'Recovery' }))
+
+    const body = await exportedBlob!.text()
+    expect(body).toContain('"recoveryOnly": true')
+    expect(body).toContain('"principal": "Infinity"')
+    expect(body).toContain('Расчёт остановлен')
   })
 
   it('rejects JSON export when the ready snapshot belongs to another parameter revision', async () => {

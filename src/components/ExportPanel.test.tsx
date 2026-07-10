@@ -6,10 +6,12 @@ import { ExportPanel } from './ExportPanel'
 
 const renderPanel = (calculatedExportsDisabled = false) => {
   const download = vi.fn()
+  const downloadRecovery = vi.fn()
   const print = vi.fn()
   render(
     <ExportPanel
       download={download}
+      downloadRecovery={downloadRecovery}
       print={print}
       calculatedExportsDisabled={calculatedExportsDisabled}
       createImported={vi.fn(() => true)}
@@ -21,15 +23,15 @@ const renderPanel = (calculatedExportsDisabled = false) => {
       status={null}
     />
   )
-  return { download, print }
+  return { download, downloadRecovery, print }
 }
 
 afterEach(() => cleanup())
 
 describe('ExportPanel', () => {
-  it('отключает расчётные экспорты во время stale и оставляет JSON доступным', async () => {
+  it('отключает все расчётные экспорты и оставляет raw recovery доступным', async () => {
     const user = userEvent.setup()
-    const { download, print } = renderPanel(true)
+    const { download, downloadRecovery, print } = renderPanel(true)
 
     const csv = screen.getByRole('button', { name: /CSV/i }) as HTMLButtonElement
     const excel = screen.getByRole('button', { name: /Excel/i }) as HTMLButtonElement
@@ -39,14 +41,15 @@ describe('ExportPanel', () => {
     expect(csv.disabled).toBe(true)
     expect(excel.disabled).toBe(true)
     expect(pdf.disabled).toBe(true)
-    expect(json.disabled).toBe(false)
+    expect(json.disabled).toBe(true)
 
     await user.click(csv)
     await user.click(pdf)
     expect(download).not.toHaveBeenCalled()
     expect(print).not.toHaveBeenCalled()
 
-    await user.click(json)
-    expect(download).toHaveBeenCalledWith('json')
+    expect(download).not.toHaveBeenCalled()
+    await user.click(screen.getByRole('button', { name: /Raw recovery JSON/i }))
+    expect(downloadRecovery).toHaveBeenCalledOnce()
   })
 })

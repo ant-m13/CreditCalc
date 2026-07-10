@@ -75,6 +75,7 @@ function App() {
   })
   const {
     download,
+    downloadRecovery,
     print,
     copyShareLink,
     createParameterCode,
@@ -251,7 +252,7 @@ function App() {
             {section === 'grace' && <GraceList items={store.gracePeriods} remove={store.removeGrace} open={() => setShowGrace(true)}/>}
             {section === 'schedule' && selected && base && <Schedule schedule={selected.schedule} baseSchedule={base.schedule} repayments={allRepayments} currency={calculationSnapshot.config.currency} displayDecimals={calculationSnapshot.displayDecimals} rows={rows} setRows={setRows} more={() => setRows(r => r + 24)}/>}
             {section === 'schedule' && (!selected || !base) && <section className="panel list-panel"><div className="panel-head"><div><h3>График недоступен</h3><p>Сначала исправьте ошибки в параметрах расчёта.</p></div></div></section>}
-            {section === 'export' && <ExportPanel download={downloadExport} print={printCalculated} calculatedExportsDisabled={calculatedResultsUnavailable} createImported={createLoanFromData} replaceImported={replaceActiveWithData} copyShareLink={copyShareLink} createParameterCode={createParameterCode} decodeParameterCode={decodeParameterCode} looksLikeParameterLink={looksLikeParameterLink} status={importStatus}/>}
+            {section === 'export' && <ExportPanel download={downloadExport} downloadRecovery={downloadRecovery} print={printCalculated} calculatedExportsDisabled={calculatedResultsUnavailable} createImported={createLoanFromData} replaceImported={replaceActiveWithData} copyShareLink={copyShareLink} createParameterCode={createParameterCode} decodeParameterCode={decodeParameterCode} looksLikeParameterLink={looksLikeParameterLink} status={importStatus}/>}
             {section === 'changes' && <Changelog/>}
           </Suspense>
         </SectionErrorBoundary>

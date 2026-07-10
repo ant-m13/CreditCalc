@@ -77,6 +77,29 @@ export const createSnapshotFromReadyCalculation = (loan: LoanProfile, calculated
 export function useLoanExport({ loans, activeLoanId, calculatedSchedule, calculatedExportsReady, calculationErrors, readyCalculationSnapshot, setImportStatus }: UseLoanExportOptions) {
   const activeLoan = useCallback(() => loans.find(item => item.id === activeLoanId) ?? loans[0], [loans, activeLoanId])
   const print = useCallback(() => window.print(), [])
+  const downloadRecovery = useCallback(() => {
+    const loan = activeLoan()
+    if (!loan) return
+    try {
+      const body = JSON.stringify({
+        version: 1,
+        recoveryOnly: true,
+        exportedAt: new Date().toISOString(),
+        calculationErrors,
+        ...loanToBackupData(loan)
+      }, (_key, value) => typeof value === 'number' && !Number.isFinite(value) ? String(value) : value, 2)
+      assertPortableJsonSize(body)
+      const safeName = loan.name.toLowerCase().replace(/[^a-zа-яё0-9]+/gi, '-').replace(/^-|-$/g, '') || 'credit'
+      const anchor = document.createElement('a')
+      anchor.href = URL.createObjectURL(new Blob([body], { type: 'application/json' }))
+      anchor.download = `credit-${safeName}.recovery.json`
+      anchor.click()
+      URL.revokeObjectURL(anchor.href)
+      setImportStatus({ kind: 'success', text: 'Raw recovery backup исходных параметров сохранён; файл не является подтверждённым расчётом' })
+    } catch (error) {
+      setImportStatus({ kind: 'error', text: error instanceof Error ? error.message : 'Не удалось сохранить raw recovery backup' })
+    }
+  }, [activeLoan, calculationErrors, setImportStatus])
 
   const download = useCallback((kind: 'csv' | 'json' | 'xls') => {
     const loan = activeLoan()
@@ -168,6 +191,7 @@ export function useLoanExport({ loans, activeLoanId, calculatedSchedule, calcula
 
   return {
     download,
+    downloadRecovery,
     print,
     copyShareLink,
     createParameterCode,
