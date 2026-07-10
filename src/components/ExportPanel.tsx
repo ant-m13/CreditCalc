@@ -83,7 +83,7 @@ export function ExportPanel({
   const [confirmLink, setConfirmLink] = useState(false)
 
   const visibleStatus = localStatus ?? status
-  const calculatedExportTitle = calculatedExportsDisabled ? 'Дождитесь завершения пересчёта графика' : undefined
+  const calculatedExportTitle = calculatedExportsDisabled ? 'Нет корректного актуального расчёта для экспорта' : undefined
 
   const readJson = async (file: File) => {
     setLocalStatus(null)

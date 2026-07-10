@@ -62,6 +62,7 @@ function App() {
     displayDecimals: store.displayDecimals,
     loanId: store.activeLoanId
   })
+  const calculatedResultsUnavailable = isStale || errors.length > 0 || !comparison || !selected
   const {
     importStatus,
     setImportStatus,
@@ -83,9 +84,9 @@ function App() {
     loans: store.loans,
     activeLoanId: store.activeLoanId,
     calculatedSchedule: selected?.schedule ?? null,
-    calculatedExportsReady: !isStale,
+    calculatedExportsReady: !calculatedResultsUnavailable,
     calculationErrors: errors,
-    readyCalculationSnapshot: isStale ? null : calculationSnapshot,
+    readyCalculationSnapshot: calculatedResultsUnavailable ? null : calculationSnapshot,
     setImportStatus
   })
   const {
@@ -191,12 +192,12 @@ function App() {
     }
   }, [comparison, hidePrintReport, isStale, selected, showPrintReport])
   const guardCalculatedExport = useCallback((action: () => void) => {
-    if (isStale) {
-      setImportStatus({ kind: 'error', text: STALE_EXPORT_MESSAGE })
+    if (calculatedResultsUnavailable) {
+      setImportStatus({ kind: 'error', text: isStale ? STALE_EXPORT_MESSAGE : errors.join(' · ') || 'Нет корректного готового расчёта для экспорта' })
       return
     }
     action()
-  }, [isStale, setImportStatus])
+  }, [calculatedResultsUnavailable, errors, isStale, setImportStatus])
   const printCalculated = useCallback(() => guardCalculatedExport(() => {
     showPrintReport()
     print()
@@ -234,7 +235,7 @@ function App() {
       <div className="sidebar-note"><ShieldCheck size={20}/><div><b>Расчёт локально</b><span>Ваши данные не покидают устройство</span></div></div>
     </aside>
     <main>
-      <header><button className="icon-btn menu-btn" aria-label="Открыть меню" onClick={() => setMobileNav(true)}><Menu/></button><div className="header-title"><p>Финансовый план · v{APP_VERSION}</p><h1>{section === 'overview' ? 'Ваш кредит' : nav.find(x => x[0] === section)?.[2]}</h1></div><LoanSwitcher loans={store.loans} activeLoanId={store.activeLoanId} switchLoan={store.switchLoan} createLoan={store.createLoan} renameLoan={store.renameLoan} removeLoan={store.removeLoan}/><button className="icon-btn theme-toggle" onClick={toggleNightTheme} title={store.theme === 'night' ? 'Вернуть светлую тему' : 'Включить ночной режим'} aria-label={store.theme === 'night' ? 'Вернуть светлую тему' : 'Включить ночной режим'}>{store.theme === 'night' ? <Sun/> : <Moon/>}</button><FontControls fontSize={store.appFontSize} setFontSize={store.setAppFontSize}/><div className="header-actions"><span className={storageStatus.kind === 'saved' ? 'status-dot' : 'status-dot warning'}><i/> {storageStatus.kind === 'failed' ? 'Сохранение не удалось' : storageStatus.kind === 'nearQuota' ? 'Мало места' : 'Данные сохранены'}</span><button className="ghost print-action" onClick={printCalculated} disabled={isStale} title={isStale ? STALE_EXPORT_MESSAGE : undefined}><Printer size={16}/> Печать</button><button className="primary add-payment-action" onClick={() => openEarly()}><Plus size={17}/> Досрочный платёж</button></div></header>
+      <header><button className="icon-btn menu-btn" aria-label="Открыть меню" onClick={() => setMobileNav(true)}><Menu/></button><div className="header-title"><p>Финансовый план · v{APP_VERSION}</p><h1>{section === 'overview' ? 'Ваш кредит' : nav.find(x => x[0] === section)?.[2]}</h1></div><LoanSwitcher loans={store.loans} activeLoanId={store.activeLoanId} switchLoan={store.switchLoan} createLoan={store.createLoan} renameLoan={store.renameLoan} removeLoan={store.removeLoan}/><button className="icon-btn theme-toggle" onClick={toggleNightTheme} title={store.theme === 'night' ? 'Вернуть светлую тему' : 'Включить ночной режим'} aria-label={store.theme === 'night' ? 'Вернуть светлую тему' : 'Включить ночной режим'}>{store.theme === 'night' ? <Sun/> : <Moon/>}</button><FontControls fontSize={store.appFontSize} setFontSize={store.setAppFontSize}/><div className="header-actions"><span className={storageStatus.kind === 'saved' ? 'status-dot' : 'status-dot warning'}><i/> {storageStatus.kind === 'failed' ? 'Сохранение не удалось' : storageStatus.kind === 'nearQuota' ? 'Мало места' : 'Данные сохранены'}</span><button className="ghost print-action" onClick={printCalculated} disabled={calculatedResultsUnavailable} title={calculatedResultsUnavailable ? (isStale ? STALE_EXPORT_MESSAGE : 'Исправьте ошибки расчёта перед печатью') : undefined}><Printer size={16}/> Печать</button><button className="primary add-payment-action" onClick={() => openEarly()}><Plus size={17}/> Досрочный платёж</button></div></header>
       <div className="content">
         {storageWarning && <div className="alert alert-with-actions"><span>{storageWarning}</span><button className="ghost compact" onClick={() => download('json')}>Скачать JSON</button>{storageStatus.kind === 'failed' && <button className="ghost compact" onClick={store.retryStorageSave}>Повторить</button>}</div>}
         {storageConflict && <div className="alert alert-with-actions" role="alert"><span>В другой вкладке сохранена более новая версия данных{storageConflict.updatedAt ? ` (${new Date(storageConflict.updatedAt).toLocaleString('ru-RU')})` : ''}. Автоматическое объединение финансовых данных отключено.</span><button className="ghost compact" onClick={() => window.location.reload()}>Загрузить новую версию</button><button className="ghost compact danger" onClick={() => { store.overwriteExternalStorageChanges(); clearStorageConflict() }}>Перезаписать из этой вкладки</button></div>}
@@ -250,7 +251,7 @@ function App() {
             {section === 'grace' && <GraceList items={store.gracePeriods} remove={store.removeGrace} open={() => setShowGrace(true)}/>}
             {section === 'schedule' && selected && base && <Schedule schedule={selected.schedule} baseSchedule={base.schedule} repayments={allRepayments} currency={calculationSnapshot.config.currency} displayDecimals={calculationSnapshot.displayDecimals} rows={rows} setRows={setRows} more={() => setRows(r => r + 24)}/>}
             {section === 'schedule' && (!selected || !base) && <section className="panel list-panel"><div className="panel-head"><div><h3>График недоступен</h3><p>Сначала исправьте ошибки в параметрах расчёта.</p></div></div></section>}
-            {section === 'export' && <ExportPanel download={downloadExport} print={printCalculated} calculatedExportsDisabled={isStale} createImported={createLoanFromData} replaceImported={replaceActiveWithData} copyShareLink={copyShareLink} createParameterCode={createParameterCode} decodeParameterCode={decodeParameterCode} looksLikeParameterLink={looksLikeParameterLink} status={importStatus}/>}
+            {section === 'export' && <ExportPanel download={downloadExport} print={printCalculated} calculatedExportsDisabled={calculatedResultsUnavailable} createImported={createLoanFromData} replaceImported={replaceActiveWithData} copyShareLink={copyShareLink} createParameterCode={createParameterCode} decodeParameterCode={decodeParameterCode} looksLikeParameterLink={looksLikeParameterLink} status={importStatus}/>}
             {section === 'changes' && <Changelog/>}
           </Suspense>
         </SectionErrorBoundary>

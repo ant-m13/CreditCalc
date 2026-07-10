@@ -384,4 +384,17 @@ describe('App smoke tests', () => {
     await user.click(screen.getByRole('button', { name: 'Перезаписать из этой вкладки' }))
     expect(screen.queryByText(/Автоматическое объединение/)).toBeNull()
   })
+
+  it('блокирует CSV и печать при ошибке расчёта', async () => {
+    const user = userEvent.setup()
+    const broken = loan({ config: { ...defaultConfig, principal: Number.MAX_VALUE } })
+    useLoanStore.setState({ ...broken, loans: [broken], activeLoanId: broken.id })
+    render(<App />)
+
+    const print = await screen.findByRole('button', { name: 'Печать' })
+    expect((print as HTMLButtonElement).disabled).toBe(true)
+    await user.click(screen.getByRole('button', { name: 'Импорт/экспорт' }))
+    expect((await screen.findByRole('button', { name: 'CSV' }) as HTMLButtonElement).disabled).toBe(true)
+    expect((screen.getByRole('button', { name: 'PDF / печать' }) as HTMLButtonElement).disabled).toBe(true)
+  })
 })
