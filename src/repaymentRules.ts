@@ -1,19 +1,11 @@
 import { addMonths, addWeeks, addYears, format, parseISO } from 'date-fns'
 import { generateBaseSchedule, scheduledPaymentDates, sortRepaymentsByApplicationOrder, type EarlyRepayment, type GracePeriod, type LoanConfig, type PreparedPaymentCalendar } from './loanEngine'
-import { MAX_GENERATED_REPAYMENTS, MAX_RULE_SKIP_MONTHS, MAX_TEXT_FIELD_LENGTH } from './loanEngine/limits'
+import { MAX_GENERATED_REPAYMENTS, MAX_MONEY_AMOUNT, MAX_PERCENT, MAX_RULE_SKIP_MONTHS, MAX_TEXT_FIELD_LENGTH } from './loanEngine/limits'
 import { num } from './loanEngine/rounding'
 import { isISODate, isISOYearMonth } from './utils/dateValidation'
+import { isOneOf, repaymentRuleTypes, repaymentSources, repaymentStrategies, sameDayOrders } from './portableSchemas'
 
-export type RepaymentRuleType =
-  | 'weeklyFixed'
-  | 'monthlyFixed'
-  | 'bimonthlyFixed'
-  | 'quarterlyFixed'
-  | 'semiannualFixed'
-  | 'annualFixed'
-  | 'annualBonus'
-  | 'paymentPercent'
-  | 'monthlyTotalPayment'
+export type RepaymentRuleType = typeof repaymentRuleTypes[number]
 
 export interface RepaymentRule {
   id: string
@@ -32,14 +24,6 @@ export interface RepaymentRule {
   skipMonths: string[]
   comment?: string
 }
-
-const repaymentRuleTypes: readonly RepaymentRuleType[] = ['weeklyFixed', 'monthlyFixed', 'bimonthlyFixed', 'quarterlyFixed', 'semiannualFixed', 'annualFixed', 'annualBonus', 'paymentPercent', 'monthlyTotalPayment']
-const repaymentStrategies = ['reduceTerm', 'reducePayment', 'full', 'custom'] as const
-const repaymentSources = ['own', 'subsidy', 'insurance', 'other'] as const
-const sameDayOrders = ['regularFirst', 'earlyFirst'] as const
-
-const isOneOf = <T extends string>(value: unknown, values: readonly T[]): value is T =>
-  typeof value === 'string' && values.includes(value as T)
 
 export const validateRepaymentRuleStructure = (rule: RepaymentRule): string[] => {
   const errors: string[] = []
@@ -71,12 +55,15 @@ export const validateRepaymentRuleStructure = (rule: RepaymentRule): string[] =>
 
   if (type === 'paymentPercent') {
     if (typeof rule.percent !== 'number' || !Number.isFinite(rule.percent) || rule.percent < 0) errors.push(`${label}: процент должен быть неотрицательным числом`)
+    else if (rule.percent > MAX_PERCENT) errors.push(`${label}: процент не должен превышать ${MAX_PERCENT}`)
   } else if (type && (typeof rule.amount !== 'number' || !Number.isFinite(rule.amount) || rule.amount < 0)) {
     errors.push(`${label}: сумма должна быть неотрицательным числом`)
+  } else if (type && rule.amount! > MAX_MONEY_AMOUNT) {
+    errors.push(`${label}: сумма не должна превышать ${MAX_MONEY_AMOUNT}`)
   }
 
-  if (rule.amount !== undefined && (typeof rule.amount !== 'number' || !Number.isFinite(rule.amount) || rule.amount < 0)) errors.push(`${label}: сумма повреждена`)
-  if (rule.percent !== undefined && (typeof rule.percent !== 'number' || !Number.isFinite(rule.percent) || rule.percent < 0)) errors.push(`${label}: процент повреждён`)
+  if (rule.amount !== undefined && (typeof rule.amount !== 'number' || !Number.isFinite(rule.amount) || rule.amount < 0 || rule.amount > MAX_MONEY_AMOUNT)) errors.push(`${label}: сумма повреждена`)
+  if (rule.percent !== undefined && (typeof rule.percent !== 'number' || !Number.isFinite(rule.percent) || rule.percent < 0 || rule.percent > MAX_PERCENT)) errors.push(`${label}: процент повреждён`)
 
   return [...new Set(errors)]
 }

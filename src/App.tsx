@@ -1,6 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import { flushSync } from 'react-dom'
-import { ArrowDownToLine, CalendarDays, History, Landmark, Menu, Moon, Plus, Printer, ReceiptText, Settings2, ShieldCheck, Sun, TrendingDown, X } from 'lucide-react'
+import { ArrowDownToLine, CalendarDays, History, Landmark, Menu, Moon, PanelLeftClose, PanelLeftOpen, Plus, Printer, ReceiptText, Settings2, ShieldCheck, Sun, TrendingDown, X } from 'lucide-react'
 import { isRegularPaymentDate, validateScenario, type EarlyRepayment } from './loanEngine'
 import { useLoanStore } from './store'
 import { FontControls } from './components/FontControls'
@@ -20,6 +20,7 @@ import { useLoanImport } from './hooks/useLoanImport'
 import { useSharedCalculation } from './hooks/useSharedCalculation'
 import { useStorageStatus } from './hooks/useStorageStatus'
 import { createQuarantineExport } from './quarantineExport'
+import { downloadBlob } from './download'
 
 const Overview = lazy(() => import('./components/Overview').then(module => ({ default: module.Overview })))
 const Settings = lazy(() => import('./components/Settings').then(module => ({ default: module.Settings })))
@@ -38,10 +39,12 @@ function App() {
   const [earlyError, setEarlyError] = useState('')
   const [showGrace, setShowGrace] = useState(false)
   const [mobileNav, setMobileNav] = useState(false)
+  const [mobileViewport, setMobileViewport] = useState(false)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [printReportVisible, setPrintReportVisible] = useState(false)
-  const [rows, setRows] = useState(18)
+  const [rows, setRows] = useState(0)
   const shellRef = useRef<HTMLDivElement>(null)
-  const resetRows = useCallback(() => setRows(18), [])
+  const resetRows = useCallback(() => setRows(0), [])
   const {
     generatedRepayments,
     allRepayments,
@@ -62,6 +65,7 @@ function App() {
     displayDecimals: store.displayDecimals,
     loanId: store.activeLoanId
   })
+  const calculatedResultsUnavailable = isStale || errors.length > 0 || !comparison || !selected
   const {
     importStatus,
     setImportStatus,
@@ -74,6 +78,7 @@ function App() {
   })
   const {
     download,
+    downloadRecovery,
     print,
     copyShareLink,
     createParameterCode,
@@ -83,8 +88,9 @@ function App() {
     loans: store.loans,
     activeLoanId: store.activeLoanId,
     calculatedSchedule: selected?.schedule ?? null,
-    calculatedExportsReady: !isStale,
+    calculatedExportsReady: !calculatedResultsUnavailable,
     calculationErrors: errors,
+    readyCalculationSnapshot: calculatedResultsUnavailable ? null : calculationSnapshot,
     setImportStatus
   })
   const {
@@ -93,6 +99,8 @@ function App() {
     lastLightTheme,
     storageWarning,
     storageStatus,
+    storageConflict,
+    clearStorageConflict,
     closeWhatsNew,
     finishOnboarding
   } = useStorageStatus(store.theme)
@@ -110,6 +118,14 @@ function App() {
     setImportStatus,
     onAccept: acceptSharedCalculation
   })
+
+  useEffect(() => {
+    const media = window.matchMedia('(max-width: 950px)')
+    const updateViewport = () => setMobileViewport(media.matches)
+    updateViewport()
+    media.addEventListener?.('change', updateViewport)
+    return () => media.removeEventListener?.('change', updateViewport)
+  }, [])
 
   useEffect(() => {
     setShowEarly(false)
@@ -188,12 +204,12 @@ function App() {
     }
   }, [comparison, hidePrintReport, isStale, selected, showPrintReport])
   const guardCalculatedExport = useCallback((action: () => void) => {
-    if (isStale) {
-      setImportStatus({ kind: 'error', text: STALE_EXPORT_MESSAGE })
+    if (calculatedResultsUnavailable) {
+      setImportStatus({ kind: 'error', text: isStale ? STALE_EXPORT_MESSAGE : errors.join(' · ') || 'Нет корректного готового расчёта для экспорта' })
       return
     }
     action()
-  }, [isStale, setImportStatus])
+  }, [calculatedResultsUnavailable, errors, isStale, setImportStatus])
   const printCalculated = useCallback(() => guardCalculatedExport(() => {
     showPrintReport()
     print()
@@ -208,40 +224,42 @@ function App() {
   const downloadQuarantinedLoans = useCallback(() => {
     try {
       const body = JSON.stringify(createQuarantineExport(store.quarantinedLoansRaw), null, 2)
-      const anchor = document.createElement('a')
-      anchor.href = URL.createObjectURL(new Blob([body], { type: 'application/json' }))
-      anchor.download = `credit-quarantine-${new Date().toISOString().slice(0, 10)}.json`
-      anchor.click()
-      URL.revokeObjectURL(anchor.href)
+      downloadBlob(new Blob([body], { type: 'application/json' }), `credit-quarantine-${new Date().toISOString().slice(0, 10)}.json`)
       setImportStatus({ kind: 'success', text: 'Повреждённые данные скачаны' })
     } catch (error) {
       setImportStatus({ kind: 'error', text: error instanceof Error ? error.message : 'Не удалось скачать повреждённые данные' })
     }
   }, [setImportStatus, store.quarantinedLoansRaw])
+  const deleteQuarantinedLoans = useCallback(() => {
+    if (!window.confirm('Удалить raw-данные карантина без возможности восстановления? Сначала скачайте резервную копию, если она может понадобиться.')) return
+    store.deleteQuarantinedLoans()
+    setImportStatus({ kind: 'success', text: 'Raw-данные карантина удалены' })
+  }, [setImportStatus, store])
 
-  return <div ref={shellRef} className="app-shell" data-theme={store.theme} data-ui-font={store.appFontSize} data-schedule-font={store.scheduleFontSize}>
-    <aside className={mobileNav ? 'sidebar open' : 'sidebar'}>
-      <div className="brand"><div className="brand-mark"><Landmark size={22}/></div><div><b>Кредитный калькулятор</b><span>версия {APP_VERSION}</span></div><button className="icon-btn close-nav" aria-label="Закрыть меню" onClick={() => setMobileNav(false)}><X/></button></div>
-      <nav>{nav.map(([id, Icon, label]) => <button key={id} className={section === id ? 'active' : ''} aria-current={section === id ? 'page' : undefined} onClick={() => { setSection(id); setMobileNav(false) }}><Icon size={18}/><span>{label}</span>{id === 'early' && store.repayments.length > 0 && <em>{store.repayments.length}</em>}</button>)}</nav>
+  return <div ref={shellRef} className={sidebarCollapsed ? 'app-shell sidebar-collapsed' : 'app-shell'} data-theme={store.theme} data-ui-font={store.appFontSize} data-schedule-font={store.scheduleFontSize}>
+    <aside id="primary-sidebar" className={mobileNav ? 'sidebar open' : 'sidebar'} inert={mobileViewport && !mobileNav ? true : undefined} aria-hidden={mobileViewport && !mobileNav ? true : undefined}>
+      <div className="brand"><div className="brand-mark"><Landmark size={22}/></div><div className="brand-copy"><b>Кредитный калькулятор</b><span>версия {APP_VERSION}</span></div><button className="icon-btn sidebar-collapse" aria-label={sidebarCollapsed ? 'Развернуть меню' : 'Свернуть меню'} aria-controls="primary-sidebar" aria-expanded={!sidebarCollapsed} onClick={() => setSidebarCollapsed(value => !value)}>{sidebarCollapsed ? <PanelLeftOpen/> : <PanelLeftClose/>}</button><button className="icon-btn close-nav" aria-label="Закрыть меню" onClick={() => setMobileNav(false)}><X/></button></div>
+      <nav aria-label="Основная навигация">{nav.map(([id, Icon, label]) => <button key={id} className={section === id ? 'active' : ''} aria-label={label} aria-current={section === id ? 'page' : undefined} title={sidebarCollapsed ? label : undefined} onClick={() => { setSection(id); setMobileNav(false) }}><Icon size={18}/><span>{label}</span>{id === 'early' && store.repayments.length > 0 && <em>{store.repayments.length}</em>}</button>)}</nav>
       <div className="sidebar-note"><ShieldCheck size={20}/><div><b>Расчёт локально</b><span>Ваши данные не покидают устройство</span></div></div>
     </aside>
     <main>
-      <header><button className="icon-btn menu-btn" aria-label="Открыть меню" onClick={() => setMobileNav(true)}><Menu/></button><div className="header-title"><p>Финансовый план · v{APP_VERSION}</p><h1>{section === 'overview' ? 'Ваш кредит' : nav.find(x => x[0] === section)?.[2]}</h1></div><LoanSwitcher loans={store.loans} activeLoanId={store.activeLoanId} switchLoan={store.switchLoan} createLoan={store.createLoan} renameLoan={store.renameLoan} removeLoan={store.removeLoan}/><button className="icon-btn theme-toggle" onClick={toggleNightTheme} title={store.theme === 'night' ? 'Вернуть светлую тему' : 'Включить ночной режим'} aria-label={store.theme === 'night' ? 'Вернуть светлую тему' : 'Включить ночной режим'}>{store.theme === 'night' ? <Sun/> : <Moon/>}</button><FontControls fontSize={store.appFontSize} setFontSize={store.setAppFontSize}/><div className="header-actions"><span className={storageStatus.kind === 'saved' ? 'status-dot' : 'status-dot warning'}><i/> {storageStatus.kind === 'failed' ? 'Сохранение не удалось' : storageStatus.kind === 'nearQuota' ? 'Мало места' : 'Данные сохранены'}</span><button className="ghost print-action" onClick={printCalculated} disabled={isStale} title={isStale ? STALE_EXPORT_MESSAGE : undefined}><Printer size={16}/> Печать</button><button className="primary add-payment-action" onClick={() => openEarly()}><Plus size={17}/> Досрочный платёж</button></div></header>
+      <header><button className="icon-btn menu-btn" aria-label="Открыть меню" onClick={() => setMobileNav(true)}><Menu/></button><div className="header-title"><p>Финансовый план · v{APP_VERSION}</p><h1>{section === 'overview' ? 'Ваш кредит' : nav.find(x => x[0] === section)?.[2]}</h1></div><LoanSwitcher loans={store.loans} activeLoanId={store.activeLoanId} switchLoan={store.switchLoan} createLoan={store.createLoan} renameLoan={store.renameLoan} removeLoan={store.removeLoan}/><button className="icon-btn theme-toggle" onClick={toggleNightTheme} title={store.theme === 'night' ? 'Вернуть светлую тему' : 'Включить ночной режим'} aria-label={store.theme === 'night' ? 'Вернуть светлую тему' : 'Включить ночной режим'}>{store.theme === 'night' ? <Sun/> : <Moon/>}</button><FontControls fontSize={store.appFontSize} setFontSize={store.setAppFontSize}/><div className="header-actions"><span className={storageStatus.kind === 'saved' ? 'status-dot' : 'status-dot warning'}><i/> {storageStatus.kind === 'failed' ? 'Сохранение не удалось' : storageStatus.kind === 'nearQuota' ? 'Мало места' : 'Данные сохранены'}</span><button className="ghost print-action" onClick={printCalculated} disabled={calculatedResultsUnavailable} title={calculatedResultsUnavailable ? (isStale ? STALE_EXPORT_MESSAGE : 'Исправьте ошибки расчёта перед печатью') : undefined}><Printer size={16}/> Печать</button><button className="primary add-payment-action" onClick={() => openEarly()}><Plus size={17}/> Досрочный платёж</button></div></header>
       <div className="content">
         {storageWarning && <div className="alert alert-with-actions"><span>{storageWarning}</span><button className="ghost compact" onClick={() => download('json')}>Скачать JSON</button>{storageStatus.kind === 'failed' && <button className="ghost compact" onClick={store.retryStorageSave}>Повторить</button>}</div>}
-        {(store.storageRecoveryReport.length > 0 || store.quarantinedLoansRaw.length > 0) && <div className="alert alert-with-actions"><span>{store.storageRecoveryReport.length > 0 ? store.storageRecoveryReport.join(' · ') : `В карантине ${store.quarantinedLoansRaw.length} повреждённых записей localStorage.`}</span>{store.quarantinedLoansRaw.length > 0 && <button className="ghost compact" onClick={downloadQuarantinedLoans}>Скачать повреждённые данные</button>}<button className="ghost compact" onClick={store.clearStorageRecoveryReport}>Скрыть</button></div>}
-        {isStale && <div className="alert">Пересчитываем график. На экране пока показан предыдущий согласованный расчёт.</div>}
-        {errors.length > 0 && <div className="alert">{errors.join(' · ')}</div>}
+        {storageConflict && <div className="alert alert-with-actions" role="alert"><span>В другой вкладке сохранена более новая версия данных{storageConflict.updatedAt ? ` (${new Date(storageConflict.updatedAt).toLocaleString('ru-RU')})` : ''}. Автоматическое объединение финансовых данных отключено.</span><button className="ghost compact" onClick={() => window.location.reload()}>Загрузить новую версию</button><button className="ghost compact danger" onClick={() => { store.overwriteExternalStorageChanges(); clearStorageConflict() }}>Перезаписать из этой вкладки</button></div>}
+        {(store.storageRecoveryReport.length > 0 || store.quarantinedLoansRaw.length > 0) && <div className="alert alert-with-actions"><span>{store.storageRecoveryReport.length > 0 ? store.storageRecoveryReport.join(' · ') : `В карантине ${store.quarantinedLoansRaw.length} повреждённых записей localStorage.`}</span>{store.quarantinedLoansRaw.length > 0 && <><button className="ghost compact" onClick={downloadQuarantinedLoans}>Скачать raw backup</button><button className="ghost compact danger" onClick={deleteQuarantinedLoans}>Удалить данные</button></>}<button className="ghost compact" onClick={store.dismissStorageRecoveryReport}>Скрыть уведомление</button></div>}
+        {isStale && <div className="alert" role="status" aria-live="polite" aria-atomic="true">Пересчитываем график. На экране пока показан предыдущий согласованный расчёт.</div>}
+        {errors.length > 0 && <div className="alert" role="alert" aria-live="assertive" aria-atomic="true">{errors.join(' · ')}</div>}
         <SectionErrorBoundary resetKey={section}>
           <Suspense fallback={<SectionLoading/>}>
             {section === 'overview' && comparison && selected && <Overview config={calculationSnapshot.config} displayDecimals={calculationSnapshot.displayDecimals} repayments={allRepayments} gracePeriods={calculationSnapshot.gracePeriods} comparison={comparison} selected={selected} chartData={overviewChartData} onSelect={store.selectScenario} onOpen={() => openEarly()}/>}
-            {section === 'overview' && (!comparison || !selected) && <section className="panel list-panel"><div className="panel-head"><div><h3>Расчёт временно остановлен</h3><p>Исправьте параметры кредита или правила досрочных платежей, чтобы построить график.</p></div></div></section>}
+            {section === 'overview' && (!comparison || !selected) && <section className="panel list-panel" role="status" aria-live="polite"><div className="panel-head"><div><h3>Расчёт временно остановлен</h3><p>Исправьте параметры кредита или правила досрочных платежей, чтобы построить график.</p></div></div></section>}
             {section === 'settings' && <Settings key={`settings-${store.activeLoanId}`} config={store.config} update={store.updateConfig} updateInterest={store.updateInterest} termUnit={store.termUnit} setTermUnit={store.setTermUnit} displayDecimals={store.displayDecimals} setDisplayDecimals={store.setDisplayDecimals} appFontSize={store.appFontSize} setAppFontSize={store.setAppFontSize} theme={store.theme} setTheme={store.setTheme} customAccentColor={store.customAccentColor} useCustomAccentColor={store.useCustomAccentColor} setCustomAccentColor={store.setCustomAccentColor} setUseCustomAccentColor={store.setUseCustomAccentColor} resetCustomAccentColor={store.resetCustomAccentColor}/>}
             {section === 'early' && <EarlyList key={`early-${store.activeLoanId}`} items={store.repayments} rules={store.repaymentRules} generated={generatedRepayments} currency={store.config.currency} displayDecimals={store.displayDecimals} remove={store.removeRepayment} edit={openEarly} toggle={toggleEarlyRepayment} open={() => openEarly()} addRule={store.addRepaymentRule} updateRule={store.updateRepaymentRule} removeRule={store.removeRepaymentRule} defaultStart={store.config.firstPaymentDate}/>}
             {section === 'grace' && <GraceList items={store.gracePeriods} remove={store.removeGrace} open={() => setShowGrace(true)}/>}
-            {section === 'schedule' && selected && base && <Schedule schedule={selected.schedule} baseSchedule={base.schedule} repayments={allRepayments} currency={calculationSnapshot.config.currency} displayDecimals={calculationSnapshot.displayDecimals} rows={rows} setRows={setRows} more={() => setRows(r => r + 24)}/>}
+            {section === 'schedule' && selected && base && <Schedule schedule={selected.schedule} baseSchedule={base.schedule} repayments={allRepayments} currency={calculationSnapshot.config.currency} displayDecimals={calculationSnapshot.displayDecimals} rows={rows} setRows={setRows}/>}
             {section === 'schedule' && (!selected || !base) && <section className="panel list-panel"><div className="panel-head"><div><h3>График недоступен</h3><p>Сначала исправьте ошибки в параметрах расчёта.</p></div></div></section>}
-            {section === 'export' && <ExportPanel download={downloadExport} print={printCalculated} calculatedExportsDisabled={isStale} createImported={createLoanFromData} replaceImported={replaceActiveWithData} copyShareLink={copyShareLink} createParameterCode={createParameterCode} decodeParameterCode={decodeParameterCode} looksLikeParameterLink={looksLikeParameterLink} status={importStatus}/>}
+            {section === 'export' && <ExportPanel download={downloadExport} downloadRecovery={downloadRecovery} print={printCalculated} calculatedExportsDisabled={calculatedResultsUnavailable} createImported={createLoanFromData} replaceImported={replaceActiveWithData} copyShareLink={copyShareLink} createParameterCode={createParameterCode} decodeParameterCode={decodeParameterCode} looksLikeParameterLink={looksLikeParameterLink} status={importStatus}/>}
             {section === 'changes' && <Changelog/>}
           </Suspense>
         </SectionErrorBoundary>

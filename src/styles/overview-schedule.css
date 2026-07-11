@@ -14,3 +14,4 @@
 
 @media(max-width:950px){.current-debt-grid{grid-template-columns:1fr 1fr}.schedule-head{display:block}.schedule-tools{justify-content:flex-start;margin-top:14px}}
 @media(max-width:620px){.current-debt-grid,.progress-grid{grid-template-columns:1fr}.next-payment-panel .panel-head{display:block}.next-payment-panel .panel-head>b{display:block;margin-top:8px}.schedule-tools input{width:100%}.schedule-tools .ghost{flex:1}.schedule-jump-error{text-align:left}.schedule-filters{grid-template-columns:1fr 1fr}.schedule-filters button,.schedule-collapse-toggle{grid-column:1/-1}.audit-card dl{grid-template-columns:1fr}.saved-period-head{display:block}.saved-period-head b{display:inline-flex;margin-top:10px}}
+.schedule-pagination{display:flex;align-items:center;justify-content:center;gap:12px;margin-top:16px}.schedule-pagination span{color:var(--muted);font-size:.9rem}

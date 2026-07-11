@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { STORAGE_ERROR_EVENT, STORAGE_STATUS_EVENT, type StorageStatusKind } from '../store'
+import { STORAGE_CONFLICT_EVENT, STORAGE_ERROR_EVENT, STORAGE_STATUS_EVENT, type StorageConflictDetail, type StorageStatusKind } from '../store'
 import { APP_VERSION } from '../version'
 
 type LightTheme = 'emerald' | 'ocean' | 'violet' | 'graphite' | 'warm'
@@ -10,6 +10,7 @@ export function useStorageStatus(theme: Theme) {
   const [showOnboarding, setShowOnboarding] = useState(false)
   const [lastLightTheme, setLastLightTheme] = useState<LightTheme>('emerald')
   const [storageStatus, setStorageStatus] = useState<{ kind: StorageStatusKind; message: string }>({ kind: 'saved', message: 'Данные сохранены' })
+  const [storageConflict, setStorageConflict] = useState<StorageConflictDetail | null>(null)
 
   useEffect(() => {
     const safeGet = (key: string) => {
@@ -41,11 +42,17 @@ export function useStorageStatus(theme: Theme) {
         message: detail?.message ?? 'Браузер не дал сохранить данные локально. Экспортируйте расчёт в JSON, чтобы не потерять изменения.'
       })
     }
+    const showConflict = (event: Event) => {
+      const detail = (event as CustomEvent<StorageConflictDetail>).detail
+      if (detail) setStorageConflict(detail)
+    }
     window.addEventListener(STORAGE_ERROR_EVENT, showLegacyWarning)
     window.addEventListener(STORAGE_STATUS_EVENT, updateStatus)
+    window.addEventListener(STORAGE_CONFLICT_EVENT, showConflict)
     return () => {
       window.removeEventListener(STORAGE_ERROR_EVENT, showLegacyWarning)
       window.removeEventListener(STORAGE_STATUS_EVENT, updateStatus)
+      window.removeEventListener(STORAGE_CONFLICT_EVENT, showConflict)
     }
   }, [])
 
@@ -78,6 +85,8 @@ export function useStorageStatus(theme: Theme) {
     lastLightTheme,
     storageWarning: storageStatus.kind === 'saved' ? null : storageStatus.message,
     storageStatus,
+    storageConflict,
+    clearStorageConflict: () => setStorageConflict(null),
     closeWhatsNew,
     finishOnboarding
   }

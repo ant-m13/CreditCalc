@@ -3,10 +3,10 @@ import {
   nextPaymentDate,
   nextSameDaySequence,
   normalizeStoredRepaymentAmountMode,
-  repaymentAmountModeContext,
+  regularPaymentDateMatches,
+  repaymentAmountModeContextForRegularDate,
   sortRateChanges,
   sortRepaymentsByApplicationOrder,
-  supportedCurrencies,
   validateScenario,
   type EarlyRepayment,
   type GracePeriod,
@@ -21,30 +21,13 @@ import { sortRepaymentRulesByApplicationOrder, validateRepaymentRuleStructure, t
 import type { LoanData, LoanImportData, LoanPersistedState, LoanProfile, QuarantinedLoanRaw, ThemeName } from './storeTypes'
 import { createId } from './utils/createId'
 import { isISODate, isISOYearMonth } from './utils/dateValidation'
+import { balanceMoments, dayCountBases, fontSizes, frequencies, graceTypes, interestMethods, isOneOf, paymentTypes, periodStarts, rateChangeModes, repaymentRuleTypes, repaymentSources, repaymentStrategies, roundingModes, sameDayOrders, scenarioIds, supportedCurrencies, termUnits, themeNames } from './portableSchemas'
 
 export const MAX_LOANS = 100
 export const defaultAccentColor = '#0b9873'
 
-const themeNames: readonly ThemeName[] = ['emerald', 'ocean', 'violet', 'graphite', 'warm', 'night']
-const paymentTypes = ['annuity', 'differentiated'] as const
-const frequencies = ['monthly', 'biweekly', 'quarterly'] as const
-const roundingModes = ['kopecks', 'rubles', 'bank'] as const
-const interestMethods = ['annuity', 'daily'] as const
-const rateChangeModes = ['nextPeriod', 'exactDate'] as const
-const dayCountBases = ['365', '366', '360', 'actual365', 'actualActual'] as const
-const periodStarts = ['inclusive', 'exclusive'] as const
-const balanceMoments = ['startOfDay', 'endOfDay'] as const
-const repaymentStrategies = ['reduceTerm', 'reducePayment', 'full', 'custom'] as const
-const repaymentSources = ['own', 'subsidy', 'insurance', 'other'] as const
-const sameDayOrders = ['regularFirst', 'earlyFirst'] as const
-const repaymentRuleTypes = ['weeklyFixed', 'monthlyFixed', 'bimonthlyFixed', 'quarterlyFixed', 'semiannualFixed', 'annualFixed', 'annualBonus', 'paymentPercent', 'monthlyTotalPayment'] as const
-const graceTypes = ['full', 'interestOnly', 'reduced', 'custom'] as const
-const scenarioIds = ['base', 'reduceTerm', 'reducePayment', 'combined'] as const
-const termUnits = ['months', 'years'] as const
-const fontSizes = ['normal', 'large', 'xlarge'] as const
-
 const oneOf = <T extends string>(value: unknown, values: readonly T[], fallback: T): T =>
-  typeof value === 'string' && values.includes(value as T) ? value as T : fallback
+  isOneOf(value, values) ? value : fallback
 
 const finiteNumber = (value: unknown, fallback: number, min = 0, max = Number.POSITIVE_INFINITY) =>
   typeof value === 'number' && Number.isFinite(value) ? Math.min(max, Math.max(min, value)) : fallback
@@ -81,7 +64,7 @@ const createSeedRepayments = (config: LoanConfig): EarlyRepayment[] => [{
 }]
 
 const normalizeTheme = (value: unknown): ThemeName =>
-  typeof value === 'string' && themeNames.includes(value as ThemeName) ? value as ThemeName : 'emerald'
+  isOneOf(value, themeNames) ? value : 'emerald'
 
 export const normalizeAccentColor = (value: unknown): string =>
   typeof value === 'string' && /^#[0-9a-fA-F]{6}$/.test(value) ? value : defaultAccentColor
@@ -193,6 +176,9 @@ const normalizeConfig = (config: Partial<LoanConfig> | undefined): LoanConfig =>
 
 const normalizeRepayments = (value: unknown, config: LoanConfig): EarlyRepayment[] => {
   if (!Array.isArray(value)) return []
+  const regularRepaymentDates = regularPaymentDateMatches(value.flatMap(item =>
+    isObject(item) && isISODate(item.date) && item.amountMode !== 'extra' ? [item.date] : []
+  ), config)
   const usedSequences = new Map<string, Set<number>>()
   const nextSequence = (date: string, candidate: number) => {
     const used = usedSequences.get(date) ?? new Set<number>()
@@ -206,13 +192,12 @@ const normalizeRepayments = (value: unknown, config: LoanConfig): EarlyRepayment
     if (!isObject(item) || typeof item.id !== 'string' || !isISODate(item.date)) return []
     const amount = optionalFiniteNumber(item.amount, 0)
     if (amount === undefined) return []
-    const context = repaymentAmountModeContext({
+    const context = repaymentAmountModeContextForRegularDate({
       amount,
       amountMode: item.amountMode,
-      date: item.date,
       enabled: item.enabled,
       sameDayOrder: item.sameDayOrder
-    }, config)
+    }, regularRepaymentDates.has(item.date))
     const amountMode = normalizeStoredRepaymentAmountMode(context)
     const sequenceCandidate = typeof item.sameDaySequence === 'number' && Number.isInteger(item.sameDaySequence) && item.sameDaySequence >= 0 ? item.sameDaySequence : index
     return [{
@@ -459,5 +444,7 @@ export const normalizePersistedState = (persisted: unknown): Partial<LoanPersist
   if (!recoveredLoans.length && rawLoans.length) storageRecoveryReport.push('Все повреждённые кредиты отклонены, создан новый пустой расчёт.')
   const activeLoanId = typeof state.activeLoanId === 'string' && loans.some(loan => loan.id === state.activeLoanId) ? state.activeLoanId : loans[0].id
   const active = loans.find(loan => loan.id === activeLoanId) ?? loans[0]
-  return { loans, activeLoanId, ...publicData(active), storageRecoveryReport, quarantinedLoansRaw: quarantinedLoansRaw.slice(0, MAX_LOANS) }
+  const persistedRevision = typeof state.persistedRevision === 'number' && Number.isSafeInteger(state.persistedRevision) && state.persistedRevision >= 0 ? state.persistedRevision : 0
+  const persistedUpdatedAt = typeof state.persistedUpdatedAt === 'string' ? state.persistedUpdatedAt : ''
+  return { loans, activeLoanId, ...publicData(active), storageRecoveryReport, quarantinedLoansRaw: quarantinedLoansRaw.slice(0, MAX_LOANS), persistedRevision, persistedUpdatedAt }
 }

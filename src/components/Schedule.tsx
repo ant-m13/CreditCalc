@@ -15,8 +15,14 @@ interface ScheduleProps {
   displayDecimals: 0 | 2
   rows: number
   setRows: React.Dispatch<React.SetStateAction<number>>
-  more: () => void
 }
+
+const SCHEDULE_PAGE_SIZE = 100
+
+export const getScheduleScrollBehavior = (): ScrollBehavior =>
+  typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    ? 'auto'
+    : 'smooth'
 
 const rowTotal = (row: PaymentScheduleItem) => row.cashFlowTotal ?? row.payment + row.earlyPayment + row.fee
 const rowFee = (row: PaymentScheduleItem) => row.feePaid ?? row.fee
@@ -68,7 +74,7 @@ function ScheduleTable({ rows, expandedRows, toggleRow, showFees, showDeferred, 
 
 const collapsedColumnCount = (showFees: boolean, showDeferred: boolean) => 7 + (showFees ? 1 : 0) + (showDeferred ? 2 : 0)
 
-export function Schedule({ schedule, baseSchedule, repayments, currency, displayDecimals, rows, setRows, more }: ScheduleProps) {
+export function Schedule({ schedule, baseSchedule, repayments, currency, displayDecimals, rows, setRows }: ScheduleProps) {
   const { money } = createMoneyFormatter(currency, displayDecimals)
   const [jump, setJump] = useState('')
   const [jumpError, setJumpError] = useState('')
@@ -95,7 +101,8 @@ export function Schedule({ schedule, baseSchedule, repayments, currency, display
   const years = useMemo(() => [...new Set(schedule.map(row => row.date.slice(0, 4)))], [schedule])
   const amount = parseAmount(amountSearch)
   const filteredSchedule = useMemo(() => schedule.filter(row => (yearFilter === 'all' || row.date.startsWith(yearFilter)) && (amount === null || matchesAmount(row, amount))), [schedule, yearFilter, amount])
-  const visibleRows = filteredSchedule.slice(0, yearFilter === 'all' && amount === null ? rows : filteredSchedule.length)
+  const pageOffset = Math.min(rows, Math.max(0, Math.floor(Math.max(0, filteredSchedule.length - 1) / SCHEDULE_PAGE_SIZE) * SCHEDULE_PAGE_SIZE))
+  const visibleRows = filteredSchedule.slice(pageOffset, pageOffset + SCHEDULE_PAGE_SIZE)
   const groupedRows = useMemo(() => {
     const groups: { key: string; title: string; rows: PaymentScheduleItem[]; totals: { principal: number; interest: number; fee: number; total: number; closing: number; deferred: number; debt: number } }[] = []
     for (const row of visibleRows) {
@@ -135,7 +142,7 @@ export function Schedule({ schedule, baseSchedule, repayments, currency, display
       return
     }
     setJumpError('')
-    setRows(Math.max(rows, index + 1))
+    setRows(Math.floor(index / SCHEDULE_PAGE_SIZE) * SCHEDULE_PAGE_SIZE)
     setYearFilter('all')
     setAmountSearch('')
     setMonthsCollapsed(false)
@@ -144,7 +151,7 @@ export function Schedule({ schedule, baseSchedule, repayments, currency, display
   const quickJump = (query: string) => {
     const index = schedule.findIndex(row => row.date === query || row.date.startsWith(query))
     if (index < 0) return
-    setRows(Math.max(rows, index + 1))
+    setRows(Math.floor(index / SCHEDULE_PAGE_SIZE) * SCHEDULE_PAGE_SIZE)
     setYearFilter('all')
     setAmountSearch('')
     setMonthsCollapsed(false)
@@ -167,14 +174,14 @@ export function Schedule({ schedule, baseSchedule, repayments, currency, display
     if (pendingRow === null) return
     const timer = window.setTimeout(() => {
       const target = document.getElementById(`mobile-schedule-row-${pendingRow}`) ?? document.getElementById(`schedule-row-${pendingRow}`)
-      target?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      target?.scrollIntoView({ behavior: getScheduleScrollBehavior(), block: 'center' })
       setPendingRow(null)
     }, 80)
     return () => window.clearTimeout(timer)
   }, [pendingRow, rows])
 
   return <section className="panel table-panel">
-    <div className="panel-head schedule-head"><div><h3>График платежей</h3><p>{schedule.length} строк · показано {visibleRows.length} · закрытие {closingDate ? shortDate(closingDate) : '—'}</p></div><div className="schedule-tools"><input value={jump} onChange={event => { setJump(event.target.value); if (jumpError) setJumpError('') }} onKeyDown={event => { if (event.key === 'Enter') jumpTo() }} placeholder="Дата, месяц или год" aria-describedby={jumpError ? 'schedule-jump-error' : undefined}/><button className="ghost" onClick={jumpTo}>Перейти</button><button className="ghost" onClick={() => setRows(schedule.length)}>Показать всё</button>{jumpError && <p id="schedule-jump-error" className="inline-error schedule-jump-error" role="status">{jumpError}</p>}</div></div>
+    <div className="panel-head schedule-head"><div><h3>График платежей</h3><p>{schedule.length} строк · показано {visibleRows.length} · закрытие {closingDate ? shortDate(closingDate) : '—'}</p></div><div className="schedule-tools"><input value={jump} onChange={event => { setJump(event.target.value); if (jumpError) setJumpError('') }} onKeyDown={event => { if (event.key === 'Enter') jumpTo() }} placeholder="Дата, месяц или год" aria-label="Дата или месяц для перехода по графику" aria-describedby={jumpError ? 'schedule-jump-error' : undefined}/><button className="ghost" onClick={jumpTo}>Перейти</button>{jumpError && <p id="schedule-jump-error" className="inline-error schedule-jump-error" role="status">{jumpError}</p>}</div></div>
     <div className="mobile-schedule-bar"><div><span>Остаток долга</span><b>{money(currentBalance)}</b></div><div className="mobile-quick-actions"><button className="ghost compact" onClick={() => quickJump(today.slice(0,4))}>Текущий год</button>{nextRow && <button className="ghost compact" onClick={() => quickJump(nextRow.date)}>Следующий платёж</button>}{nextEarly && <button className="ghost compact" onClick={() => quickJump(nextEarly.date)}>Досрочные</button>}<button className="ghost compact" onClick={() => setMobileTableMode(value => !value)}>{mobileTableMode ? 'Карточки' : 'Таблица'}</button></div></div>
     <div className="schedule-filters"><label><span>Год</span><select value={yearFilter} onChange={event => setYearFilter(event.target.value)}><option value="all">Все годы</option>{years.map(year => <option value={year} key={year}>{year}</option>)}</select></label><label><span>Поиск суммы</span><input inputMode="decimal" value={amountSearch} onChange={event => setAmountSearch(event.target.value)} placeholder="Например 35479,81"/></label><button className="ghost" onClick={() => { setYearFilter('all'); setAmountSearch(''); setMonthsCollapsed(false); setOpenMonths(new Set()) }}>Сбросить</button><label className="schedule-collapse-toggle"><input type="checkbox" checked={monthsCollapsed} onChange={event => setMonthsCollapsed(event.target.checked)}/><span>Свернуть месяцы</span></label></div>
     <div className={mobileTableMode ? 'table-wrap force-mobile-table' : 'table-wrap'}>
@@ -187,7 +194,7 @@ export function Schedule({ schedule, baseSchedule, repayments, currency, display
     </div>
     {!mobileTableMode && !monthsCollapsed && <div className="mobile-schedule-cards">{visibleRows.map(row => <article id={`mobile-schedule-row-${row.number}`} key={`card-${row.number}-${row.date}`} className={row.event ? 'schedule-card recalc-row' : 'schedule-card'}><div><span>№ {row.number}</span><b>{shortDate(row.date)}</b></div><dl><div><dt>По кредиту</dt><dd>{money(row.principalPaid ?? row.principal)}</dd></div><div><dt>Проценты</dt><dd>{money(row.interestPaid ?? row.interest)}</dd></div>{showFees && <div><dt>Комиссия</dt><dd>{money(rowFee(row))}</dd></div>}<div><dt>Итого</dt><dd>{money(rowTotal(row))}</dd></div><div><dt>Остаток</dt><dd>{money(row.closingBalance)}</dd></div>{showDeferred && <><div><dt>Отложенные проценты</dt><dd>{money(rowDeferredInterest(row))}</dd></div><div><dt>Общая задолженность</dt><dd>{money(rowTotalDebt(row))}</dd></div></>}</dl>{row.audit && <button className="ghost compact" onClick={() => toggleRow(row.number)} aria-expanded={expandedRows.has(row.number)} aria-controls={`mobile-audit-${row.number}`}>{expandedRows.has(row.number) ? 'Скрыть формулу' : 'Показать формулу'}</button>}{expandedRows.has(row.number) && <div id={`mobile-audit-${row.number}`} className="mobile-audit"><AuditCard row={row} money={money}/></div>}</article>)}</div>}
     {!monthsCollapsed && <table className="schedule-totals bank-schedule"><tfoot><tr><td colSpan={2}>Итого за весь срок</td><td>{money(totals.principal)}</td><td>{money(totals.interest)}</td>{showFees && <td>{money(totals.fee)}</td>}<td>{money(totals.total)}</td><td>{money(closingRow?.closingBalance ?? 0)}</td>{showDeferred && <><td>{money(closingRow?.deferredInterestClosing ?? 0)}</td><td>{money(closingRow ? rowTotalDebt(closingRow) : 0)}</td></>}</tr></tfoot></table>}
-    {yearFilter === 'all' && amount === null && rows < schedule.length && <button className="load-more" onClick={more}>Показать ещё <ChevronDown/></button>}
+    {filteredSchedule.length > SCHEDULE_PAGE_SIZE && <nav className="schedule-pagination" aria-label="Страницы графика"><button className="ghost" disabled={pageOffset === 0} onClick={() => setRows(Math.max(0, pageOffset - SCHEDULE_PAGE_SIZE))}>Назад</button><span>Строки {pageOffset + 1}–{Math.min(pageOffset + SCHEDULE_PAGE_SIZE, filteredSchedule.length)} из {filteredSchedule.length}</span><button className="ghost" disabled={pageOffset + SCHEDULE_PAGE_SIZE >= filteredSchedule.length} onClick={() => setRows(pageOffset + SCHEDULE_PAGE_SIZE)}>Далее <ChevronDown/></button></nav>}
     {savedRows.length > 0 && <div className="saved-period"><div className="saved-period-head"><div><span className="eyebrow">Сокращённый срок</span><h4>Платежи исходного графика, которые больше не нужны</h4><p>Это хвост первоначального графика после даты закрытия выбранного сценария. Сумма “Итого” показывает платежи, которые исчезли из исходного графика, но не является чистой экономией: часть “по кредиту” — это основной долг, погашенный раньше. Экономия денег считается по процентам.</p></div><b>{savedRows.length} {plural(savedRows.length, 'платёж', 'платежа', 'платежей')}</b></div><div className="table-wrap"><table className="bank-schedule saved-schedule"><caption className="sr-only">Платежи исходного графика после даты закрытия выбранного сценария, которые больше не потребуются.</caption><thead><tr><th rowSpan={2}>№ п/п</th><th rowSpan={2}>Дата</th><th colSpan={showFees ? 4 : 3}>Сумма платежа по исходному графику</th><th rowSpan={2}>Остаток задолженности</th></tr><tr><th>По кредиту</th><th>По процентам</th>{showFees && <th>Комиссия</th>}<th>Итого</th></tr></thead><tbody>{savedRows.map(row => <tr key={`saved-${row.number}-${row.date}`}><td>{row.number}</td><td>{shortDate(row.date)}</td><td>{money(row.principalPaid ?? row.principal)}</td><td>{money(row.interestPaid ?? row.interest)}</td>{showFees && <td>{money(rowFee(row))}</td>}<td>{money(rowTotal(row))}</td><td><b>{money(row.closingBalance)}</b></td></tr>)}</tbody><tfoot><tr><td colSpan={2}>Исчезнувшие платежи исходного графика</td><td>{money(savedTotals.principal)}</td><td>{money(savedTotals.interest)}</td>{showFees && <td>{money(savedTotals.fee)}</td>}<td>{money(savedTotals.total)}</td><td>—</td></tr></tfoot></table></div><div className="saved-period-note"><CircleHelp/> Чистая финансовая экономия — это снижение процентов по всему кредиту, а не сумма всех исчезнувших строк исходного графика.</div></div>}
   </section>
 }

@@ -18,13 +18,20 @@ export function nextPaymentDate(date: string, config: LoanConfig) {
 }
 
 export function isRegularPaymentDate(date: string, config: LoanConfig, maxSteps = 10000) {
-  if (date < config.firstPaymentDate) return false
+  return regularPaymentDateMatches([date], config, maxSteps).has(date)
+}
+
+export function regularPaymentDateMatches(dates: Iterable<string>, config: LoanConfig, maxSteps = MAX_SCHEDULE_ROWS) {
+  const targets = new Set([...dates].filter(date => date >= config.firstPaymentDate))
+  const matches = new Set<string>()
+  if (targets.size === 0) return matches
+  const lastTarget = [...targets].sort().at(-1)!
   let cursor = config.firstPaymentDate
-  for (let step = 0; step < maxSteps && cursor <= date; step += 1) {
-    if (cursor === date) return true
+  for (let step = 0; step < maxSteps && cursor <= lastTarget; step += 1) {
+    if (targets.has(cursor)) matches.add(cursor)
     cursor = nextPaymentDate(cursor, config)
   }
-  return false
+  return matches
 }
 
 export const totalPaymentPeriods = (config: LoanConfig) =>
@@ -46,6 +53,7 @@ export const preparePaymentCalendar = (config: LoanConfig, gracePeriods: GracePe
   let remainingContractualPayments = configuredPeriods
   let cursor = config.firstPaymentDate
   let intervalIndex = 0
+  let isFirstPaymentDate = true
   const isExtendingGraceDate = (date: string) => {
     while (intervalIndex < intervals.length && intervals[intervalIndex].endDate < date) intervalIndex += 1
     const interval = intervals[intervalIndex]
@@ -57,7 +65,9 @@ export const preparePaymentCalendar = (config: LoanConfig, gracePeriods: GracePe
       throw new Error(`Календарь платежей не помещается в допустимое количество строк (${MAX_SCHEDULE_ROWS})`)
     }
     dates.push(cursor)
-    if (!isExtendingGraceDate(cursor)) remainingContractualPayments -= 1
+    const isInterestOnlyStub = isFirstPaymentDate && config.firstPaymentInterestOnly
+    if (!isInterestOnlyStub && !isExtendingGraceDate(cursor)) remainingContractualPayments -= 1
+    isFirstPaymentDate = false
     cursor = nextPaymentDate(cursor, config)
   }
   return { dates, extendedPeriods: dates.length - configuredPeriods }

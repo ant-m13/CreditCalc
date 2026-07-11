@@ -1,10 +1,11 @@
 import type { EarlyRepayment, GracePeriod, LoanConfig } from './loanEngine'
 import { parseLoanBackupObject, type LoanBackupData } from './importExport'
 import type { RepaymentRule } from './repaymentRules'
+import { assertPortableJsonSize, MAX_PORTABLE_JSON_BYTES, MAX_SHARE_ENCODED_PAYLOAD_LENGTH, portablePayloadTooLargeMessage } from './portabilityLimits'
 
 export const SHARE_PREFIX = 'v1.'
-export const MAX_ENCODED_PAYLOAD_LENGTH = 120_000
-export const MAX_JSON_PAYLOAD_LENGTH = 600_000
+export const MAX_ENCODED_PAYLOAD_LENGTH = MAX_SHARE_ENCODED_PAYLOAD_LENGTH
+export const MAX_JSON_PAYLOAD_LENGTH = MAX_PORTABLE_JSON_BYTES
 
 export interface SharedCalculationV1 {
   version: 1
@@ -39,7 +40,7 @@ const base64UrlToBytes = (value: string) => {
   return Uint8Array.from(binary, char => char.charCodeAt(0))
 }
 
-const streamToBytes = async (stream: ReadableStream<Uint8Array>) => {
+const streamToBytes = async (stream: ReadableStream<Uint8Array>, maximumLength = MAX_PORTABLE_JSON_BYTES) => {
   const reader = stream.getReader()
   const chunks: Uint8Array[] = []
   let length = 0
@@ -48,7 +49,7 @@ const streamToBytes = async (stream: ReadableStream<Uint8Array>) => {
     if (done) break
     chunks.push(value)
     length += value.length
-    if (length > MAX_JSON_PAYLOAD_LENGTH) throw new Error('Расчёт слишком большой для ссылки. Сохраните его в JSON-файл')
+    if (length > maximumLength) throw new Error(portablePayloadTooLargeMessage)
   }
   const result = new Uint8Array(length)
   let offset = 0
@@ -117,26 +118,26 @@ export function parseLoanSnapshot(value: unknown): LoanBackupData {
 
 export async function encodeSharedCalculation(snapshot: SharedCalculationV1) {
   const json = serializeLoanSnapshot(snapshot)
+  assertPortableJsonSize(json)
   const jsonBytes = new TextEncoder().encode(json)
-  if (jsonBytes.byteLength > MAX_JSON_PAYLOAD_LENGTH) throw new Error('Расчёт слишком большой для ссылки. Сохраните его в JSON-файл')
   const compressed = await gzip(jsonBytes)
   const encoded = `${SHARE_PREFIX}${bytesToBase64Url(compressed)}`
-  if (encoded.length > MAX_ENCODED_PAYLOAD_LENGTH) throw new Error('Расчёт слишком большой для ссылки. Сохраните его в JSON-файл')
+  if (encoded.length > MAX_ENCODED_PAYLOAD_LENGTH) throw new Error(portablePayloadTooLargeMessage)
   return encoded
 }
 
 export async function decodeSharedCalculation(payload: string) {
   if (!payload.startsWith(SHARE_PREFIX)) throw new Error('Версия ссылки не поддерживается')
-  if (payload.length > MAX_ENCODED_PAYLOAD_LENGTH) throw new Error('Расчёт слишком большой для ссылки. Сохраните его в JSON-файл')
+  if (payload.length > MAX_ENCODED_PAYLOAD_LENGTH) throw new Error(portablePayloadTooLargeMessage)
   const encoded = payload.slice(SHARE_PREFIX.length)
   let raw: unknown
   try {
     const bytes = await gunzip(base64UrlToBytes(encoded))
-    if (bytes.byteLength > MAX_JSON_PAYLOAD_LENGTH) throw new Error('Расчёт слишком большой для ссылки. Сохраните его в JSON-файл')
+    if (bytes.byteLength > MAX_JSON_PAYLOAD_LENGTH) throw new Error(portablePayloadTooLargeMessage)
     const json = new TextDecoder().decode(bytes)
     raw = JSON.parse(json)
   } catch (error) {
-    if (error instanceof Error && error.message.includes('слишком большой')) throw error
+    if (error instanceof Error && (error.message.includes('слишком большой') || error.message.includes('лимит переносимых данных'))) throw error
     throw new Error('Ссылка повреждена. Проверьте ссылку или используйте JSON-файл', { cause: error })
   }
   return parseLoanSnapshot(raw)

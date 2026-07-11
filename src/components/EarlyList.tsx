@@ -148,16 +148,17 @@ function RepaymentRulesPanel({ rules, addRule, updateRule, removeRule, defaultSt
 export function EarlyList({ items, rules, generated, currency, displayDecimals, remove, edit, toggle, open, addRule, updateRule, removeRule, defaultStart }: { items: EarlyRepayment[]; rules: RepaymentRule[]; generated: EarlyRepayment[]; currency: string; displayDecimals: 0 | 2; remove: (id: string) => void; edit: (item: EarlyRepayment) => void; toggle: (item: EarlyRepayment) => void; open: () => void; addRule: (rule: RepaymentRule) => void; updateRule: (rule: RepaymentRule) => void; removeRule: (id: string) => void; defaultStart: string }) {
   const { money } = createMoneyFormatter(currency, displayDecimals)
   const ruleNames = useMemo(() => new Map(rules.map(rule => [rule.id, rule.name])), [rules])
+  const manualIds = useMemo(() => new Set(items.map(item => item.id)), [items])
   const activeItems = useMemo(() => items.filter(item => !repaymentDisabled(item)), [items])
   const combined = useMemo(() => sortRepaymentsByApplicationOrder([
     ...items,
     ...generated
   ]).map(item => {
-    const manual = items.some(manualItem => manualItem.id === item.id)
+    const manual = manualIds.has(item.id)
     if (manual) return { item, kind: 'manual' as const, label: 'Разовый платёж' }
       const ruleId = item.id.startsWith('rule-') ? item.id.slice(5, -11) : ''
     return { item, kind: 'rule' as const, label: ruleNames.get(ruleId) ?? 'Регулярный платёж' }
-  }), [items, generated, ruleNames])
+  }), [items, generated, manualIds, ruleNames])
   const manualTotal = activeItems.reduce((sum, item) => sum + item.amount, 0)
   const generatedTotal = generated.reduce((sum, item) => sum + item.amount, 0)
 

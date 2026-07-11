@@ -3,7 +3,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from './App'
-import { defaultConfig, useLoanStore, type LoanProfile } from './store'
+import { defaultConfig, STORAGE_CONFLICT_EVENT, useLoanStore, type LoanProfile } from './store'
 import { APP_VERSION } from './version'
 
 const sharedLinkMock = vi.hoisted(() => ({
@@ -351,5 +351,107 @@ describe('App smoke tests', () => {
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Досрочный платёж' })).toBeNull())
     const nextAmount = screen.getByText('Регулярные досрочные платежи').closest('section')?.querySelector('input[type="number"]') as HTMLInputElement | null
     expect(nextAmount?.value).toBe('20000')
+  })
+
+  it('скрывает предупреждение карантина без удаления raw и удаляет только после подтверждения', async () => {
+    const user = userEvent.setup()
+    useLoanStore.setState({
+      storageRecoveryReport: ['Повреждённая запись помещена в карантин'],
+      quarantinedLoansRaw: [{ id: 'bad', name: 'Сбой', reason: 'ошибка', raw: { secret: 'raw' } }]
+    })
+    render(<App />)
+
+    await user.click(screen.getByRole('button', { name: 'Скрыть уведомление' }))
+    expect(useLoanStore.getState().quarantinedLoansRaw).toHaveLength(1)
+    expect(screen.getByText(/В карантине 1/)).toBeTruthy()
+
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValueOnce(false).mockReturnValueOnce(true)
+    await user.click(screen.getByRole('button', { name: 'Удалить данные' }))
+    expect(useLoanStore.getState().quarantinedLoansRaw).toHaveLength(1)
+    await user.click(screen.getByRole('button', { name: 'Удалить данные' }))
+    expect(useLoanStore.getState().quarantinedLoansRaw).toEqual([])
+    expect(confirm).toHaveBeenCalledTimes(2)
+  })
+
+  it('показывает конфликт вкладок и не предлагает неявный merge', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    act(() => window.dispatchEvent(new CustomEvent(STORAGE_CONFLICT_EVENT, { detail: { revision: 12, updatedAt: '2026-07-10T10:00:00.000Z' } })))
+
+    expect(screen.getByRole('alert').textContent).toContain('Автоматическое объединение финансовых данных отключено')
+    expect(screen.getByRole('button', { name: 'Загрузить новую версию' })).toBeTruthy()
+    await user.click(screen.getByRole('button', { name: 'Перезаписать из этой вкладки' }))
+    expect(screen.queryByText(/Автоматическое объединение/)).toBeNull()
+  })
+
+  it('блокирует CSV и печать при ошибке расчёта', async () => {
+    const user = userEvent.setup()
+    const broken = loan({ config: { ...defaultConfig, principal: Number.MAX_VALUE } })
+    useLoanStore.setState({ ...broken, loans: [broken], activeLoanId: broken.id })
+    render(<App />)
+
+    const print = await screen.findByRole('button', { name: 'Печать' })
+    expect((print as HTMLButtonElement).disabled).toBe(true)
+    await user.click(screen.getByRole('button', { name: 'Импорт/экспорт' }))
+    expect((await screen.findByRole('button', { name: 'CSV' }) as HTMLButtonElement).disabled).toBe(true)
+    expect((screen.getByRole('button', { name: 'PDF / печать' }) as HTMLButtonElement).disabled).toBe(true)
+  })
+
+  it('поясняет exact-date ставку без обещания следующего платёжного периода', async () => {
+    const user = userEvent.setup()
+    const exact = loan({ config: { ...defaultConfig, rateChangeMode: 'exactDate' } })
+    useLoanStore.setState({ ...exact, loans: [exact], activeLoanId: exact.id })
+    render(<App />)
+
+    await user.click(screen.getByRole('button', { name: 'Параметры' }))
+    expect(await screen.findByText(/Дата, с которой новая ставка применяется внутри текущего процентного периода/)).toBeTruthy()
+    expect(screen.getByText(/Годовая ставка, действующая точно с указанной даты/)).toBeTruthy()
+  })
+
+  it('убирает скрытое мобильное меню из tab order', async () => {
+    vi.mocked(window.matchMedia).mockReturnValue({
+      matches: true, media: '(max-width: 950px)', onchange: null,
+      addListener: vi.fn(), removeListener: vi.fn(), addEventListener: vi.fn(), removeEventListener: vi.fn(), dispatchEvent: vi.fn()
+    })
+    const user = userEvent.setup()
+    const { container } = render(<App />)
+    const sidebar = container.querySelector('aside.sidebar')!
+
+    await waitFor(() => expect(sidebar.hasAttribute('inert')).toBe(true))
+    expect(sidebar.getAttribute('aria-hidden')).toBe('true')
+    await user.click(screen.getByRole('button', { name: 'Открыть меню' }))
+    expect(sidebar.hasAttribute('inert')).toBe(false)
+    expect(sidebar.hasAttribute('aria-hidden')).toBe(false)
+  })
+
+  it('объявляет ошибку и остановку расчёта assistive-технологиям', async () => {
+    const invalidLoan = loan({ config: { ...defaultConfig, principal: 0 } })
+    useLoanStore.setState({ ...invalidLoan, loans: [invalidLoan], activeLoanId: invalidLoan.id })
+    render(<App />)
+
+    const error = await screen.findByRole('alert')
+    expect(error.getAttribute('aria-live')).toBe('assertive')
+    expect(error.getAttribute('aria-atomic')).toBe('true')
+    expect((await screen.findByRole('status')).textContent).toMatch(/Расчёт временно остановлен/)
+  })
+
+  it('сворачивает desktop-меню до иконок и разворачивает обратно', async () => {
+    const user = userEvent.setup()
+    const { container } = render(<App />)
+    const shell = container.querySelector('.app-shell')!
+
+    const collapse = screen.getByRole('button', { name: 'Свернуть меню' })
+    expect(collapse.getAttribute('aria-expanded')).toBe('true')
+    await user.click(collapse)
+
+    expect(shell.classList.contains('sidebar-collapsed')).toBe(true)
+    expect(screen.getByRole('button', { name: 'Параметры' }).getAttribute('title')).toBe('Параметры')
+    const expand = screen.getByRole('button', { name: 'Развернуть меню' })
+    expect(expand.getAttribute('aria-expanded')).toBe('false')
+    await user.click(expand)
+
+    expect(shell.classList.contains('sidebar-collapsed')).toBe(false)
+    expect(screen.getByRole('button', { name: 'Свернуть меню' })).toBeTruthy()
   })
 })

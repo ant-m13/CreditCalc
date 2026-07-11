@@ -4,6 +4,8 @@ import { generateBaseSchedule } from './generateBaseSchedule'
 import type { ComparisonResult, EarlyRepayment, GracePeriod, LoanConfig, PaymentScheduleItem, RepaymentStrategy, ScenarioResult } from './types'
 import { validateScenario } from './validation'
 import { periodDays } from './calculateInterest'
+import Decimal from 'decimal.js'
+import { finiteFinancialNumber } from './financialSafety'
 
 const isIgnoredOnlyRow = (row: PaymentScheduleItem) => row.eventTypes.length > 0 && row.eventTypes.every(type => type === 'earlyIgnored')
 const isDebtClosedRow = (row: PaymentScheduleItem) => row.closingBalance === 0 && (row.deferredInterestClosing ?? 0) === 0
@@ -12,8 +14,8 @@ const financialClosingRow = (schedule: PaymentScheduleItem[]) => [...schedule].r
 function toResult(id: string, name: string, strategy: ScenarioResult['strategy'], schedule: ReturnType<typeof generateBaseSchedule>, config: LoanConfig, base?: ScenarioResult): ScenarioResult {
   const last = schedule.at(-1)
   const closingRow = financialClosingRow(schedule) ?? last
-  const totalInterest = schedule.reduce((s, x) => s + x.interest, 0)
-  const totalPaid = schedule.reduce((s, x) => s + (x.cashFlowTotal ?? x.payment + x.earlyPayment + x.fee), 0)
+  const totalInterest = finiteFinancialNumber(schedule.reduce((sum, row) => sum.add(row.interest), new Decimal(0)), 'Итог процентов')
+  const totalPaid = finiteFinancialNumber(schedule.reduce((sum, row) => sum.add(row.cashFlowTotal ?? row.payment + row.earlyPayment + row.fee), new Decimal(0)), 'Итог выплат')
   const closingDate = closingRow?.date ?? config.issueDate
   let recalculationIndex = -1
   schedule.forEach((row, index) => { if (row.paymentRecalculated) recalculationIndex = index })
@@ -31,7 +33,7 @@ function toResult(id: string, name: string, strategy: ScenarioResult['strategy']
     monthlyPayment,
     totalPaid,
     totalInterest,
-    overpayment: Math.max(0, totalPaid - config.principal),
+    overpayment: finiteFinancialNumber(Decimal.max(0, new Decimal(totalPaid).minus(config.principal)), 'Итог переплаты'),
     closingDate,
     termMonths,
     termDays,
@@ -65,19 +67,23 @@ function addCumulativeSavings(schedule: ReturnType<typeof generateBaseSchedule>,
   })
 }
 
-export function compareScenarios(config: LoanConfig, repayments: EarlyRepayment[], gracePeriods: GracePeriod[] = [], preparedCalendar?: PreparedPaymentCalendar): ComparisonResult {
-  const validationErrors = validateScenario(config, repayments, gracePeriods)
-  if (validationErrors.length > 0) throw new Error(validationErrors.join(' · '))
+interface CompareScenarioOptions { scenarioAlreadyValidated?: boolean }
+
+export function compareScenarios(config: LoanConfig, repayments: EarlyRepayment[], gracePeriods: GracePeriod[] = [], preparedCalendar?: PreparedPaymentCalendar, options: CompareScenarioOptions = {}): ComparisonResult {
+  if (!options.scenarioAlreadyValidated) {
+    const validationErrors = validateScenario(config, repayments, gracePeriods)
+    if (validationErrors.length > 0) throw new Error(validationErrors.join(' · '))
+  }
   const paymentCalendar = preparedCalendar ?? preparePaymentCalendar(config, gracePeriods)
-  const base = toResult('base', 'Без досрочных', 'base', generateBaseSchedule(config, { gracePeriods, paymentCalendar }), config)
+  const base = toResult('base', 'Без досрочных', 'base', generateBaseSchedule(config, { gracePeriods, paymentCalendar, scenarioAlreadyValidated: true }), config)
   const make = (strategy: RepaymentStrategy, name: string) => {
     const mapped = repayments.map(r => ({ ...r, strategy }))
-    const schedule = addCumulativeSavings(generateBaseSchedule(config, { earlyRepayments: mapped, gracePeriods, forcedStrategy: strategy, paymentCalendar }), base.schedule)
+    const schedule = addCumulativeSavings(generateBaseSchedule(config, { earlyRepayments: mapped, gracePeriods, forcedStrategy: strategy, paymentCalendar, scenarioAlreadyValidated: true }), base.schedule)
     return toResult(strategy, name, strategy, schedule, config, base)
   }
   const term = make('reduceTerm', 'Сократить срок')
   const payment = make('reducePayment', 'Снизить платёж')
-  const combinedSchedule = addCumulativeSavings(generateBaseSchedule(config, { earlyRepayments: repayments, gracePeriods, paymentCalendar }), base.schedule)
+  const combinedSchedule = addCumulativeSavings(generateBaseSchedule(config, { earlyRepayments: repayments, gracePeriods, paymentCalendar, scenarioAlreadyValidated: true }), base.schedule)
   const combined = toResult('combined', 'По операциям', 'combined', combinedSchedule, config, base)
   const scenarios = [base, term, payment, combined]
   return {

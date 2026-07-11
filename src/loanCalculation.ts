@@ -51,8 +51,14 @@ export function buildLoanCalculation(loan: LoanCalculationSource): LoanCalculati
   }
 
   const allRepayments = sortRepaymentsByApplicationOrder([...activeManualRepayments(loan.repayments), ...generatedRepayments])
+  if (generatedRepayments.length > 0) {
+    const combinedValidationErrors = validateScenario(loan.config, allRepayments, loan.gracePeriods)
+    if (combinedValidationErrors.length > 0) {
+      return { generatedRepayments, allRepayments, errors: combinedValidationErrors, comparison: null, selected: null, base: null }
+    }
+  }
   try {
-    const comparison = compareScenarios(loan.config, allRepayments, loan.gracePeriods, paymentCalendar)
+    const comparison = compareScenarios(loan.config, allRepayments, loan.gracePeriods, paymentCalendar, { scenarioAlreadyValidated: true })
     const selected = comparison.scenarios.find(s => s.id === loan.selectedScenario) ?? comparison.scenarios[1] ?? null
     const base = comparison.scenarios[0] ?? null
     return { generatedRepayments, allRepayments, errors: [], comparison, selected, base }

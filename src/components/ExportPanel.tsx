@@ -1,12 +1,11 @@
 import { useRef, useState } from 'react'
 import { ArrowDownToLine, Check, CircleHelp, Clipboard, ClipboardPaste, FileJson, KeyRound, Landmark, Link2, Printer, ReceiptText, Upload, X } from 'lucide-react'
-import { parseLoanBackup, type LoanBackupData } from '../importExport'
+import type { LoanBackupData } from '../importExport'
 import { formatMoney, shortDate, fmtMonthsFull } from '../formatters'
 import { useModalDialog } from '../hooks/useModalDialog'
 import { rateChangeModeName, scenarioName } from '../labels'
 import { Field } from './ui'
-
-const MAX_JSON_IMPORT_SIZE = 2 * 1024 * 1024
+import { MAX_PORTABLE_JSON_BYTES, validatePortableJson } from '../portableDataValidation'
 
 type Status = { kind: 'success' | 'error'; text: string }
 
@@ -54,6 +53,7 @@ const copyText = async (text: string) => {
 
 export function ExportPanel({
   download,
+  downloadRecovery,
   print,
   calculatedExportsDisabled = false,
   createImported,
@@ -65,6 +65,7 @@ export function ExportPanel({
   status
 }: {
   download: (x: 'csv'|'json'|'xls') => void
+  downloadRecovery: () => void
   print: () => void
   calculatedExportsDisabled?: boolean
   createImported: (data: LoanBackupData, source: string) => boolean
@@ -84,18 +85,18 @@ export function ExportPanel({
   const [confirmLink, setConfirmLink] = useState(false)
 
   const visibleStatus = localStatus ?? status
-  const calculatedExportTitle = calculatedExportsDisabled ? 'Дождитесь завершения пересчёта графика' : undefined
+  const calculatedExportTitle = calculatedExportsDisabled ? 'Нет корректного актуального расчёта для экспорта' : undefined
 
   const readJson = async (file: File) => {
     setLocalStatus(null)
     try {
-      if (file.size > MAX_JSON_IMPORT_SIZE) throw new Error('JSON-файл слишком большой. Максимальный размер — 2 МБ')
+      if (file.size > MAX_PORTABLE_JSON_BYTES) throw new Error('JSON-файл превышает единый лимит переносимых данных (8 МБ)')
       setPending({
         title: 'Загрузить кредит из файла?',
         description: `Файл «${file.name}» прочитан. Проверьте краткое содержимое и выберите, как загрузить кредит.`,
         sourceLabel: 'JSON-файл',
         actionSource: `файла «${file.name}»`,
-        data: parseLoanBackup(await file.text())
+        data: await validatePortableJson(await file.text())
       })
     } catch (error) {
       setLocalStatus({ kind: 'error', text: error instanceof Error ? error.message : 'Не удалось загрузить файл' })
@@ -156,5 +157,5 @@ export function ExportPanel({
     }
   }
 
-  return <section className="panel export-panel"><div className="panel-head"><div><h3>Импорт/экспорт расчёта</h3><p>Действия выполняются для кредита, выбранного в шапке</p></div></div><div className="export-grid compact-export-grid"><button onClick={() => download('csv')} disabled={calculatedExportsDisabled} title={calculatedExportTitle}><span className="export-icon green"><ReceiptText/></span><b>CSV</b><ArrowDownToLine/></button><button onClick={() => download('xls')} disabled={calculatedExportsDisabled} title={calculatedExportTitle}><span className="export-icon emerald"><Landmark/></span><b>Excel</b><ArrowDownToLine/></button><button onClick={() => download('json')}><span className="export-icon violet"><FileJson/></span><b>Сохранить JSON</b><ArrowDownToLine/></button><button onClick={() => inputRef.current?.click()}><span className="export-icon import"><Upload/></span><b>Загрузить JSON</b><Upload/></button><button onClick={copyShareLink}><span className="export-icon link"><Link2/></span><b>Ссылка на расчёт</b><Link2/></button><button onClick={showParameterCode}><span className="export-icon link"><KeyRound/></span><b>Код параметров</b><Clipboard/></button><button onClick={() => { setCodeDraft(''); setConfirmLink(false); setCodeInputOpen(true); setLocalStatus(null) }}><span className="export-icon import"><ClipboardPaste/></span><b>Загрузить код</b><Upload/></button><button onClick={print} disabled={calculatedExportsDisabled} title={calculatedExportTitle}><span className="export-icon amber"><Printer/></span><b>PDF / печать</b><ArrowDownToLine/></button></div><input ref={inputRef} className="file-input" type="file" accept="application/json,.json" onChange={event => { const file = event.target.files?.[0]; if (file) void readJson(file); event.currentTarget.value = '' }}/>{visibleStatus && <div className={`import-status ${visibleStatus.kind}`} role="status" aria-live="polite">{visibleStatus.kind === 'success' ? <Check/> : <CircleHelp/>}{visibleStatus.text}</div>}{pending && <ImportPreviewModal pending={pending} decline={() => setPending(null)} createNew={() => { if (createImported(pending.data, pending.actionSource)) setPending(null) }} replaceCurrent={() => { if (replaceImported(pending.data, pending.actionSource)) setPending(null) }}/>} {parameterCode && <ParameterCodeModal code={parameterCode} close={() => setParameterCode(null)} copy={() => void copyParameterCode()}/>} {codeInputOpen && <ParameterImportModal value={codeDraft} setValue={value => { setCodeDraft(value); setConfirmLink(looksLikeParameterLink(value)) }} paste={() => void pasteParameterCode()} submit={() => void submitParameterCode()} close={() => { setCodeInputOpen(false); setConfirmLink(false) }} linkDetected={confirmLink} confirmLink={() => void submitParameterCode(true)} cancelLink={() => setConfirmLink(false)}/>}</section>
+  return <section className="panel export-panel"><div className="panel-head"><div><h3>Импорт/экспорт расчёта</h3><p>Действия выполняются для кредита, выбранного в шапке</p></div></div>{calculatedExportsDisabled && <div className="alert alert-with-actions"><span>Расчёт недоступен. Производные отчёты заблокированы, но исходные параметры можно сохранить для восстановления.</span><button className="ghost compact" onClick={downloadRecovery}>Скачать Raw recovery JSON</button></div>}<div className="export-grid compact-export-grid"><button onClick={() => download('csv')} disabled={calculatedExportsDisabled} title={calculatedExportTitle}><span className="export-icon green"><ReceiptText/></span><b>CSV</b><ArrowDownToLine/></button><button onClick={() => download('xls')} disabled={calculatedExportsDisabled} title={calculatedExportTitle}><span className="export-icon emerald"><Landmark/></span><b>Excel</b><ArrowDownToLine/></button><button onClick={() => download('json')} disabled={calculatedExportsDisabled} title={calculatedExportTitle}><span className="export-icon violet"><FileJson/></span><b>Сохранить JSON</b><ArrowDownToLine/></button><button onClick={() => inputRef.current?.click()}><span className="export-icon import"><Upload/></span><b>Загрузить JSON</b><Upload/></button><button onClick={copyShareLink} disabled={calculatedExportsDisabled} title={calculatedExportTitle}><span className="export-icon link"><Link2/></span><b>Ссылка на расчёт</b><Link2/></button><button onClick={showParameterCode} disabled={calculatedExportsDisabled} title={calculatedExportTitle}><span className="export-icon link"><KeyRound/></span><b>Код параметров</b><Clipboard/></button><button onClick={() => { setCodeDraft(''); setConfirmLink(false); setCodeInputOpen(true); setLocalStatus(null) }}><span className="export-icon import"><ClipboardPaste/></span><b>Загрузить код</b><Upload/></button><button onClick={print} disabled={calculatedExportsDisabled} title={calculatedExportTitle}><span className="export-icon amber"><Printer/></span><b>PDF / печать</b><ArrowDownToLine/></button></div><input ref={inputRef} className="file-input" type="file" accept="application/json,.json" onChange={event => { const file = event.target.files?.[0]; if (file) void readJson(file); event.currentTarget.value = '' }}/>{visibleStatus && <div className={`import-status ${visibleStatus.kind}`} role="status" aria-live="polite">{visibleStatus.kind === 'success' ? <Check/> : <CircleHelp/>}{visibleStatus.text}</div>}{pending && <ImportPreviewModal pending={pending} decline={() => setPending(null)} createNew={() => { if (createImported(pending.data, pending.actionSource)) setPending(null) }} replaceCurrent={() => { if (replaceImported(pending.data, pending.actionSource)) setPending(null) }}/>} {parameterCode && <ParameterCodeModal code={parameterCode} close={() => setParameterCode(null)} copy={() => void copyParameterCode()}/>} {codeInputOpen && <ParameterImportModal value={codeDraft} setValue={value => { setCodeDraft(value); setConfirmLink(looksLikeParameterLink(value)) }} paste={() => void pasteParameterCode()} submit={() => void submitParameterCode()} close={() => { setCodeInputOpen(false); setConfirmLink(false) }} linkDetected={confirmLink} confirmLink={() => void submitParameterCode(true)} cancelLink={() => setConfirmLink(false)}/>}</section>
 }

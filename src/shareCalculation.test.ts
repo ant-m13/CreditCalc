@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { defaultConfig } from './loanDefaults'
+import { MAX_PORTABLE_JSON_BYTES } from './portabilityLimits'
 import { parseLoanBackup } from './importExport'
 import { buildShareUrl, createLoanSnapshot, decodeSharedCalculation, encodeSharedCalculation, looksLikeSharedCalculationUrl, normalizeSharedCalculationPayload, parseLoanSnapshot, readSharedCalculationFromLocation } from './shareCalculation'
 import type { EarlyRepayment, GracePeriod, LoanConfig } from './loanEngine'
@@ -112,7 +113,7 @@ describe('ссылка на расчёт', () => {
     expect(() => parseLoanSnapshot({ ...snapshot(), version: 2 })).toThrow('Версия ссылки')
   })
 
-  it('нормализует устаревший payload ссылки с неизвестными полями расчёта', async () => {
+  it('отклоняет payload ссылки с явно повреждёнными полями расчёта', async () => {
     const legacy = {
       ...snapshot(),
       config: {
@@ -130,12 +131,7 @@ describe('ссылка на расчёт', () => {
         }
       }
     }
-    const decoded = await decodeSharedCalculation(await encodeSharedCalculation(legacy as never))
-    expect(decoded.config.firstPaymentInterestOnly).toBe(defaultConfig.firstPaymentInterestOnly)
-    expect(decoded.config.paymentType).toBe(defaultConfig.paymentType)
-    expect(decoded.config.frequency).toBe(defaultConfig.frequency)
-    expect(decoded.config.rounding).toBe(defaultConfig.rounding)
-    expect(decoded.config.interest).toEqual(defaultConfig.interest)
+    await expect(decodeSharedCalculation(await encodeSharedCalculation(legacy as never))).rejects.toThrow('недопустимое значение')
   })
 
   it('восстанавливает старый payload ссылки без новых полей расчёта', async () => {
@@ -159,8 +155,26 @@ describe('ссылка на расчёт', () => {
   })
 
   it('отклоняет слишком большой payload', async () => {
-    const tooBig = { ...snapshot(), repayments: [{ ...repayments[0], comment: 'я'.repeat(700_000) }] }
-    await expect(encodeSharedCalculation(tooBig)).rejects.toThrow('слишком большой')
+    const tooBig = { ...snapshot(), repayments: [{ ...repayments[0], comment: 'я'.repeat(MAX_PORTABLE_JSON_BYTES) }] }
+    await expect(encodeSharedCalculation(tooBig)).rejects.toThrow('лимит переносимых данных')
+  })
+
+  it('round-trip переносит большое валидное состояние, превышавшее старый лимит', async () => {
+    const largeRepayments = Array.from({ length: 900 }, (_, index) => ({
+      ...repayments[0],
+      id: `large-${index}`,
+      amount: 1,
+      amountMode: 'extra' as const,
+      sameDaySequence: index,
+      comment: `${String(index).padStart(4, '0')}-${'данные'.repeat(70)}`
+    }))
+    const large = { ...snapshot(), repayments: largeRepayments }
+    expect(new TextEncoder().encode(JSON.stringify(large)).byteLength).toBeGreaterThan(600_000)
+
+    const decoded = await decodeSharedCalculation(await encodeSharedCalculation(large))
+
+    expect(decoded.repayments).toHaveLength(900)
+    expect(decoded.repayments.at(-1)?.comment).toBe(largeRepayments.at(-1)?.comment)
   })
 
   it('buildShareUrl сохраняет origin, pathname, Vite base path и query string', async () => {

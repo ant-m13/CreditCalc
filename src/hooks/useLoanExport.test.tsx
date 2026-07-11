@@ -7,6 +7,7 @@ import { defaultConfig } from '../loanDefaults'
 import type { LoanProfile } from '../store'
 import type { ImportStatus } from './useLoanImport'
 import type { RepaymentRule } from '../repaymentRules'
+import type { LoanCalculationSnapshot } from '../loanCalculationRunner'
 
 const candidateValidationMock = vi.hoisted(() => vi.fn(() => {
   throw new Error('sync candidate validation should not run')
@@ -77,13 +78,25 @@ const scheduleRow = (patch: Partial<PaymentScheduleItem> = {}): PaymentScheduleI
   ...patch
 })
 
+const calculationSnapshot = (activeLoan: LoanProfile): LoanCalculationSnapshot => ({
+  revision: 'ready-test-revision',
+  loanId: activeLoan.id,
+  config: activeLoan.config,
+  repayments: activeLoan.repayments,
+  repaymentRules: activeLoan.repaymentRules,
+  gracePeriods: activeLoan.gracePeriods,
+  selectedScenario: activeLoan.selectedScenario,
+  displayDecimals: activeLoan.displayDecimals
+})
+
 function ExportProbe({
   calculatedSchedule,
   calculatedExportsReady = true,
   setImportStatus = vi.fn(),
   activeLoan = loan,
   kind = 'csv',
-  calculationErrors = []
+  calculationErrors = [],
+  readyCalculationSnapshot
 }: {
   calculatedSchedule: PaymentScheduleItem[] | null
   calculatedExportsReady?: boolean
@@ -91,17 +104,23 @@ function ExportProbe({
   activeLoan?: LoanProfile
   kind?: 'csv' | 'json' | 'xls'
   calculationErrors?: string[]
+  readyCalculationSnapshot?: LoanCalculationSnapshot | null
 }) {
-  const { download, copyShareLink, createParameterCode } = useLoanExport({
+  const readySnapshot = readyCalculationSnapshot === undefined
+    ? calculatedExportsReady ? calculationSnapshot(activeLoan) : null
+    : readyCalculationSnapshot
+  const { download, downloadRecovery, copyShareLink, createParameterCode } = useLoanExport({
     loans: [activeLoan],
     activeLoanId: activeLoan.id,
     calculatedSchedule,
     calculatedExportsReady,
     calculationErrors,
+    readyCalculationSnapshot: readySnapshot,
     setImportStatus
   })
   return <>
     <button onClick={() => download(kind)}>Export</button>
+    <button onClick={downloadRecovery}>Recovery</button>
     <button onClick={() => void copyShareLink()}>Link</button>
     <button onClick={() => void createParameterCode()
       .then(code => setImportStatus({ kind: 'success', text: code }))
@@ -197,7 +216,20 @@ describe('useLoanExport', () => {
     })
   })
 
-  it('rejects JSON export if caller passed an empty error list for an invalid plan', async () => {
+  it('exports an explicitly marked raw recovery backup after calculation failure', async () => {
+    const user = userEvent.setup()
+    const brokenLoan = { ...loan, config: { ...loan.config, principal: Number.POSITIVE_INFINITY } }
+    render(<ExportProbe calculatedSchedule={null} activeLoan={brokenLoan} calculationErrors={['Расчёт остановлен']} calculatedExportsReady={false}/>)
+
+    await user.click(screen.getByRole('button', { name: 'Recovery' }))
+
+    const body = await exportedBlob!.text()
+    expect(body).toContain('"recoveryOnly": true')
+    expect(body).toContain('"principal": "Infinity"')
+    expect(body).toContain('Расчёт остановлен')
+  })
+
+  it('rejects JSON export when the ready snapshot belongs to another parameter revision', async () => {
     const user = userEvent.setup()
     const setImportStatus = vi.fn()
     const totalRule = (id: string, amount: number): RepaymentRule => ({
@@ -214,14 +246,14 @@ describe('useLoanExport', () => {
       skipMonths: []
     })
     const invalidLoan = { ...loan, repaymentRules: [totalRule('total-1', 100000), totalRule('total-2', 110000)] }
-    render(<ExportProbe calculatedSchedule={null} activeLoan={invalidLoan} calculationErrors={[]} kind="json" setImportStatus={setImportStatus}/>)
+    render(<ExportProbe calculatedSchedule={null} activeLoan={invalidLoan} readyCalculationSnapshot={calculationSnapshot(loan)} calculationErrors={[]} kind="json" setImportStatus={setImportStatus}/>)
 
     await user.click(screen.getByRole('button', { name: 'Export' }))
 
     expect(exportedBlob).toBeNull()
     expect(setImportStatus).toHaveBeenCalledWith({
       kind: 'error',
-      text: expect.stringContaining('только одну общую сумму')
+      text: 'Дождитесь окончания пересчёта, чтобы экспортировать актуальный график'
     })
   })
 

@@ -6,6 +6,16 @@ import { defaultConfig } from './store'
 const repayment = { id: 'early-1', date: defaultConfig.firstPaymentDate, amount: 8704.99, amountMode: 'extra', strategy: 'reduceTerm', source: 'own', sameDayOrder: 'regularFirst', interestFirst: true }
 
 describe('импорт резервной копии', () => {
+  it('принимает текущую версию JSON и legacy-файл без поля version', () => {
+    expect(parseLoanBackup(JSON.stringify({ version: 1, config: defaultConfig }))).toMatchObject({ config: defaultConfig })
+    expect(parseLoanBackup(JSON.stringify({ config: defaultConfig }))).toMatchObject({ config: defaultConfig })
+  })
+
+  it('отклоняет явно указанную неизвестную версию JSON', () => {
+    expect(() => parseLoanBackup(JSON.stringify({ version: 2, config: defaultConfig }))).toThrow('Версия JSON-резервной копии 2 не поддерживается')
+    expect(() => parseLoanBackup(JSON.stringify({ version: '1', config: defaultConfig }))).toThrow('Версия JSON-резервной копии 1 не поддерживается')
+  })
+
   it('восстанавливает расчёт и настройки интерфейса', () => {
     const result = parseLoanBackup(JSON.stringify({ config: defaultConfig, repayments: [repayment], gracePeriods: [], selectedScenario: 'reducePayment', settings: { termUnit: 'years', displayDecimals: 0, theme: 'ocean' } }))
     expect(result.repayments[0].amount).toBe(8704.99)
@@ -47,34 +57,6 @@ describe('импорт резервной копии', () => {
     expect(result.config.interest).toEqual(defaultConfig.interest)
   })
 
-  it('нормализует устаревшие поля расчёта к значениям по умолчанию', () => {
-    const result = parseLoanBackup(JSON.stringify({
-      config: {
-        ...defaultConfig,
-        firstPaymentInterestOnly: 'yes',
-        paymentType: 'legacy-annuity',
-        frequency: 'monthly-old',
-        rounding: null,
-        interest: {
-          method: 'classic',
-          dayCountBasis: 'actual360',
-          includePaymentDate: 'no',
-          periodStart: 'middle',
-          balanceMoment: 'paymentTime'
-        }
-      },
-      repayments: [],
-      gracePeriods: [],
-      selectedScenario: 'combined'
-    }))
-
-    expect(result.config.firstPaymentInterestOnly).toBe(defaultConfig.firstPaymentInterestOnly)
-    expect(result.config.paymentType).toBe(defaultConfig.paymentType)
-    expect(result.config.frequency).toBe(defaultConfig.frequency)
-    expect(result.config.rounding).toBe(defaultConfig.rounding)
-    expect(result.config.interest).toEqual(defaultConfig.interest)
-  })
-
   it('восстанавливает и сортирует историю изменения ставки', () => {
     const rateChanges = [
       { id: 'rate-2', date: '2026-10-26', annualRate: 7.5 },
@@ -90,7 +72,7 @@ describe('импорт резервной копии', () => {
   })
 
   it('отклоняет повреждённую историю изменения ставки', () => {
-    expect(() => parseLoanBackup(JSON.stringify({ config: { ...defaultConfig, rateChangeMode: 'broken' }, repayments: [], gracePeriods: [] }))).toThrow('режим изменения ставки')
+    expect(() => parseLoanBackup(JSON.stringify({ config: { ...defaultConfig, rateChangeMode: 'broken' }, repayments: [], gracePeriods: [] }))).toThrow('Режим изменения ставки')
     expect(() => parseLoanBackup(JSON.stringify({ config: { ...defaultConfig, rateChanges: [{ id: 'rate-1', date: '2026-08-26', annualRate: 101 }] }, repayments: [], gracePeriods: [] }))).toThrow('изменении ставки')
     expect(() => parseLoanBackup(JSON.stringify({ config: { ...defaultConfig, rateChanges: [{ id: 'rate-1', date: defaultConfig.issueDate, annualRate: 8 }] }, repayments: [], gracePeriods: [] }))).toThrow('после выдачи')
     expect(() => parseLoanBackup(JSON.stringify({ config: { ...defaultConfig, rateChanges: [{ id: 'rate-1', date: '2026-08-26', annualRate: 8 }, { id: 'rate-2', date: '2026-08-26', annualRate: 9 }] }, repayments: [], gracePeriods: [] }))).toThrow('дублирующийся ID: 2026-08-26')
@@ -180,11 +162,36 @@ describe('импорт резервной копии', () => {
     expect(() => parseLoanBackup(JSON.stringify({ repayments: [] }))).toThrow('параметры кредита')
   })
 
-  it('подставляет валюту по умолчанию для старого файла с неподдерживаемой валютой', () => {
-    const result = parseLoanBackup(JSON.stringify({ config: { ...defaultConfig, currency: 'NOT-A-CURRENCY' }, repayments: [], gracePeriods: [] }))
+  it('преобразует только известный legacy-код валюты с предупреждением', () => {
+    const result = parseLoanBackup(JSON.stringify({ config: { ...defaultConfig, currency: 'RUR' }, repayments: [], gracePeriods: [] }))
 
     expect(result.config.currency).toBe(defaultConfig.currency)
-    expect(result.importWarnings).toEqual(['Валюта NOT-A-CURRENCY не поддерживается и заменена на RUB'])
+    expect(result.importWarnings).toEqual(['Legacy-код валюты RUR преобразован в RUB без конвертации суммы'])
+    expect(() => parseLoanBackup(JSON.stringify({ config: { ...defaultConfig, currency: 'NOT-A-CURRENCY' } }))).toThrow('не поддерживается')
+  })
+
+  it.each([
+    ['тип платежа', { paymentType: 'broken' }],
+    ['частоту', { frequency: 'broken' }],
+    ['округление', { rounding: 'broken' }],
+    ['режим ставки', { rateChangeMode: 'broken' }],
+    ['boolean первого платежа', { firstPaymentInterestOnly: 'true' }],
+    ['метод процентов', { interest: { ...defaultConfig.interest, method: 'broken' } }],
+    ['day-count basis', { interest: { ...defaultConfig.interest, dayCountBasis: 'broken' } }],
+    ['boolean даты платежа', { interest: { ...defaultConfig.interest, includePaymentDate: 1 } }]
+  ])('отклоняет явно повреждённое финансовое поле: %s', (_label, patch) => {
+    expect(() => parseLoanBackup(JSON.stringify({ config: { ...defaultConfig, ...patch } }))).toThrow('недопустимое значение')
+  })
+
+  it('предупреждает о допустимых legacy-преобразованиях amountMode', () => {
+    const withoutMode = { ...repayment } as Record<string, unknown>
+    delete withoutMode.amountMode
+    withoutMode.amount = 100_000
+    const result = parseLoanBackup(JSON.stringify({ config: defaultConfig, repayments: [withoutMode, { ...repayment, id: 'legacy-total', date: '2026-08-15', amount: 100_000, sameDaySequence: 1, amountMode: 'total' }] }))
+    expect(result.importWarnings).toEqual([
+      'Ошибка в досрочном платеже №1: отсутствующий legacy amountMode преобразован в totalWithFee',
+      'Ошибка в досрочном платеже №2: legacy amountMode total преобразован в totalWithFee'
+    ])
   })
 
   it('предупреждает о валюте по умолчанию для старого файла без валюты', () => {
@@ -208,6 +215,11 @@ describe('импорт резервной копии', () => {
     expect(() => parseLoanBackup(JSON.stringify({ config: { ...defaultConfig, principal: 0 }, repayments: [], gracePeriods: [] }))).toThrow('недопустимые числа')
     expect(() => parseLoanBackup(JSON.stringify({ config: { ...defaultConfig, termMonths: 12.5 }, repayments: [], gracePeriods: [] }))).toThrow('недопустимые числа')
     expect(() => parseLoanBackup(JSON.stringify({ config: { ...defaultConfig, paymentDay: 15.7 }, repayments: [], gracePeriods: [] }))).toThrow('недопустимые числа')
+  })
+
+  it('отклоняет Number.MAX_VALUE и чрезмерные суммы операций', () => {
+    expect(() => parseLoanBackup(JSON.stringify({ config: { ...defaultConfig, principal: Number.MAX_VALUE } }))).toThrow('недопустимые числа')
+    expect(() => parseLoanBackup(JSON.stringify({ config: defaultConfig, repayments: [{ ...repayment, amount: Number.MAX_VALUE }] }))).toThrow('досрочном платеже')
   })
 
   it('отклоняет комиссию за досрочное погашение выше 100%', () => {

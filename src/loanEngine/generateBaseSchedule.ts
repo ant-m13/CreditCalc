@@ -3,7 +3,7 @@ import { addDays, parseISO } from 'date-fns'
 import { accrueInterestSegmentsRaw, periodsPerYear } from './accrual'
 import { calculateAnnuityPayment } from './calculateAnnuityPayment'
 import { periodDays } from './calculateInterest'
-import { extendedPaymentPeriods, iso, isRegularPaymentDate, nextPaymentDate, preparePaymentCalendar, totalPaymentPeriods, type PreparedPaymentCalendar } from './dates'
+import { extendedPaymentPeriods, iso, nextPaymentDate, preparePaymentCalendar, regularPaymentDateMatches, totalPaymentPeriods, type PreparedPaymentCalendar } from './dates'
 import { activeGrace } from './gracePeriod'
 import { MAX_EARLY_REPAYMENTS, MAX_GRACE_PERIODS, MAX_SCHEDULE_ROWS } from './limits'
 import { createRateTimeline } from './rateChanges'
@@ -12,8 +12,9 @@ import { money, num } from './rounding'
 import { sortRepaymentsByApplicationOrder } from './repaymentOrder'
 import type { EarlyRepayment, GracePeriod, LoanConfig, PaymentScheduleItem, RepaymentApplicationOutcome, RepaymentStrategy, ScheduleEventType } from './types'
 import { validateScenario } from './validation'
+import { assertFiniteScheduleItem } from './financialSafety'
 
-interface Options { earlyRepayments?: EarlyRepayment[]; gracePeriods?: GracePeriod[]; forcedStrategy?: RepaymentStrategy; paymentCalendar?: PreparedPaymentCalendar }
+interface Options { earlyRepayments?: EarlyRepayment[]; gracePeriods?: GracePeriod[]; forcedStrategy?: RepaymentStrategy; paymentCalendar?: PreparedPaymentCalendar; scenarioAlreadyValidated?: boolean }
 
 const clampDebtBalance = (value: Decimal.Value) => Decimal.max(0, new Decimal(value))
 
@@ -80,9 +81,15 @@ export function generateBaseSchedule(config: LoanConfig, options: Options = {}):
   const gracePeriods = options.gracePeriods ?? []
   if (allRepayments.length > MAX_EARLY_REPAYMENTS) throw new Error(`Слишком много досрочных платежей. Максимум: ${MAX_EARLY_REPAYMENTS}`)
   if (gracePeriods.length > MAX_GRACE_PERIODS) throw new Error(`Слишком много льготных периодов. Максимум: ${MAX_GRACE_PERIODS}`)
-  const validationErrors = validateScenario(config, allRepayments, gracePeriods)
-  if (validationErrors.length > 0) throw new Error(validationErrors.join(' · '))
+  if (!options.scenarioAlreadyValidated) {
+    const validationErrors = validateScenario(config, allRepayments, gracePeriods)
+    if (validationErrors.length > 0) throw new Error(validationErrors.join(' · '))
+  }
   const paymentCalendar = options.paymentCalendar ?? preparePaymentCalendar(config, gracePeriods)
+  const regularRepaymentDates = regularPaymentDateMatches(
+    allRepayments.filter(item => item.amountMode !== 'extra').map(item => item.date),
+    config
+  )
   const configuredPeriods = totalPaymentPeriods(config)
   const maxPeriods = configuredPeriods + extendedPaymentPeriods(config, gracePeriods, paymentCalendar)
   const rateTimeline = createRateTimeline(config)
@@ -128,10 +135,12 @@ export function generateBaseSchedule(config: LoanConfig, options: Options = {}):
     isRegularPayment: false,
     isGracePayment: false
   }]
+  assertFiniteScheduleItem(schedule[0])
   const pushScheduleRow = (row: PaymentScheduleItem) => {
     if (schedule.length >= MAX_SCHEDULE_ROWS) {
       throw new Error(`График не закрывает кредит в допустимое количество строк (${MAX_SCHEDULE_ROWS})`)
     }
+    assertFiniteScheduleItem(row)
     schedule.push(row)
   }
   const appendPendingRateChange = (labels: string[], types: ScheduleEventType[]) => {
@@ -550,7 +559,7 @@ export function generateBaseSchedule(config: LoanConfig, options: Options = {}):
       new Decimal(0),
       periodsAfterCurrentPayment(currentRemainingPeriods),
       payment,
-      isRegularPaymentDate(early.date, config),
+      regularRepaymentDates.has(early.date),
       { afterCurrentPayment: true, allowPartialRegularPayment: true }
     )
     ignoredAfterCloseOutcomes.push(applied.outcome)

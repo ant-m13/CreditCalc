@@ -9,21 +9,28 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: auto-release
   cancel-in-progress: false
 
 jobs:
-  tag:
+  verify:
+    permissions:
+      contents: read
     runs-on: ubuntu-latest
+    outputs:
+      exists: ${{ steps.version.outputs.exists }}
+      tag: ${{ steps.version.outputs.tag }}
+      version: ${{ steps.version.outputs.version }}
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Set up Node.js
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
@@ -48,8 +55,14 @@ jobs:
 
           if git ls-remote --exit-code --tags origin \
             "refs/tags/$TAG" >/dev/null 2>&1; then
+            git fetch --no-tags origin "refs/tags/$TAG:refs/tags/$TAG"
+            TAG_SHA="$(git rev-list -n 1 "$TAG")"
+            if [[ "$TAG_SHA" != "$GITHUB_SHA" ]]; then
+              echo "Тег $TAG уже указывает на $TAG_SHA вместо ожидаемого $GITHUB_SHA"
+              exit 1
+            fi
             echo "exists=true" >> "$GITHUB_OUTPUT"
-            echo "Тег $TAG уже существует — выпуск пропущен."
+            echo "Тег $TAG уже существует на ожидаемой ревизии."
           else
             echo "exists=false" >> "$GITHUB_OUTPUT"
             echo "Будет создан тег $TAG."
@@ -65,13 +78,6 @@ jobs:
             exit 1
           fi
 
-      - name: Checkout existing tag for repair runs
-        if: steps.version.outputs.exists == 'true'
-        shell: bash
-        env:
-          TAG: ${{ steps.version.outputs.tag }}
-        run: git checkout "$TAG"
-
       - name: Enable pnpm
         run: corepack enable
 
@@ -80,7 +86,6 @@ jobs:
 
       - name: Audit production dependencies
         run: pnpm audit --prod
-        continue-on-error: true
 
       - name: Install Playwright browser
         run: pnpm exec playwright install --with-deps chromium
@@ -99,11 +104,35 @@ jobs:
       - name: Run production browser E2E
         run: pnpm test:e2e
 
+      - name: Pack dist
+        run: |
+          cd dist
+          zip -r ../credit-calculator-dist.zip .
+
+      - name: Upload verified release artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: release-dist
+          path: credit-calculator-dist.zip
+          if-no-files-found: error
+
+  publish:
+    needs: verify
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository for tag publication
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          fetch-depth: 0
+
       - name: Create and push Git tag
-        if: steps.version.outputs.exists == 'false'
+        if: needs.verify.outputs.exists == 'false'
         shell: bash
         env:
-          TAG: ${{ steps.version.outputs.tag }}
+          TAG: ${{ needs.verify.outputs.tag }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email \
@@ -112,15 +141,15 @@ jobs:
           git tag -a "$TAG" "$GITHUB_SHA" -m "Release $TAG"
           git push origin "$TAG"
 
-      - name: Pack dist
-        run: |
-          cd dist
-          zip -r ../credit-calculator-dist.zip .
+      - name: Download verified release artifact
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: release-dist
 
       - name: Create or update GitHub Release
         uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
-          tag_name: ${{ steps.version.outputs.tag }}
+          tag_name: ${{ needs.verify.outputs.tag }}
           files: credit-calculator-dist.zip
           generate_release_notes: true
           fail_on_unmatched_files: true
