@@ -87,6 +87,7 @@ export interface GoalPlannerResult {
 export interface GoalPlanPreview {
   current: ScenarioResult
   planned: ScenarioResult
+  repayments: EarlyRepayment[]
 }
 
 interface PlannerContext {
@@ -140,7 +141,7 @@ const plannerContribution = (schedule: PaymentScheduleItem[], plannerRepaymentId
       result.principal += outcome.appliedPrincipal
       result.interest += outcome.appliedInterest
       result.fees += outcome.fee
-      result.unused += outcome.unusedAmount
+      if (outcome.reason !== 'debtClosed') result.unused += outcome.unusedAmount
       result.bankTransfer += regularPayment + outcome.appliedAmount + outcome.fee
       result.additionalInvestment += outcome.appliedAmount + outcome.fee
     }
@@ -518,5 +519,6 @@ export function buildGoalPlanPreview(input: GoalPlannerInput, operations: GoalPl
   if (errors.length) throw new Error(errors.join(' · '))
   const comparison = compareScenarios(input.config, repayments, input.gracePeriods, context.calendar, { scenarioAlreadyValidated: true })
   const planned = comparison.scenarios.find(item => item.id === 'combined') ?? comparison.scenarios[0]
-  return { current: context.current, planned }
+  const scheduleDates = new Set(planned.schedule.map(row => row.date))
+  return { current: context.current, planned, repayments: repayments.filter(repayment => scheduleDates.has(repayment.date)) }
 }
