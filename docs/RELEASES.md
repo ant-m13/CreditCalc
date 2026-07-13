@@ -125,7 +125,7 @@ pnpm audit --prod
 Если тег уже существует, можно вручную запустить `release-dist.yml` или `deploy-pages.yml` и указать тег, например:
 
 ```text
-v1.7.0
+vX.Y.Z
 ```
 
-`release-dist.yml` соберёт проект именно из этого тега и обновит/создаст релиз с архивом `credit-calculator-dist.zip`. `deploy-pages.yml` опубликует на GitHub Pages сборку из того же тега.
+Замените `vX.Y.Z` на существующий тег релиза. `release-dist.yml` соберёт проект именно из этого тега и обновит/создаст релиз с архивом `credit-calculator-dist.zip`. `deploy-pages.yml` опубликует на GitHub Pages сборку из того же тега.
