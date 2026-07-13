@@ -76,4 +76,21 @@ describe('Schedule', () => {
     expect(container.querySelector('#schedule-row-101')).toBeTruthy()
     expect(container.querySelector('#schedule-row-1')).toBeNull()
   })
+
+  it('ограничивает DOM исчезнувших строк исходного графика', () => {
+    const selected = [scheduleRow({ number: 1, date: '2026-07-15', openingBalance: 1000, closingBalance: 0 })]
+    const base = Array.from({ length: 250 }, (_, index) => scheduleRow({
+      number: index + 1,
+      date: `${2027 + Math.floor(index / 12)}-${String(index % 12 + 1).padStart(2, '0')}-15`
+    }))
+    function SavedRowsProbe() {
+      const [rows, setRows] = useState(0)
+      return <Schedule schedule={selected} baseSchedule={base} repayments={[]} currency="RUB" displayDecimals={2} rows={rows} setRows={setRows}/>
+    }
+    const { container } = render(<SavedRowsProbe/>)
+
+    expect(container.querySelectorAll('.saved-schedule tbody tr')).toHaveLength(100)
+    fireEvent.click(screen.getByRole('button', { name: 'Следующие исчезнувшие платежи' }))
+    expect(container.querySelector('.saved-schedule tbody tr td')?.textContent).toBe('101')
+  })
 })

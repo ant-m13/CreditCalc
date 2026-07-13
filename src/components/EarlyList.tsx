@@ -9,6 +9,14 @@ import type { RepaymentRule } from '../repaymentRules'
 import { createId } from '../utils/createId'
 import { isISODate, isISOYearMonth } from '../utils/dateValidation'
 import { Field } from './ui'
+import { useBoundedPage } from '../hooks/useBoundedPage'
+
+export const EARLY_LIST_PAGE_SIZE = 50
+
+function ListPagination({ page, label }: { page: ReturnType<typeof useBoundedPage<unknown>>; label: string }) {
+  if (page.total <= EARLY_LIST_PAGE_SIZE) return null
+  return <nav className="schedule-pagination" aria-label={`Страницы: ${label}`}><button className="ghost" disabled={!page.hasPrevious} onClick={page.previous}>Назад</button><span>{page.start}–{page.end} из {page.total}</span><button className="ghost" disabled={!page.hasNext} onClick={page.next} aria-label={`Следующая страница: ${label}`}>Далее</button></nav>
+}
 
 function Empty({ title, action }: { title: string; action: () => void }) {
   return <div className="empty"><span><TrendingDown/></span><h3>{title}</h3><p>Добавьте событие, и мы сразу покажем его влияние на кредит.</p><button className="ghost" onClick={action}><Plus/> Добавить</button></div>
@@ -52,6 +60,7 @@ function RepaymentRulesPanel({ rules, addRule, updateRule, removeRule, defaultSt
   const [strategy, setStrategy] = useState<EarlyRepayment['strategy']>('reduceTerm')
   const [source, setSource] = useState<EarlyRepayment['source']>('own')
   const [sameDayOrder, setSameDayOrder] = useState<EarlyRepayment['sameDayOrder']>('regularFirst')
+  const rulesPage = useBoundedPage(rules, EARLY_LIST_PAGE_SIZE)
   const amountFieldLabel = type === 'paymentPercent' ? 'Процент' : type === 'monthlyTotalPayment' ? 'Общее списание' : 'Сумма'
   const ruleValueLabel = (rule: RepaymentRule) =>
     rule.type === 'paymentPercent' ? `${rule.percent ?? 0}% от первоначального регулярного платежа` :
@@ -134,14 +143,14 @@ function RepaymentRulesPanel({ rules, addRule, updateRule, removeRule, defaultSt
     </div>
     {error && <div className="alert modal-alert">{error}</div>}
     <div className="rule-actions"><button className="primary rule-add" onClick={submit}><Plus/> {editingRule ? 'Сохранить изменения' : 'Добавить регулярный платёж'}</button>{editingRule && <button className="ghost" onClick={reset}>Отмена</button>}</div>
-    {rules.length ? <div className="event-list rule-list">{rules.map(rule => {
+    {rules.length ? <><div className="event-list rule-list">{rulesPage.visibleItems.map(rule => {
       const disabled = ruleDisabled(rule)
       return <div className={`event compact-event${disabledClass(disabled)}`} key={rule.id}>
         <div className="date-tile"><CalendarDays/></div>
         <div><b>{rule.name}</b><span>{ruleTypeName(rule.type)} · {ruleValueLabel(rule)} · {shortDate(rule.startDate)} — {shortDate(rule.endDate)}</span><small>{disabled ? 'Временно отключено' : `${scenarioName(rule.strategy)} · ${sourceName(rule.source)} · пропусков: ${rule.skipMonths.length}`}</small></div>
         <div className="event-actions"><button className="icon-btn" aria-label={`Редактировать регулярный платёж ${rule.name}`} onClick={() => startEdit(rule)}><Pencil/></button><button className="icon-btn danger" aria-label={`Удалить регулярный платёж ${rule.name}`} onClick={() => removeRule(rule.id)}><Trash2/></button></div>
       </div>
-    })}</div> : <div className="tip"><CircleHelp/> Например: +20 000 ₽ каждый месяц, общий платёж 60 000 ₽ в дату списания или премия раз в год.</div>}
+    })}</div><ListPagination page={rulesPage} label="регулярные правила"/></> : <div className="tip"><CircleHelp/> Например: +20 000 ₽ каждый месяц, общий платёж 60 000 ₽ в дату списания или премия раз в год.</div>}
   </section>
 }
 
@@ -161,29 +170,31 @@ export function EarlyList({ items, rules, generated, currency, displayDecimals, 
   }), [items, generated, manualIds, ruleNames])
   const manualTotal = activeItems.reduce((sum, item) => sum + item.amount, 0)
   const generatedTotal = generated.reduce((sum, item) => sum + item.amount, 0)
+  const manualPage = useBoundedPage(items, EARLY_LIST_PAGE_SIZE)
+  const combinedPage = useBoundedPage(combined, EARLY_LIST_PAGE_SIZE)
 
   return <>
     <div className="early-layout">
       <section className="panel list-panel early-card">
         <div className="panel-head"><div><h3>Разовые платежи</h3><p>Операции, введённые вручную</p></div><button className="primary" onClick={open}><Plus/> Добавить</button></div>
         <div className="early-summary"><div><span>Операций</span><b>{items.length}</b></div><div><span>Сумма</span><b>{money(manualTotal)}</b></div></div>
-        {items.length ? <div className="event-list">{items.map(item => {
+        {items.length ? <><div className="event-list">{manualPage.visibleItems.map(item => {
           const disabled = repaymentDisabled(item)
           return <div className={`event${disabledClass(disabled)}`} key={item.id}>
             <div className="date-tile"><b>{format(parseISO(item.date), 'dd')}</b><span>{format(parseISO(item.date), 'MMM yy', { locale: ru })}</span></div>
           <div><b>{money(item.amount)}</b><span>{disabled ? 'Временно отключено' : `${scenarioName(item.strategy)} · ${item.amountMode === 'totalWithFee' ? 'общее списание с комиссией' : 'сумма списания'} · ${sourceName(item.source)}`}</span>{item.comment && <small>{item.comment}</small>}</div>
             <div className="event-actions"><RepaymentToggleButton item={item} toggle={toggle}/><button className="icon-btn" aria-label={`Редактировать платёж ${shortDate(item.date)}`} onClick={() => edit(item)}><Pencil/></button><button className="icon-btn danger" aria-label={`Удалить платёж ${shortDate(item.date)}`} onClick={() => remove(item.id)}><Trash2/></button></div>
           </div>
-        })}</div> : <Empty title="Пока нет разовых платежей" action={open}/>}
+        })}</div><ListPagination page={manualPage} label="разовые платежи"/></> : <Empty title="Пока нет разовых платежей" action={open}/>}
       </section>
       <RepaymentRulesPanel rules={rules} addRule={addRule} updateRule={updateRule} removeRule={removeRule} defaultStart={defaultStart} currency={currency} displayDecimals={displayDecimals}/>
     </div>
     <section className="panel list-panel early-calendar">
       <div className="panel-head"><div><h3>Календарь досрочных платежей</h3><p>Разовые и регулярные досрочные платежи</p></div><div className="early-summary inline"><div><span>Всего</span><b>{combined.length}</b></div><div><span>Регулярные</span><b>{money(generatedTotal)}</b></div></div></div>
-      {combined.length ? <div className="event-list">{combined.map(({ item, kind, label }) => {
+      {combined.length ? <><div className="event-list">{combinedPage.visibleItems.map(({ item, kind, label }) => {
         const disabled = kind === 'manual' && repaymentDisabled(item)
         return <div className={`event combined-event${kind === 'rule' ? ' generated-event' : ''}${disabledClass(disabled)}`} key={`${kind}-${item.id}`}><div className="date-tile">{kind === 'rule' ? <ListChecks/> : <><b>{format(parseISO(item.date), 'dd')}</b><span>{format(parseISO(item.date), 'MMM yy', { locale: ru })}</span></>}</div><div><b>{money(item.amount)}</b><span><em className={`event-badge ${kind === 'rule' ? 'rule' : ''}`}>{kind === 'rule' ? 'Регулярный' : 'Разовый'}</em> {disabled ? `Временно отключено · ${label}` : label} · {shortDate(item.date)} · {scenarioName(item.strategy)} · {sourceName(item.source)}</span>{item.comment && <small>{item.comment}</small>}</div>{kind === 'manual' ? <div className="event-actions"><RepaymentToggleButton item={item} toggle={toggle}/><button className="icon-btn" aria-label={`Редактировать платёж ${shortDate(item.date)}`} onClick={() => edit(item)}><Pencil/></button><button className="icon-btn danger" aria-label={`Удалить платёж ${shortDate(item.date)}`} onClick={() => remove(item.id)}><Trash2/></button></div> : <span className="generated-note">авто</span>}</div>
-      })}</div> : <div className="tip"><CircleHelp/> Добавьте разовый или регулярный платёж, чтобы увидеть общий календарь досрочных операций.</div>}
+      })}</div><ListPagination page={combinedPage} label="календарь операций"/></> : <div className="tip"><CircleHelp/> Добавьте разовый или регулярный платёж, чтобы увидеть общий календарь досрочных операций.</div>}
     </section>
   </>
 }

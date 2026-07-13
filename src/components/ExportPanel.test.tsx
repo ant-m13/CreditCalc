@@ -2,7 +2,9 @@
 import { cleanup, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { ExportPanel } from './ExportPanel'
+import { defaultConfig } from '../loanDefaults'
+import { VALIDATED_LOAN_DATA_MARKER } from '../importExport'
+import { ExportPanel, ImportPreviewModal } from './ExportPanel'
 
 const renderPanel = (calculatedExportsDisabled = false) => {
   const download = vi.fn()
@@ -51,5 +53,34 @@ describe('ExportPanel', () => {
     expect(download).not.toHaveBeenCalled()
     await user.click(screen.getByRole('button', { name: /Raw recovery JSON/i }))
     expect(downloadRecovery).toHaveBeenCalledOnce()
+  })
+
+  it('показывает длинный список предупреждений импорта страницами', async () => {
+    const user = userEvent.setup()
+    const warnings = Array.from({ length: 45 }, (_, index) => `Предупреждение ${index + 1}`)
+    render(<ImportPreviewModal pending={{
+      title: 'Проверка импорта',
+      description: 'Проверьте данные',
+      sourceLabel: 'JSON',
+      actionSource: 'файла',
+      data: {
+        __validatedLoanData: VALIDATED_LOAN_DATA_MARKER,
+        config: defaultConfig,
+        repayments: [],
+        repaymentRules: [],
+        gracePeriods: [],
+        selectedScenario: 'combined',
+        termUnit: 'months',
+        displayDecimals: 2,
+        theme: 'emerald',
+        importWarnings: warnings
+      }
+    }} createNew={vi.fn()} replaceCurrent={vi.fn()} decline={vi.fn()}/>)
+
+    expect(screen.getAllByRole('status')).toHaveLength(20)
+    expect(screen.getByText('Предупреждение 1')).toBeTruthy()
+    await user.click(screen.getByRole('button', { name: 'Следующие предупреждения' }))
+    expect(screen.queryByText('Предупреждение 1')).toBeNull()
+    expect(screen.getByText('Предупреждение 21')).toBeTruthy()
   })
 })
