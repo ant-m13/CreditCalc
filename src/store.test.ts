@@ -5,6 +5,7 @@ import { MAX_EARLY_REPAYMENTS, MAX_RATE_CHANGES, MAX_REPAYMENT_RULES } from './l
 import { defaultConfig, MAX_LOANS, normalizePersistedState, useLoanStore, type LoanProfile } from './store'
 import type { EarlyRepayment } from './loanEngine'
 import { expandRepaymentRules, type RepaymentRule } from './repaymentRules'
+import type { GoalPlanOperations } from './goalPlanner'
 
 const repaymentBase = {
   strategy: 'reduceTerm',
@@ -390,6 +391,78 @@ describe('миграция локального хранилища', () => {
     expect(normalized.loans).toHaveLength(1)
     expect(normalized.loans[0].id).toBe('tail-loan')
     expect(normalized.activeLoanId).toBe('tail-loan')
+  })
+})
+
+describe('применение плана цели', () => {
+  const planOperations = (): GoalPlanOperations => ({
+    repayments: [{
+      ...repayment(10),
+      id: 'goal-plan-one-time',
+      date: '2026-08-15',
+      amount: 100_000,
+      comment: 'Добавлено планировщиком цели'
+    }],
+    repaymentRules: [{
+      ...rule(10),
+      id: 'goal-plan-monthlyFixed',
+      name: 'Планировщик цели · ежемесячная доплата',
+      amount: 8_700
+    }]
+  })
+
+  const applyCurrent = (operations = planOperations()) => {
+    const state = useLoanStore.getState()
+    state.applyGoalPlan({
+      expectedLoanId: state.activeLoanId,
+      expectedConfig: state.config,
+      expectedRepayments: state.repayments,
+      expectedRepaymentRules: state.repaymentRules,
+      expectedGracePeriods: state.gracePeriods,
+      operations
+    })
+  }
+
+  it('атомарно добавляет комбинированный план с новыми ID', () => {
+    setStoreLoan(loanProfile({ selectedScenario: 'reducePayment' }))
+
+    applyCurrent()
+    const state = useLoanStore.getState()
+
+    expect(state.repayments).toHaveLength(1)
+    expect(state.repaymentRules).toHaveLength(1)
+    expect(state.repayments[0].id).toMatch(/^goal-early-/)
+    expect(state.repaymentRules[0].id).toMatch(/^goal-rule-/)
+    expect(state.selectedScenario).toBe('combined')
+    expect(currentCalculationErrors()).toBe('')
+  })
+
+  it('отклоняет устаревший результат после изменения кредита', () => {
+    setStoreLoan(loanProfile())
+    const stale = useLoanStore.getState()
+    stale.updateConfig({ annualRate: stale.config.annualRate + 1 })
+
+    expect(() => useLoanStore.getState().applyGoalPlan({
+      expectedLoanId: stale.activeLoanId,
+      expectedConfig: stale.config,
+      expectedRepayments: stale.repayments,
+      expectedRepaymentRules: stale.repaymentRules,
+      expectedGracePeriods: stale.gracePeriods,
+      operations: planOperations()
+    })).toThrow('изменился')
+    expect(useLoanStore.getState().repayments).toEqual([])
+    expect(useLoanStore.getState().repaymentRules).toEqual([])
+  })
+
+  it('не сохраняет ни одну часть конфликтующего плана', () => {
+    const existingTotal = { ...rule(1), type: 'monthlyTotalPayment' as const, amount: 100_000, startDate: defaultConfig.firstPaymentDate, endDate: '2027-12-01' }
+    setStoreLoan(loanProfile({ repaymentRules: [existingTotal] }))
+    const conflict = planOperations()
+    conflict.repaymentRules = [{ ...conflict.repaymentRules[0], type: 'monthlyTotalPayment', startDate: defaultConfig.firstPaymentDate, amount: 120_000 }]
+
+    expect(() => applyCurrent(conflict)).toThrow('только одну общую сумму')
+    expect(useLoanStore.getState().repayments).toEqual([])
+    expect(useLoanStore.getState().repaymentRules).toEqual([existingTotal])
   })
 })
 
