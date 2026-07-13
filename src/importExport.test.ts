@@ -49,6 +49,7 @@ describe('импорт резервной копии', () => {
     }
     const result = parseLoanBackup(JSON.stringify({ config: legacyConfig, repayments: [], scenario: { id: 'reduceTerm', schedule: [] } }))
     expect(result.config.firstPaymentInterestOnly).toBe(defaultConfig.firstPaymentInterestOnly)
+    expect(result.config.firstPaymentInterestOnlyMode).toBe('addToTerm')
     expect(result.config.paymentType).toBe(defaultConfig.paymentType)
     expect(result.config.frequency).toBe(defaultConfig.frequency)
     expect(result.config.rounding).toBe(defaultConfig.rounding)
@@ -69,6 +70,11 @@ describe('импорт резервной копии', () => {
   it('восстанавливает режим применения изменения ставки', () => {
     const result = parseLoanBackup(JSON.stringify({ config: { ...defaultConfig, rateChangeMode: 'exactDate' }, repayments: [], gracePeriods: [], selectedScenario: 'combined' }))
     expect(result.config.rateChangeMode).toBe('exactDate')
+  })
+
+  it('восстанавливает режим первого interest-only периода', () => {
+    const result = parseLoanBackup(JSON.stringify({ config: { ...defaultConfig, firstPaymentInterestOnlyMode: 'withinTerm' } }))
+    expect(result.config.firstPaymentInterestOnlyMode).toBe('withinTerm')
   })
 
   it('отклоняет повреждённую историю изменения ставки', () => {
@@ -184,6 +190,7 @@ describe('импорт резервной копии', () => {
     ['округление', { rounding: 'broken' }],
     ['режим ставки', { rateChangeMode: 'broken' }],
     ['boolean первого платежа', { firstPaymentInterestOnly: 'true' }],
+    ['режим первого платежа', { firstPaymentInterestOnlyMode: 'broken' }],
     ['метод процентов', { interest: { ...defaultConfig.interest, method: 'broken' } }],
     ['day-count basis', { interest: { ...defaultConfig.interest, dayCountBasis: 'broken' } }],
     ['boolean даты платежа', { interest: { ...defaultConfig.interest, includePaymentDate: 1 } }]

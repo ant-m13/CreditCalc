@@ -74,6 +74,7 @@ describe('store normalization', () => {
       currency: defaultConfig.currency,
       rounding: defaultConfig.rounding,
       firstPaymentInterestOnly: defaultConfig.firstPaymentInterestOnly,
+      firstPaymentInterestOnlyMode: 'addToTerm',
       interest: defaultConfig.interest
     })
     expect(normalized.selectedScenario).toBe('reducePayment')
