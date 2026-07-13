@@ -26,7 +26,10 @@ export function useSharedCalculation({ createLoanFromData, replaceActiveWithData
     decodeSharedCalculation(payload).then(data => {
       if (!cancelled) setSharedCalculation(data)
     }).catch(error => {
-      if (!cancelled) setImportStatus({ kind: 'error', text: error instanceof Error ? error.message : 'Ссылка повреждена. Проверьте ссылку или используйте JSON-файл' })
+      if (!cancelled) {
+        clearSharedHash()
+        setImportStatus({ kind: 'error', text: error instanceof Error ? error.message : 'Ссылка повреждена. Проверьте ссылку или используйте JSON-файл' })
+      }
     })
     return () => { cancelled = true }
   }, [setImportStatus])
