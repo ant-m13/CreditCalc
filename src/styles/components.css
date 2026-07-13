@@ -22,8 +22,9 @@
 .theme-toggle{background:#eef6f3;border:1px solid #d8e6e1;color:#21443b;flex:0 0 auto}
 .theme-toggle:hover{background:var(--green);color:white}
 .font-controls{margin-left:0}
+.pwa-notice{display:flex;align-items:center;gap:10px}.pwa-notice>svg{flex:0 0 auto}.pwa-notice>span{flex:1;line-height:1.5}.pwa-notice-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}.ready-notice,.install-notice{background:#edf9f5;border-color:#cfe9e0;color:#286251}.browser-persistence-row{gap:12px}.browser-persistence-row .ghost{flex:0 0 auto}
 @media(max-width:950px){.settings-layout{grid-template-columns:1fr;grid-template-areas:"loan" "interest" "fees" "rate" "appearance"}.loan-settings-panel .form-grid,.interest-settings-panel .form-grid,.fees-settings-panel .form-grid,.appearance-panel .form-grid{grid-template-columns:1fr 1fr}.appearance-panel{grid-column:auto}}
-@media(max-width:620px){.loan-settings-panel .form-grid,.interest-settings-panel .form-grid,.fees-settings-panel .form-grid,.appearance-panel .form-grid,.rate-change-form,.rate-change-row,.date-commit-control{grid-template-columns:1fr}.date-commit-control .compact{justify-self:start}.rate-change-row .icon-btn{justify-self:end}.theme-toggle{width:36px;height:36px}}
+@media(max-width:620px){.loan-settings-panel .form-grid,.interest-settings-panel .form-grid,.fees-settings-panel .form-grid,.appearance-panel .form-grid,.rate-change-form,.rate-change-row,.date-commit-control{grid-template-columns:1fr}.date-commit-control .compact{justify-self:start}.rate-change-row .icon-btn{justify-self:end}.theme-toggle{width:36px;height:36px}.pwa-notice,.alert-with-actions.pwa-notice{align-items:flex-start;flex-wrap:wrap}.pwa-notice-actions{width:100%;justify-content:flex-start;padding-left:28px}.browser-persistence-row{align-items:flex-start;flex-direction:column}.browser-persistence-row .ghost{align-self:flex-start}}
 
 /* Досрочные платежи: разовые операции, правила и общий календарь */
 .early-layout{display:grid;grid-template-columns:minmax(0,1fr) minmax(380px,1fr);gap:16px;align-items:start}
