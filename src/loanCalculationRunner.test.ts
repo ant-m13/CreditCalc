@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { defaultConfig } from './loanDefaults'
-import { LoanCalculationRunner, type LoanCalculationSnapshot } from './loanCalculationRunner'
+import { calculateLoanSynchronously, LoanCalculationRunner, type LoanCalculationSnapshot } from './loanCalculationRunner'
 
 class RuntimeFailingWorker {
   static instances: RuntimeFailingWorker[] = []
@@ -56,6 +56,71 @@ describe('LoanCalculationRunner', () => {
     expect(RuntimeFailingWorker.instances[1].messages).toEqual([
       expect.objectContaining({ revision: 'latest' })
     ])
+    runner.dispose()
+  })
+
+  it('accepts one structurally valid response for the active request and terminates the Worker', () => {
+    const runner = new LoanCalculationRunner()
+    const onResult = vi.fn()
+    const current = snapshot('current')
+
+    runner.calculate(current, onResult)
+    const worker = RuntimeFailingWorker.instances[0]
+    const request = worker.messages[0] as { requestId: number }
+    worker.onmessage?.(new MessageEvent('message', { data: {
+      requestId: request.requestId,
+      kind: 'result',
+      revision: current.revision,
+      result: calculateLoanSynchronously(current).result
+    } }))
+
+    expect(onResult).toHaveBeenCalledOnce()
+    expect(onResult).toHaveBeenCalledWith(expect.objectContaining({ revision: current.revision }))
+    expect(worker.terminate).toHaveBeenCalledOnce()
+    expect(worker.onmessage).toBeNull()
+    expect(worker.onerror).toBeNull()
+    runner.dispose()
+  })
+
+  it.each([
+    { label: 'malformed', response: null },
+    { label: 'foreign revision', response: { requestId: 1, kind: 'result', revision: 'foreign', result: {} } },
+    { label: 'foreign request', response: { requestId: 999, kind: 'result', revision: 'protocol', result: {} } },
+    { label: 'invalid result', response: { requestId: 1, kind: 'result', revision: 'protocol', result: {} } }
+  ])('falls back exactly once after a $label Worker response', async ({ response }) => {
+    const runner = new LoanCalculationRunner()
+    const onResult = vi.fn()
+    const current = snapshot('protocol')
+
+    runner.calculate(current, onResult)
+    const worker = RuntimeFailingWorker.instances[0]
+    const request = worker.messages[0] as { requestId: number }
+    const data = response && typeof response === 'object' && 'requestId' in response && response.requestId === 1
+      ? { ...response, requestId: request.requestId }
+      : response
+    worker.onmessage?.(new MessageEvent('message', { data }))
+    await vi.runOnlyPendingTimersAsync()
+
+    expect(onResult).toHaveBeenCalledOnce()
+    expect(onResult).toHaveBeenCalledWith(expect.objectContaining({
+      revision: current.revision,
+      result: expect.objectContaining({ errors: [] })
+    }))
+    expect(worker.terminate).toHaveBeenCalledOnce()
+    runner.dispose()
+  })
+
+  it('falls back when the Worker does not answer before the watchdog expires', async () => {
+    const runner = new LoanCalculationRunner()
+    const onResult = vi.fn()
+
+    runner.calculate(snapshot('timeout'), onResult)
+    const worker = RuntimeFailingWorker.instances[0]
+    await vi.runAllTimersAsync()
+
+    expect(onResult).toHaveBeenCalledOnce()
+    expect(onResult).toHaveBeenCalledWith(expect.objectContaining({ revision: 'timeout' }))
+    expect(worker.terminate).toHaveBeenCalledOnce()
     runner.dispose()
   })
 

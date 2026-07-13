@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest'
-import { buildCacheNames, CACHE_PREFIX, isAppEntryPath, isPathInsideScope, normalizedScopePath } from './serviceWorkerPolicy'
+import {
+  buildCacheNames,
+  CACHE_PREFIX,
+  isAppEntryPath,
+  isCacheableNavigationResponse,
+  isPathInsideScope,
+  isSuccessfulNavigationResponse,
+  normalizedScopePath
+} from './serviceWorkerPolicy'
 
 describe('service worker cache policy', () => {
   it('создаёт стабильные build-specific имена только в namespace приложения', () => {
@@ -23,5 +31,18 @@ describe('service worker cache policy', () => {
     expect(isAppEntryPath('/CreditCalc/', scope)).toBe(true)
     expect(isAppEntryPath('/CreditCalc/index.html', scope)).toBe(true)
     expect(isAppEntryPath('/CreditCalc/export', scope)).toBe(false)
+  })
+
+  it('использует кеш для HTTP-ошибок и обновляет его только HTML-ответом', () => {
+    const html = new Response('<!doctype html>', { status: 200, headers: { 'content-type': 'text/html; charset=utf-8' } })
+    const json = new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } })
+    const unavailable = new Response('temporary failure', { status: 503 })
+
+    expect(isSuccessfulNavigationResponse(html)).toBe(true)
+    expect(isCacheableNavigationResponse(html)).toBe(true)
+    expect(isSuccessfulNavigationResponse(json)).toBe(true)
+    expect(isCacheableNavigationResponse(json)).toBe(false)
+    expect(isSuccessfulNavigationResponse(unavailable)).toBe(false)
+    expect(isCacheableNavigationResponse(unavailable)).toBe(false)
   })
 })

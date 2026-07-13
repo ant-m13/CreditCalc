@@ -1,5 +1,13 @@
 /// <reference lib="webworker" />
-import { buildCacheNames, isAppEntryPath, isPathInsideScope, normalizedScopePath, type PrecacheEntry } from './pwa/serviceWorkerPolicy'
+import {
+  buildCacheNames,
+  isAppEntryPath,
+  isCacheableNavigationResponse,
+  isPathInsideScope,
+  isSuccessfulNavigationResponse,
+  normalizedScopePath,
+  type PrecacheEntry
+} from './pwa/serviceWorkerPolicy'
 
 const worker = self as unknown as ServiceWorkerGlobalScope
 const precacheEntries = (self as unknown as { __WB_MANIFEST: PrecacheEntry[] }).__WB_MANIFEST
@@ -44,7 +52,8 @@ const navigationFallback = async () => {
 const networkFirstEntry = async (request: Request) => {
   try {
     const response = await fetchWithTimeout(request)
-    if (response.ok && response.type !== 'opaque') {
+    if (!isSuccessfulNavigationResponse(response)) return navigationFallback()
+    if (isCacheableNavigationResponse(response)) {
       const pages = await caches.open(cacheNames.pages)
       await pages.put(appEntryUrl, response.clone())
     }

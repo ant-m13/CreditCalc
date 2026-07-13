@@ -48,10 +48,22 @@ export default defineConfig(({ mode }) => {
         provider: 'v8',
         reporter: ['text', 'json-summary'],
         thresholds: {
-          lines: 50,
-          functions: 45,
-          branches: 45,
-          statements: 50
+          lines: 80,
+          functions: 75,
+          branches: 65,
+          statements: 80,
+          'src/goalPlanner.ts': {
+            lines: 95,
+            functions: 95,
+            branches: 80,
+            statements: 90
+          },
+          'src/loanEngine/**.ts': {
+            lines: 95,
+            functions: 90,
+            branches: 85,
+            statements: 90
+          }
         }
       }
     },
