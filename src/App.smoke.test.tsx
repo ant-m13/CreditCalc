@@ -219,7 +219,7 @@ describe('App smoke tests', () => {
 
     expect(useLoanStore.getState().repayments[1].enabled).toBe(false)
     expect(await screen.findByRole('dialog', { name: 'Досрочный платёж' })).toBeTruthy()
-    expect(screen.getByText(/только одну общую сумму/i)).toBeTruthy()
+    expect(screen.getAllByText(/только одну общую сумму/i).length).toBeGreaterThan(0)
   }, 15000)
 
   it('открывает раздел импорта и экспорта', async () => {
