@@ -43,6 +43,22 @@ afterEach(() => {
 })
 
 describe('LoanCalculationRunner', () => {
+  it('terminates stale work before posting the latest revision', () => {
+    const runner = new LoanCalculationRunner()
+    const onResult = vi.fn()
+
+    runner.calculate(snapshot('stale'), onResult)
+    const staleWorker = RuntimeFailingWorker.instances[0]
+    runner.calculate(snapshot('latest'), onResult)
+
+    expect(staleWorker.terminate).toHaveBeenCalledOnce()
+    expect(staleWorker.onmessage).toBeNull()
+    expect(RuntimeFailingWorker.instances[1].messages).toEqual([
+      expect.objectContaining({ revision: 'latest' })
+    ])
+    runner.dispose()
+  })
+
   it('switches to synchronous calculation after three Worker runtime errors', async () => {
     const runner = new LoanCalculationRunner()
     const onResult = vi.fn()

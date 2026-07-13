@@ -37,6 +37,14 @@ export class LoanCalculationRunner {
   private workerFallbackWarningShown = false
   private readonly maxWorkerErrors = MAX_WORKER_ERRORS
 
+  private cancelWorker() {
+    if (!this.worker) return
+    this.worker.onmessage = null
+    this.worker.onerror = null
+    this.worker.terminate()
+    this.worker = null
+  }
+
   private clearScheduledSyncFallback() {
     if (this.syncFallbackTimer !== null) clearTimeout(this.syncFallbackTimer)
     this.syncFallbackTimer = null
@@ -73,6 +81,7 @@ export class LoanCalculationRunner {
 
   calculate(snapshot: LoanCalculationSnapshot, onResult: (envelope: LoanCalculationEnvelope) => void) {
     this.clearScheduledSyncFallback()
+    this.cancelWorker()
 
     if (!canUseLoanCalculationWorker() || this.workerErrorCount >= this.maxWorkerErrors) {
       if (canUseLoanCalculationWorker()) {
@@ -84,16 +93,14 @@ export class LoanCalculationRunner {
       return
     }
 
-    let worker = this.worker
-    if (!worker) {
-      try {
-        worker = new Worker(new URL('./loanCalculation.worker.ts', import.meta.url), { type: 'module' })
-        this.worker = worker
-      } catch {
-        this.workerErrorCount += 1
-        this.scheduleSynchronousFallback(snapshot, onResult)
-        return
-      }
+    let worker: Worker
+    try {
+      worker = new Worker(new URL('./loanCalculation.worker.ts', import.meta.url), { type: 'module' })
+      this.worker = worker
+    } catch {
+      this.workerErrorCount += 1
+      this.scheduleSynchronousFallback(snapshot, onResult)
+      return
     }
 
     worker.onmessage = (event: MessageEvent<WorkerResponse>) => {
@@ -122,7 +129,6 @@ export class LoanCalculationRunner {
 
   dispose() {
     this.clearScheduledSyncFallback()
-    this.worker?.terminate()
-    this.worker = null
+    this.cancelWorker()
   }
 }
