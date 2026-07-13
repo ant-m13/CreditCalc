@@ -34,34 +34,50 @@ export type { LoanProfile } from './storeTypes'
 export const STORAGE_ERROR_EVENT = 'credit-calculator-storage-error'
 export const STORAGE_STATUS_EVENT = 'credit-calculator-storage-status'
 export const STORAGE_CONFLICT_EVENT = 'credit-calculator-storage-conflict'
+export const STORAGE_SYNC_CHANNEL = 'credit-calculator-storage-sync'
 export const MAX_PERSISTED_STATE_BYTES = 4_000_000
 export const MAX_PERSISTED_INPUT_BYTES = 8 * 1024 * 1024
 
-export type StorageStatusKind = 'saved' | 'nearQuota' | 'failed'
-export interface StorageConflictDetail { revision: number; updatedAt: string }
+export type StorageStatusKind = 'saved' | 'nearQuota' | 'failed' | 'conflict'
+type StorageConflictKind = 'newer' | 'deleted' | 'race'
+interface PersistedMetadata { revision: number; updatedAt: string; epoch: string; writerId: string }
+export interface StorageConflictDetail extends PersistedMetadata { kind: StorageConflictKind }
 
 let lastKnownPersistedRevision = 0
-let pendingExternalRevision = 0
+let lastKnownPersistedWriterId = ''
+let pendingExternalConflict: StorageConflictDetail | null = null
 let storageWriteBlockedReason: string | null = null
 let lastReadPersistedRaw: string | null = null
+
+const storageId = () => typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+  ? crypto.randomUUID()
+  : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`
+const TAB_WRITER_ID = storageId()
+let activeStorageEpoch = storageId()
+let storageSyncChannel: BroadcastChannel | null = null
 
 const isObject = (value: unknown): value is Record<string, unknown> =>
   Boolean(value) && typeof value === 'object' && !Array.isArray(value)
 
-const persistedMetadata = (value: string | null): StorageConflictDetail => {
-  if (!value) return { revision: 0, updatedAt: '' }
+const persistedMetadata = (value: string | null): PersistedMetadata => {
+  if (!value) return { revision: 0, updatedAt: '', epoch: '', writerId: '' }
   try {
-    const parsed = JSON.parse(value) as { state?: { persistedRevision?: unknown; persistedUpdatedAt?: unknown } }
+    const parsed = JSON.parse(value) as { state?: { persistedRevision?: unknown; persistedUpdatedAt?: unknown; persistedEpoch?: unknown; persistedWriterId?: unknown } }
     const revision = typeof parsed.state?.persistedRevision === 'number' && Number.isSafeInteger(parsed.state.persistedRevision) && parsed.state.persistedRevision >= 0 ? parsed.state.persistedRevision : 0
     const updatedAt = typeof parsed.state?.persistedUpdatedAt === 'string' ? parsed.state.persistedUpdatedAt : ''
-    return { revision, updatedAt }
+    const epoch = typeof parsed.state?.persistedEpoch === 'string' && parsed.state.persistedEpoch ? parsed.state.persistedEpoch : 'legacy'
+    const writerId = typeof parsed.state?.persistedWriterId === 'string' ? parsed.state.persistedWriterId : ''
+    return { revision, updatedAt, epoch, writerId }
   } catch {
-    return { revision: 0, updatedAt: '' }
+    return { revision: 0, updatedAt: '', epoch: 'legacy', writerId: '' }
   }
 }
 
 const notifyStorageConflict = (detail: StorageConflictDetail) => {
-  pendingExternalRevision = Math.max(pendingExternalRevision, detail.revision)
+  pendingExternalConflict = detail
+  notifyStorageStatus('conflict', detail.kind === 'deleted'
+    ? 'Сохранённые данные удалены или сброшены в другой вкладке. Локальные изменения не записаны'
+    : 'Обнаружено конкурирующее изменение данных в другой вкладке. Локальные изменения не записаны')
   if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent<StorageConflictDetail>(STORAGE_CONFLICT_EVENT, { detail }))
 }
 
@@ -109,13 +125,85 @@ export const deserializePersistedStorage = (raw: string): StorageValue<LoanState
   }
 }
 
+const conflictDetail = (metadata: PersistedMetadata, kind: StorageConflictKind): StorageConflictDetail => ({ ...metadata, kind })
+
+export const handleExternalStorageSignal = (detail: StorageConflictDetail) => {
+  if (detail.writerId === TAB_WRITER_ID) return
+  if (detail.kind === 'deleted') {
+    if (!detail.epoch || detail.epoch === activeStorageEpoch || lastKnownPersistedRevision > 0) notifyStorageConflict(detail)
+    return
+  }
+  const epochChanged = Boolean(detail.epoch && detail.epoch !== activeStorageEpoch)
+  const newerRevision = detail.revision > lastKnownPersistedRevision
+  const sameRevisionRace = detail.revision > 0 && detail.revision === lastKnownPersistedRevision && Boolean(detail.writerId) && detail.writerId !== lastKnownPersistedWriterId
+  if (epochChanged || newerRevision || sameRevisionRace) notifyStorageConflict({ ...detail, kind: sameRevisionRace ? 'race' : 'newer' })
+}
+
+const broadcastStorageSignal = (detail: StorageConflictDetail) => {
+  try { storageSyncChannel?.postMessage(detail) } catch { /* storage events remain the compatibility fallback */ }
+}
+
+const writePersistedItem = (name: string, value: StorageValue<LoanState>) => {
+  if (storageWriteBlockedReason) {
+    notifyStorageStatus('failed', `Автосохранение заблокировано: ${storageWriteBlockedReason}. Сначала скачайте backup или удалите повреждённые данные`)
+    return
+  }
+  try {
+    const current = window.localStorage.getItem(name)
+    const currentMetadata = persistedMetadata(current)
+    if (current === null && lastKnownPersistedRevision > 0) {
+      notifyStorageConflict(conflictDetail({ ...currentMetadata, epoch: activeStorageEpoch, updatedAt: new Date().toISOString() }, 'deleted'))
+      return
+    }
+    if (current !== null && (currentMetadata.epoch !== activeStorageEpoch || currentMetadata.revision > lastKnownPersistedRevision)) {
+      notifyStorageConflict(conflictDetail(currentMetadata, 'newer'))
+      return
+    }
+    const revision = Math.max(lastKnownPersistedRevision, currentMetadata.revision) + 1
+    const updatedAt = new Date().toISOString()
+    const stampedValue = JSON.stringify({
+      ...value,
+      state: {
+        ...value.state,
+        persistedRevision: revision,
+        persistedUpdatedAt: updatedAt,
+        persistedEpoch: activeStorageEpoch,
+        persistedWriterId: TAB_WRITER_ID
+      }
+    })
+    const isNearQuota = new TextEncoder().encode(stampedValue).byteLength > MAX_PERSISTED_STATE_BYTES
+    window.localStorage.setItem(name, stampedValue)
+    lastKnownPersistedRevision = revision
+    lastKnownPersistedWriterId = TAB_WRITER_ID
+    const metadata = { revision, updatedAt, epoch: activeStorageEpoch, writerId: TAB_WRITER_ID }
+    broadcastStorageSignal(conflictDetail(metadata, 'newer'))
+    notifyStorageStatus(
+      isNearQuota ? 'nearQuota' : 'saved',
+      isNearQuota ? 'Сохранённые данные приближаются к лимиту браузера. Экспортируйте расчёт в JSON' : 'Данные сохранены'
+    )
+  } catch (error) {
+    notifyStorageError(error)
+  }
+}
+
+const withStorageWriteLock = (name: string, write: () => void) => {
+  if (typeof navigator === 'undefined' || !navigator.locks) {
+    write()
+    return
+  }
+  return navigator.locks.request(`credit-calculator:${name}`, { mode: 'exclusive' }, () => write()).catch(notifyStorageError)
+}
+
 const safePersistStorage: PersistStorage<LoanState> = {
   getItem: (name: string) => {
     if (typeof window === 'undefined') return null
     try {
       const value = window.localStorage.getItem(name)
       lastReadPersistedRaw = value
-      lastKnownPersistedRevision = persistedMetadata(value).revision
+      const metadata = persistedMetadata(value)
+      lastKnownPersistedRevision = metadata.revision
+      lastKnownPersistedWriterId = metadata.writerId
+      if (value !== null) activeStorageEpoch = metadata.epoch
       return value === null ? null : deserializePersistedStorage(value)
     } catch (error) {
       notifyStorageError(error)
@@ -124,41 +212,19 @@ const safePersistStorage: PersistStorage<LoanState> = {
   },
   setItem: (name: string, value: StorageValue<LoanState>) => {
     if (typeof window === 'undefined') return
-    if (storageWriteBlockedReason) {
-      notifyStorageStatus('failed', `Автосохранение заблокировано: ${storageWriteBlockedReason}. Сначала скачайте backup или удалите повреждённые данные`)
-      return
-    }
-    try {
-      const current = window.localStorage.getItem(name)
-      const currentMetadata = persistedMetadata(current)
-      if (currentMetadata.revision > lastKnownPersistedRevision) {
-        notifyStorageConflict(currentMetadata)
-        return
-      }
-      const revision = Math.max(lastKnownPersistedRevision, currentMetadata.revision) + 1
-      const updatedAt = new Date().toISOString()
-      const stampedValue = JSON.stringify({
-        ...value,
-        state: { ...value.state, persistedRevision: revision, persistedUpdatedAt: updatedAt }
-      })
-      const isNearQuota = new TextEncoder().encode(stampedValue).byteLength > MAX_PERSISTED_STATE_BYTES
-      window.localStorage.setItem(name, stampedValue)
-      lastKnownPersistedRevision = revision
-      notifyStorageStatus(
-        isNearQuota ? 'nearQuota' : 'saved',
-        isNearQuota ? 'Сохранённые данные приближаются к лимиту браузера. Экспортируйте расчёт в JSON' : 'Данные сохранены'
-      )
-    } catch (error) {
-      notifyStorageError(error)
-    }
+    return withStorageWriteLock(name, () => writePersistedItem(name, value))
   },
   removeItem: (name: string) => {
     if (typeof window === 'undefined') return
     try {
+      const previous = persistedMetadata(window.localStorage.getItem(name))
       window.localStorage.removeItem(name)
       lastKnownPersistedRevision = 0
-      pendingExternalRevision = 0
+      lastKnownPersistedWriterId = ''
+      pendingExternalConflict = null
       lastReadPersistedRaw = null
+      broadcastStorageSignal(conflictDetail({ ...previous, writerId: TAB_WRITER_ID, updatedAt: new Date().toISOString() }, 'deleted'))
+      activeStorageEpoch = storageId()
     } catch (error) {
       notifyStorageError(error)
     }
@@ -298,8 +364,16 @@ export const useLoanStore = create<LoanState>()(persist((set) => ({
   resetCustomAccentColor: () => set(s => syncActive(s, { customAccentColor: defaultAccentColor, useCustomAccentColor: false })),
   retryStorageSave: () => set(s => ({ activeLoanId: s.activeLoanId, loans: s.loans })),
   overwriteExternalStorageChanges: () => {
-    lastKnownPersistedRevision = Math.max(lastKnownPersistedRevision, pendingExternalRevision)
-    pendingExternalRevision = 0
+    if (pendingExternalConflict?.kind === 'deleted') {
+      activeStorageEpoch = storageId()
+      lastKnownPersistedRevision = 0
+      lastKnownPersistedWriterId = ''
+    } else if (pendingExternalConflict) {
+      activeStorageEpoch = pendingExternalConflict.epoch || activeStorageEpoch
+      lastKnownPersistedRevision = Math.max(lastKnownPersistedRevision, pendingExternalConflict.revision)
+      lastKnownPersistedWriterId = pendingExternalConflict.writerId
+    }
+    pendingExternalConflict = null
     set(s => ({ activeLoanId: s.activeLoanId, loans: s.loans }))
   },
   dismissStorageRecoveryReport: () => set({ storageRecoveryReport: [] }),
@@ -374,9 +448,17 @@ export const useLoanStore = create<LoanState>()(persist((set) => ({
 }))
 
 if (typeof window !== 'undefined') {
+  if (typeof BroadcastChannel !== 'undefined') {
+    storageSyncChannel = new BroadcastChannel(STORAGE_SYNC_CHANNEL)
+    storageSyncChannel.onmessage = (event: MessageEvent<StorageConflictDetail>) => handleExternalStorageSignal(event.data)
+  }
   window.addEventListener('storage', event => {
-    if (event.key !== PERSISTED_LOAN_STORAGE_KEY || !event.newValue) return
-    const metadata = persistedMetadata(event.newValue)
-    if (metadata.revision > lastKnownPersistedRevision) notifyStorageConflict(metadata)
+    if (event.key !== PERSISTED_LOAN_STORAGE_KEY) return
+    if (event.newValue === null) {
+      const previous = persistedMetadata(event.oldValue)
+      handleExternalStorageSignal(conflictDetail({ ...previous, writerId: 'external-storage-event', updatedAt: new Date().toISOString() }, 'deleted'))
+      return
+    }
+    handleExternalStorageSignal(conflictDetail(persistedMetadata(event.newValue), 'newer'))
   })
 }
