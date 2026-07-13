@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { createJSONStorage, persist } from 'zustand/middleware'
+import { persist, type PersistStorage, type StorageValue } from 'zustand/middleware'
 import type { EarlyRepayment, GracePeriod, LoanConfig } from './loanEngine'
 import { MAX_EARLY_REPAYMENTS, MAX_GRACE_PERIODS, MAX_REPAYMENT_RULES } from './loanEngine/limits'
 import type { RepaymentRule } from './repaymentRules'
@@ -35,12 +35,18 @@ export const STORAGE_ERROR_EVENT = 'credit-calculator-storage-error'
 export const STORAGE_STATUS_EVENT = 'credit-calculator-storage-status'
 export const STORAGE_CONFLICT_EVENT = 'credit-calculator-storage-conflict'
 export const MAX_PERSISTED_STATE_BYTES = 4_000_000
+export const MAX_PERSISTED_INPUT_BYTES = 8 * 1024 * 1024
 
 export type StorageStatusKind = 'saved' | 'nearQuota' | 'failed'
 export interface StorageConflictDetail { revision: number; updatedAt: string }
 
 let lastKnownPersistedRevision = 0
 let pendingExternalRevision = 0
+let storageWriteBlockedReason: string | null = null
+let lastReadPersistedRaw: string | null = null
+
+const isObject = (value: unknown): value is Record<string, unknown> =>
+  Boolean(value) && typeof value === 'object' && !Array.isArray(value)
 
 const persistedMetadata = (value: string | null): StorageConflictDetail => {
   if (!value) return { revision: 0, updatedAt: '' }
@@ -52,11 +58,6 @@ const persistedMetadata = (value: string | null): StorageConflictDetail => {
   } catch {
     return { revision: 0, updatedAt: '' }
   }
-}
-
-const withPersistedMetadata = (value: string, revision: number, updatedAt: string) => {
-  const parsed = JSON.parse(value) as { state?: Record<string, unknown> }
-  return JSON.stringify({ ...parsed, state: { ...(parsed.state ?? {}), persistedRevision: revision, persistedUpdatedAt: updatedAt } })
 }
 
 const notifyStorageConflict = (detail: StorageConflictDetail) => {
@@ -75,20 +76,58 @@ const notifyStorageError = (error: unknown) => {
   if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent(STORAGE_ERROR_EVENT, { detail: { message } }))
 }
 
-const safeLocalStorage = {
+const storageRecoveryState = (raw: string, reason: string): StorageValue<LoanState> => ({
+  version: 11,
+  state: {
+    storageRecoveryReport: [`Сохранённое состояние localStorage помещено в карантин: ${reason}. Автосохранение заблокировано до удаления повреждённых данных.`],
+    quarantinedLoansRaw: [{
+      id: 'persisted-storage',
+      name: 'Повреждённое состояние localStorage',
+      reason,
+      raw
+    }]
+  } as LoanState
+})
+
+const quarantinePersistedStorage = (raw: string, reason: string) => {
+  storageWriteBlockedReason = reason
+  notifyStorageStatus('failed', `Автосохранение заблокировано: ${reason}. Сначала скачайте backup или удалите повреждённые данные`)
+  return storageRecoveryState(raw, reason)
+}
+
+export const deserializePersistedStorage = (raw: string): StorageValue<LoanState> => {
+  if (raw.length > MAX_PERSISTED_INPUT_BYTES || new TextEncoder().encode(raw).byteLength > MAX_PERSISTED_INPUT_BYTES) {
+    return quarantinePersistedStorage(raw, `размер сохранённого состояния превышает ${MAX_PERSISTED_INPUT_BYTES} байт`)
+  }
+  try {
+    const parsed = JSON.parse(raw) as unknown
+    if (!isObject(parsed) || !isObject(parsed.state)) throw new Error('корневой объект persisted state повреждён')
+    return parsed as unknown as StorageValue<LoanState>
+  } catch (error) {
+    const reason = error instanceof Error ? `JSON не удалось разобрать (${error.message})` : 'JSON не удалось разобрать'
+    return quarantinePersistedStorage(raw, reason)
+  }
+}
+
+const safePersistStorage: PersistStorage<LoanState> = {
   getItem: (name: string) => {
     if (typeof window === 'undefined') return null
     try {
       const value = window.localStorage.getItem(name)
+      lastReadPersistedRaw = value
       lastKnownPersistedRevision = persistedMetadata(value).revision
-      return value
+      return value === null ? null : deserializePersistedStorage(value)
     } catch (error) {
       notifyStorageError(error)
       return null
     }
   },
-  setItem: (name: string, value: string) => {
+  setItem: (name: string, value: StorageValue<LoanState>) => {
     if (typeof window === 'undefined') return
+    if (storageWriteBlockedReason) {
+      notifyStorageStatus('failed', `Автосохранение заблокировано: ${storageWriteBlockedReason}. Сначала скачайте backup или удалите повреждённые данные`)
+      return
+    }
     try {
       const current = window.localStorage.getItem(name)
       const currentMetadata = persistedMetadata(current)
@@ -98,7 +137,10 @@ const safeLocalStorage = {
       }
       const revision = Math.max(lastKnownPersistedRevision, currentMetadata.revision) + 1
       const updatedAt = new Date().toISOString()
-      const stampedValue = withPersistedMetadata(value, revision, updatedAt)
+      const stampedValue = JSON.stringify({
+        ...value,
+        state: { ...value.state, persistedRevision: revision, persistedUpdatedAt: updatedAt }
+      })
       const isNearQuota = new TextEncoder().encode(stampedValue).byteLength > MAX_PERSISTED_STATE_BYTES
       window.localStorage.setItem(name, stampedValue)
       lastKnownPersistedRevision = revision
@@ -116,6 +158,7 @@ const safeLocalStorage = {
       window.localStorage.removeItem(name)
       lastKnownPersistedRevision = 0
       pendingExternalRevision = 0
+      lastReadPersistedRaw = null
     } catch (error) {
       notifyStorageError(error)
     }
@@ -260,7 +303,13 @@ export const useLoanStore = create<LoanState>()(persist((set) => ({
     set(s => ({ activeLoanId: s.activeLoanId, loans: s.loans }))
   },
   dismissStorageRecoveryReport: () => set({ storageRecoveryReport: [] }),
-  deleteQuarantinedLoans: () => set({ quarantinedLoansRaw: [] }),
+  deleteQuarantinedLoans: () => {
+    if (storageWriteBlockedReason) {
+      safePersistStorage.removeItem(PERSISTED_LOAN_STORAGE_KEY)
+      storageWriteBlockedReason = null
+    }
+    set({ quarantinedLoansRaw: [], storageRecoveryReport: [] })
+  },
   switchLoan: (id) => set(s => switchToLoan(s, id)),
   createLoan: (name = 'Новый кредит') => set(s => {
     assertCanAddLoan(s.loans.length)
@@ -297,10 +346,31 @@ export const useLoanStore = create<LoanState>()(persist((set) => ({
   })
 }), {
   name: PERSISTED_LOAN_STORAGE_KEY,
-  storage: createJSONStorage(() => safeLocalStorage),
+  storage: safePersistStorage,
   version: 11,
-  migrate: normalizePersistedState,
-  merge: (persisted, current) => ({ ...current, ...normalizePersistedState(persisted) })
+  migrate: (persisted) => normalizePersistedState(persisted) as LoanState,
+  merge: (persisted, current) => {
+    try {
+      const normalized = normalizePersistedState(persisted)
+      if (!storageWriteBlockedReason || lastReadPersistedRaw === null) return { ...current, ...normalized }
+      const recovery = storageRecoveryState(lastReadPersistedRaw, storageWriteBlockedReason).state
+      return {
+        ...current,
+        ...normalized,
+        storageRecoveryReport: recovery.storageRecoveryReport,
+        quarantinedLoansRaw: recovery.quarantinedLoansRaw
+      }
+    } catch (error) {
+      const reason = error instanceof Error ? `миграция завершилась ошибкой (${error.message})` : 'миграция завершилась ошибкой'
+      const recovery = quarantinePersistedStorage(lastReadPersistedRaw ?? '', reason)
+      return { ...current, ...normalizePersistedState(recovery.state) }
+    }
+  },
+  onRehydrateStorage: () => (_state, error) => {
+    if (!error) return
+    storageWriteBlockedReason = error instanceof Error ? error.message : 'неизвестная ошибка восстановления localStorage'
+    notifyStorageError(error)
+  }
 }))
 
 if (typeof window !== 'undefined') {
