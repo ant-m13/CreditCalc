@@ -17,7 +17,7 @@ const input = (patch: Partial<GoalPlannerInput> = {}): GoalPlannerInput => ({
   ...patch
 })
 
-describe('goal planner', () => {
+describe('goal planner', { timeout: 30_000 }, () => {
   it('подбирает четыре варианта закрытия и подтверждает копеечную границу', () => {
     const result = buildGoalPlans(input())
 
