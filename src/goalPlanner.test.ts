@@ -26,6 +26,14 @@ describe('goal planner', () => {
     expect(result.variants.filter(item => item.status === 'achieved')).toHaveLength(4)
     expect(result.variants.every(item => item.status === 'infeasible' || item.boundaryVerified)).toBe(true)
     expect(result.variants.filter(item => item.summary).every(item => item.summary!.closingDate <= result.targetDate!)).toBe(true)
+
+    const monthly = result.variants.find(item => item.kind === 'monthlyExtra')!
+    const previousOperations = {
+      repayments: monthly.operations.repayments,
+      repaymentRules: monthly.operations.repaymentRules.map(rule => ({ ...rule, amount: Math.max(0, (rule.amount ?? 0) - 0.01) }))
+    }
+    expect(buildGoalPlanPreview(input(), previousOperations).planned.closingDate > result.targetDate!).toBe(true)
+    expect(result.variants.some(item => (item.summary?.plannerContribution.fees ?? 0) > 0)).toBe(true)
   })
 
   it('учитывает существующие операции как текущий план', () => {
@@ -78,5 +86,30 @@ describe('goal planner', () => {
 
     expect(result.status).toBe('infeasible')
     expect(result.variants.every(item => item.status === 'infeasible')).toBe(true)
+  })
+
+  it('использует тот же движок для квартальных платежей, изменения ставки, льготы и округления до рублей', () => {
+    const result = buildGoalPlans(input({
+      config: {
+        ...defaultConfig,
+        principal: 600_000,
+        annualRate: 9,
+        issueDate: '2026-01-01',
+        firstPaymentDate: '2026-04-01',
+        paymentDay: 1,
+        termMonths: 60,
+        frequency: 'quarterly',
+        rounding: 'rubles',
+        firstPaymentInterestOnly: false,
+        rateChanges: [{ id: 'rate-1', date: '2027-01-01', annualRate: 11 }]
+      },
+      gracePeriods: [{ id: 'grace-1', startDate: '2027-04-01', endDate: '2027-06-30', type: 'interestOnly', extendTerm: true, accrueInterest: true, capitalizeInterest: false }],
+      goal: { type: 'monthsEarlier', months: 6 },
+      planStartDate: '2026-10-01',
+      oneTimeDate: '2026-07-15'
+    }))
+
+    expect(result.status).toBe('planned')
+    expect(result.variants.some(item => item.status === 'achieved' && item.boundaryVerified)).toBe(true)
   })
 })

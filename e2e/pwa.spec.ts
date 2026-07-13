@@ -60,3 +60,18 @@ test('приложение перезагружается офлайн и пок
     await context.setOffline(false)
   }
 })
+
+test('планировщик цели загружается и выполняет Worker-расчёт офлайн', async ({ page, context }) => {
+  await prepareControlledPage(page)
+  await context.setOffline(true)
+  try {
+    await page.reload({ waitUntil: 'domcontentloaded' })
+    await page.getByRole('button', { name: 'Планировщик цели' }).click()
+    const calculate = page.getByRole('button', { name: 'Рассчитать план' })
+    await expect(calculate).toBeEnabled()
+    await calculate.click()
+    await expect(page.getByRole('heading', { name: 'Варианты достижения цели' })).toBeVisible({ timeout: 30_000 })
+  } finally {
+    await context.setOffline(false)
+  }
+})

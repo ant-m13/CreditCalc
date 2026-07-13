@@ -56,6 +56,10 @@ const expected = visit(dist)
   .filter(path => statSync(path).isFile() && precacheExtensions.has(extname(path)) && !path.endsWith('service-worker.js'))
   .map(path => relative(dist, path).replaceAll('\\', '/'))
 
+if (!expected.some(file => /goalPlanner\.worker-.*\.js$/.test(file))) {
+  fail('goal planner Worker asset is missing from the production build')
+}
+
 for (const file of expected) {
   const expectedPath = new URL(file, scopeUrl).pathname
   if (!resolvedPrecachePaths.has(expectedPath)) fail(`file is not precached: ${expectedPath}`)
