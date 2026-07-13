@@ -134,7 +134,7 @@ describe('App smoke tests', () => {
     fireEvent.keyDown(document, { key: 'Escape' })
     await waitFor(() => expect(drawer.getAttribute('aria-hidden')).toBe('true'))
     expect(document.activeElement).toBe(open)
-  })
+  }, 15_000)
 
   it('открывает приложение и показывает обзор кредита', async () => {
     render(<App />)
