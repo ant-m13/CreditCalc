@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useState } from 'react'
-import type { LoanBackupData } from '../importExport'
+import type { ValidatedLoanData } from '../importExport'
 import { decodeSharedCalculation, readSharedCalculationFromLocation } from '../shareCalculation'
 import type { ImportStatus } from './useLoanImport'
 
 interface UseSharedCalculationOptions {
-  createLoanFromData: (data: LoanBackupData, source?: string) => boolean
-  replaceActiveWithData: (data: LoanBackupData, source?: string) => boolean
+  createLoanFromData: (data: ValidatedLoanData, source?: string) => boolean
+  replaceActiveWithData: (data: ValidatedLoanData, source?: string) => boolean
   setImportStatus: (status: ImportStatus | null) => void
   onAccept?: () => void
 }
@@ -17,7 +17,7 @@ const clearSharedHash = () => {
 }
 
 export function useSharedCalculation({ createLoanFromData, replaceActiveWithData, setImportStatus, onAccept }: UseSharedCalculationOptions) {
-  const [sharedCalculation, setSharedCalculation] = useState<LoanBackupData | null>(null)
+  const [sharedCalculation, setSharedCalculation] = useState<ValidatedLoanData | null>(null)
 
   useEffect(() => {
     const payload = readSharedCalculationFromLocation(window.location)

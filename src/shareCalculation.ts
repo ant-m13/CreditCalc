@@ -1,11 +1,10 @@
 import type { EarlyRepayment, GracePeriod, LoanConfig } from './loanEngine'
 import { parseLoanBackupObject, type LoanBackupData } from './importExport'
 import type { RepaymentRule } from './repaymentRules'
-import { assertPortableJsonSize, MAX_PORTABLE_JSON_BYTES, MAX_SHARE_ENCODED_PAYLOAD_LENGTH, portablePayloadTooLargeMessage } from './portabilityLimits'
+import { validatePortableShare } from './portableDataValidation'
+import { encodeSharedPayloadJson } from './sharedPayloadCodec'
 
-export const SHARE_PREFIX = 'v1.'
-export const MAX_ENCODED_PAYLOAD_LENGTH = MAX_SHARE_ENCODED_PAYLOAD_LENGTH
-export const MAX_JSON_PAYLOAD_LENGTH = MAX_PORTABLE_JSON_BYTES
+export { SHARE_PREFIX, MAX_ENCODED_PAYLOAD_LENGTH, MAX_JSON_PAYLOAD_LENGTH } from './sharedPayloadCodec'
 
 export interface SharedCalculationV1 {
   version: 1
@@ -27,62 +26,6 @@ export interface SharedCalculationV1 {
 }
 
 export type SnapshotSource = Pick<LoanBackupData, 'config' | 'repayments' | 'gracePeriods' | 'selectedScenario' | 'termUnit' | 'displayDecimals' | 'theme'> & Partial<Pick<LoanBackupData, 'name' | 'appFontSize' | 'scheduleFontSize' | 'repaymentRules' | 'customAccentColor' | 'useCustomAccentColor'>>
-
-const bytesToBase64Url = (bytes: Uint8Array) => {
-  let binary = ''
-  for (let index = 0; index < bytes.length; index += 0x8000) binary += String.fromCharCode(...bytes.slice(index, index + 0x8000))
-  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '')
-}
-
-const base64UrlToBytes = (value: string) => {
-  const base64 = value.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - value.length % 4) % 4)
-  const binary = atob(base64)
-  return Uint8Array.from(binary, char => char.charCodeAt(0))
-}
-
-const streamToBytes = async (stream: ReadableStream<Uint8Array>, maximumLength = MAX_PORTABLE_JSON_BYTES) => {
-  const reader = stream.getReader()
-  const chunks: Uint8Array[] = []
-  let length = 0
-  while (true) {
-    const { done, value } = await reader.read()
-    if (done) break
-    chunks.push(value)
-    length += value.length
-    if (length > maximumLength) throw new Error(portablePayloadTooLargeMessage)
-  }
-  const result = new Uint8Array(length)
-  let offset = 0
-  chunks.forEach(chunk => { result.set(chunk, offset); offset += chunk.length })
-  return result
-}
-
-const bytesToBlobPart = (input: Uint8Array) => input.buffer.slice(input.byteOffset, input.byteOffset + input.byteLength) as ArrayBuffer
-const bytesToStream = (input: Uint8Array): ReadableStream<BufferSource> => {
-  const blob = new Blob([bytesToBlobPart(input)])
-  if (typeof blob.stream === 'function') return blob.stream() as ReadableStream<BufferSource>
-  return new ReadableStream<BufferSource>({
-    start(controller) {
-      controller.enqueue(bytesToBlobPart(input))
-      controller.close()
-    }
-  })
-}
-
-const gzip = async (input: Uint8Array) => {
-  if (typeof CompressionStream === 'undefined') throw new Error('Ваш браузер не поддерживает создание сжатых ссылок. Используйте JSON-файл')
-  const writer = bytesToStream(input).pipeThrough(new CompressionStream('gzip'))
-  return streamToBytes(writer)
-}
-
-const gunzip = async (input: Uint8Array) => {
-  if (typeof DecompressionStream === 'undefined') throw new Error('Ваш браузер не поддерживает загрузку сжатых ссылок. Используйте JSON-файл')
-  try {
-    return await streamToBytes(bytesToStream(input).pipeThrough(new DecompressionStream('gzip')))
-  } catch {
-    throw new Error('Ссылка повреждена. Проверьте ссылку или используйте JSON-файл')
-  }
-}
 
 export function createLoanSnapshot(source: SnapshotSource): SharedCalculationV1 {
   return {
@@ -117,30 +60,11 @@ export function parseLoanSnapshot(value: unknown): LoanBackupData {
 }
 
 export async function encodeSharedCalculation(snapshot: SharedCalculationV1) {
-  const json = serializeLoanSnapshot(snapshot)
-  assertPortableJsonSize(json)
-  const jsonBytes = new TextEncoder().encode(json)
-  const compressed = await gzip(jsonBytes)
-  const encoded = `${SHARE_PREFIX}${bytesToBase64Url(compressed)}`
-  if (encoded.length > MAX_ENCODED_PAYLOAD_LENGTH) throw new Error(portablePayloadTooLargeMessage)
-  return encoded
+  return encodeSharedPayloadJson(serializeLoanSnapshot(snapshot))
 }
 
 export async function decodeSharedCalculation(payload: string) {
-  if (!payload.startsWith(SHARE_PREFIX)) throw new Error('Версия ссылки не поддерживается')
-  if (payload.length > MAX_ENCODED_PAYLOAD_LENGTH) throw new Error(portablePayloadTooLargeMessage)
-  const encoded = payload.slice(SHARE_PREFIX.length)
-  let raw: unknown
-  try {
-    const bytes = await gunzip(base64UrlToBytes(encoded))
-    if (bytes.byteLength > MAX_JSON_PAYLOAD_LENGTH) throw new Error(portablePayloadTooLargeMessage)
-    const json = new TextDecoder().decode(bytes)
-    raw = JSON.parse(json)
-  } catch (error) {
-    if (error instanceof Error && (error.message.includes('слишком большой') || error.message.includes('лимит переносимых данных'))) throw error
-    throw new Error('Ссылка повреждена. Проверьте ссылку или используйте JSON-файл', { cause: error })
-  }
-  return parseLoanSnapshot(raw)
+  return validatePortableShare(payload)
 }
 
 export async function buildShareUrl(snapshot: SharedCalculationV1, currentUrl: string | URL) {

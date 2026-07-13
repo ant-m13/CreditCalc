@@ -3,6 +3,7 @@ import { persist, type PersistStorage, type StorageValue } from 'zustand/middlew
 import type { EarlyRepayment, GracePeriod, LoanConfig } from './loanEngine'
 import { MAX_EARLY_REPAYMENTS, MAX_GRACE_PERIODS, MAX_REPAYMENT_RULES } from './loanEngine/limits'
 import type { RepaymentRule } from './repaymentRules'
+import { isValidatedLoanData, type ValidatedLoanData } from './importExport'
 import {
   assertCanAddLoan,
   assertGracePeriodsDoNotOverlap,
@@ -13,6 +14,8 @@ import {
   defaultAccentColor,
   defaultLoanData,
   loanFromData,
+  loanDataFromValidated,
+  loanFromValidatedData,
   normalizeAccentColor,
   normalizeConfigPatch,
   normalizeLoanData,
@@ -262,8 +265,8 @@ interface LoanState extends LoanData {
   renameLoan: (id: string, name: string) => void
   removeLoan: (id: string) => void
   loadExampleLoan: () => void
-  addLoanFromData: (data: LoanImportData) => void
-  replaceData: (data: LoanImportData) => void
+  addLoanFromData: (data: LoanImportData | ValidatedLoanData) => void
+  replaceData: (data: LoanImportData | ValidatedLoanData) => void
   storageRecoveryReport: string[]
   quarantinedLoansRaw: QuarantinedLoanRaw[]
 }
@@ -404,6 +407,10 @@ export const useLoanStore = create<LoanState>()(persist((set) => ({
   }),
   addLoanFromData: (data) => set(s => {
     assertCanAddLoan(s.loans.length)
+    if (isValidatedLoanData(data)) {
+      const loan = loanFromValidatedData(data, data.name ?? 'Кредит из ссылки')
+      return { loans: [...s.loans, loan], ...loanToPublicState(loan) }
+    }
     assertImportWithinLimits(data)
     const loan = loanFromData(data, data.name ?? 'Кредит из ссылки')
     assertGracePeriodsDoNotOverlap(loan.gracePeriods)
@@ -411,6 +418,10 @@ export const useLoanStore = create<LoanState>()(persist((set) => ({
     return { loans: [...s.loans, loan], ...loanToPublicState(loan) }
   }),
   replaceData: (data) => set(s => {
+    if (isValidatedLoanData(data)) {
+      const validated = loanDataFromValidated(data)
+      return { ...validated, loans: s.loans.map(loan => loan.id === s.activeLoanId ? { ...loan, ...(data.name ? { name: data.name } : {}), ...validated } : loan) }
+    }
     assertImportWithinLimits(data)
     const normalized = normalizeLoanData(data)
     assertGracePeriodsDoNotOverlap(normalized.gracePeriods)

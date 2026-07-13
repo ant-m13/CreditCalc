@@ -1,55 +1,50 @@
-import { parseLoanBackupObject, type LoanBackupData } from './importExport'
+import type { ValidatedLoanData } from './importExport'
 import { assertPortableJsonSize } from './portabilityLimits'
+import { assertSharedPayloadEnvelope } from './sharedPayloadCodec'
+import { validatePortableInput, type PortableValidationInput } from './portableDataValidationCore'
 
 export { MAX_PORTABLE_JSON_BYTES } from './portabilityLimits'
 
-type PortableValidationRequest = { requestId: number; raw: unknown }
-type PortableValidationResponse = { requestId: number; data?: LoanBackupData; error?: string }
-
-const isObject = (value: unknown): value is Record<string, unknown> =>
-  Boolean(value) && typeof value === 'object' && !Array.isArray(value)
-
-export const parsePortableJsonEnvelope = (text: string) => {
-  assertPortableJsonSize(text)
-  let raw: unknown
-  try {
-    raw = JSON.parse(text)
-  } catch {
-    throw new Error('Файл не является корректным JSON')
-  }
-  if (!isObject(raw) || !isObject(raw.config)) throw new Error('В файле отсутствуют параметры кредита')
-  return raw
-}
+type PortableValidationRequest = { requestId: number; input: PortableValidationInput }
+type PortableValidationResponse = { requestId: number; data?: ValidatedLoanData; error?: string }
 
 export class PortableDataValidationRunner {
   private worker: Worker | null = null
   private rejectPending: ((reason: Error) => void) | null = null
+  private fallbackTimer: ReturnType<typeof setTimeout> | null = null
   private requestId = 0
 
-  validate(raw: unknown): Promise<LoanBackupData> {
+  validate(input: PortableValidationInput): Promise<ValidatedLoanData> {
     this.disposePending()
     const requestId = ++this.requestId
-    if (typeof Worker === 'undefined') {
-      return new Promise((resolve, reject) => {
-        setTimeout(() => {
-          if (requestId !== this.requestId) return reject(new Error('Проверка импорта заменена более новой задачей'))
-          try { resolve(parseLoanBackupObject(raw)) } catch (error) { reject(error) }
-        }, 0)
-      })
-    }
-
     return new Promise((resolve, reject) => {
+      this.rejectPending = reject
+      const scheduleFallback = () => {
+        this.fallbackTimer = setTimeout(() => {
+          this.fallbackTimer = null
+          void validatePortableInput(input).then(data => {
+            if (requestId !== this.requestId) return
+            this.rejectPending = null
+            resolve(data)
+          }, error => {
+            if (requestId !== this.requestId) return
+            this.rejectPending = null
+            reject(error)
+          })
+        }, 0)
+      }
+      if (typeof Worker === 'undefined') {
+        scheduleFallback()
+        return
+      }
       let worker: Worker
       try {
         worker = new Worker(new URL('./portableDataValidation.worker.ts', import.meta.url), { type: 'module' })
       } catch {
-        setTimeout(() => {
-          try { resolve(parseLoanBackupObject(raw)) } catch (fallbackError) { reject(fallbackError) }
-        }, 0)
+        scheduleFallback()
         return
       }
       this.worker = worker
-      this.rejectPending = reject
       worker.onmessage = (event: MessageEvent<PortableValidationResponse>) => {
         if (event.data.requestId !== requestId || requestId !== this.requestId) return
         this.finishWorker(worker)
@@ -59,9 +54,16 @@ export class PortableDataValidationRunner {
       worker.onerror = () => {
         if (requestId !== this.requestId) return
         this.finishWorker(worker)
-        reject(new Error('Не удалось проверить импортируемый кредит в фоновом потоке'))
+        this.rejectPending = reject
+        scheduleFallback()
       }
-      worker.postMessage({ requestId, raw } satisfies PortableValidationRequest)
+      try {
+        worker.postMessage({ requestId, input } satisfies PortableValidationRequest)
+      } catch {
+        this.finishWorker(worker)
+        this.rejectPending = reject
+        scheduleFallback()
+      }
     })
   }
 
@@ -72,9 +74,11 @@ export class PortableDataValidationRunner {
   }
 
   private disposePending() {
-    if (!this.worker && !this.rejectPending) return
+    if (!this.worker && !this.rejectPending && this.fallbackTimer === null) return
     this.worker?.terminate()
     this.worker = null
+    if (this.fallbackTimer !== null) clearTimeout(this.fallbackTimer)
+    this.fallbackTimer = null
     this.rejectPending?.(new Error('Проверка импорта заменена более новой задачей'))
     this.rejectPending = null
   }
@@ -88,4 +92,7 @@ export class PortableDataValidationRunner {
 const portableDataValidationRunner = new PortableDataValidationRunner()
 
 export const validatePortableJson = (text: string) =>
-  portableDataValidationRunner.validate(parsePortableJsonEnvelope(text))
+  (assertPortableJsonSize(text), portableDataValidationRunner.validate({ kind: 'json', value: text }))
+
+export const validatePortableShare = (payload: string) =>
+  (assertSharedPayloadEnvelope(payload), portableDataValidationRunner.validate({ kind: 'share', value: payload }))

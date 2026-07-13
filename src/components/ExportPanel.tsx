@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
 import { ArrowDownToLine, Check, CircleHelp, Clipboard, ClipboardPaste, FileJson, KeyRound, Landmark, Link2, Printer, ReceiptText, Upload, X } from 'lucide-react'
-import type { LoanBackupData } from '../importExport'
+import type { ValidatedLoanData } from '../importExport'
 import { formatMoney, shortDate, fmtMonthsFull } from '../formatters'
 import { useModalDialog } from '../hooks/useModalDialog'
 import { rateChangeModeName, scenarioName } from '../labels'
@@ -14,7 +14,7 @@ interface ImportPreview {
   description: string
   sourceLabel: string
   actionSource: string
-  data: LoanBackupData
+  data: ValidatedLoanData
 }
 
 function ImportPreviewModal({ pending, createNew, replaceCurrent, decline }: { pending: ImportPreview; createNew: () => void; replaceCurrent: () => void; decline: () => void }) {
@@ -68,11 +68,11 @@ export function ExportPanel({
   downloadRecovery: () => void
   print: () => void
   calculatedExportsDisabled?: boolean
-  createImported: (data: LoanBackupData, source: string) => boolean
-  replaceImported: (data: LoanBackupData, source: string) => boolean
+  createImported: (data: ValidatedLoanData, source: string) => boolean
+  replaceImported: (data: ValidatedLoanData, source: string) => boolean
   copyShareLink: () => void
   createParameterCode: () => Promise<string>
-  decodeParameterCode: (code: string) => Promise<LoanBackupData>
+  decodeParameterCode: (code: string) => Promise<ValidatedLoanData>
   looksLikeParameterLink: (value: string) => boolean
   status: Status | null
 }) {
