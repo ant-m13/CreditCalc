@@ -23,7 +23,7 @@ export function Overview({ config, displayDecimals, repayments, gracePeriods, co
   const nextPayment = selected.schedule.find(row => row.date >= today && rowCashFlow(row) > 0)
   const nextPaymentFee = nextPayment ? nextPayment.feePaid ?? nextPayment.fee : 0
   const nextPaymentDeferredInterest = nextPayment?.deferredInterestClosing ?? 0
-  const finalBalloon = selected.schedule.find(row => row.eventTypes.includes('finalBalloon'))
+  const finalBalloon = selected.schedule.find(row => row.eventTypes.includes('materialBalloon'))
   const principalPaidPercent = loanNotIssued ? 0 : Math.min(100, Math.max(0, (config.principal - debt.principal) / Math.max(1, config.principal) * 100))
   const elapsedMonths = Math.max(0, differenceInCalendarMonths(parseISO(today), parseISO(config.issueDate)))
   const termPassedPercent = loanNotIssued ? 0 : Math.min(100, elapsedMonths / Math.max(1, selected.termMonths) * 100)

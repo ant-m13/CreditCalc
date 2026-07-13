@@ -62,7 +62,7 @@ describe('loan engine', () => {
     const short = { ...config, principal: 30_000, annualRate: 0, termMonths: 3, issueDate: '2024-01-01', firstPaymentDate: '2024-02-01', paymentDay: 1 }
     const grace: GracePeriod = { id: 'g-long', startDate: '2024-02-01', endDate: '2025-01-31', type: 'full', extendTerm: true, accrueInterest: false, capitalizeInterest: false }
     const s = generateBaseSchedule(short, { gracePeriods: [grace] })
-    const balloonInsideGrace = s.some(row => row.date <= grace.endDate && row.eventTypes.includes('finalBalloon'))
+    const balloonInsideGrace = s.some(row => row.date <= grace.endDate && row.eventTypes.includes('materialBalloon'))
     expect(balloonInsideGrace).toBe(false)
     expect(s.at(-1)!.date > grace.endDate).toBe(true)
     expect(s.filter(row => row.isRegularPayment)).toHaveLength(3)
@@ -110,7 +110,7 @@ describe('loan engine', () => {
     const grace: GracePeriod = { id: 'g-no-extend', startDate: '2024-03-01', endDate: '2024-05-31', type: 'full', extendTerm: false, accrueInterest: false, capitalizeInterest: false }
     const s = generateBaseSchedule(short, { gracePeriods: [grace] })
     expect(s.at(-1)?.date).toBe(base.at(-1)?.date)
-    expect(s.at(-1)?.eventTypes).toContain('finalBalloon')
+    expect(s.at(-1)?.eventTypes).toContain('materialBalloon')
     expect(s.at(-1)?.payment).toBeGreaterThan(base.at(-1)!.payment)
   })
   it('продлевает льготу в платёжных периодах для двухнедельного графика', () => {
@@ -128,6 +128,13 @@ describe('loan engine', () => {
     expect(s.length - base.length).toBe(1)
   })
   it('работает с нулевой ставкой', () => { const s=generateBaseSchedule({...config,annualRate:0}); const first=s.find(x=>x.date==='2024-02-15')!; expect(first.interest).toBe(0); expect(first.payment).toBe(25000) })
+  it('считает обычное финальное округление сверкой, а не balloon-платежом', () => {
+    const ordinary = { ...config, principal: 120_000, annualRate: 12, issueDate: '2024-01-01', firstPaymentDate: '2024-02-01', firstPaymentInterestOnly: false, paymentDay: 1, termMonths: 12, closeThreshold: 0 }
+    const finalRow = generateBaseSchedule(ordinary).at(-1)!
+    expect(finalRow.eventTypes).toContain('finalReconciliation')
+    expect(finalRow.eventTypes).not.toContain('materialBalloon')
+    expect(finalRow.isRegularPayment).toBe(true)
+  })
   it('пересчитывает платёж при нулевой ставке после сокращения срока', () => {
     const zeroRate = { ...config, principal: 120_000, annualRate: 0, termMonths: 12, issueDate: '2024-01-01', firstPaymentDate: '2024-02-01', paymentDay: 1, closeThreshold: 0 }
     const s = generateBaseSchedule(zeroRate, { earlyRepayments: [

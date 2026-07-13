@@ -105,7 +105,7 @@
         "deferredInterestClosing": 0,
         "cashFlowTotal": 12014.1,
         "closingBalance": 0,
-        "eventTypes": ["finalBalloon"],
+        "eventTypes": ["materialBalloon"],
         "paymentRecalculated": false,
         "isRegularPayment": false
       }
