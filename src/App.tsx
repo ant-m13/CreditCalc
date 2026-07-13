@@ -1,6 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import { flushSync } from 'react-dom'
-import { ArrowDownToLine, CalendarDays, History, Landmark, Menu, Moon, PanelLeftClose, PanelLeftOpen, Plus, Printer, ReceiptText, Settings2, ShieldCheck, Sun, TrendingDown, X } from 'lucide-react'
+import { ArrowDownToLine, CalendarDays, History, Landmark, Menu, Moon, PanelLeftClose, PanelLeftOpen, Plus, Printer, ReceiptText, Settings2, ShieldCheck, Sun, Target, TrendingDown, X } from 'lucide-react'
 import { isRegularPaymentDate, validateScenario, type EarlyRepayment } from './loanEngine'
 import { useLoanStore } from './store'
 import { FontControls } from './components/FontControls'
@@ -31,6 +31,7 @@ const EarlyList = lazy(() => import('./components/EarlyList').then(module => ({ 
 const Schedule = lazy(() => import('./components/Schedule').then(module => ({ default: module.Schedule })))
 const ExportPanel = lazy(() => import('./components/ExportPanel').then(module => ({ default: module.ExportPanel })))
 const Changelog = lazy(() => import('./components/Changelog').then(module => ({ default: module.Changelog })))
+const GoalPlanner = lazy(() => import('./components/GoalPlanner').then(module => ({ default: module.GoalPlanner })))
 
 const STALE_EXPORT_MESSAGE = 'Дождитесь окончания пересчёта, чтобы экспортировать актуальный график'
 const drawerFocusableSelector = 'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])'
@@ -202,7 +203,7 @@ function App() {
 
   const nav = [
     ['overview', Landmark, 'Обзор'], ['settings', Settings2, 'Параметры'], ['early', TrendingDown, 'Досрочные'],
-    ['grace', CalendarDays, 'Льготные периоды'], ['schedule', ReceiptText, 'График платежей'], ['export', ArrowDownToLine, 'Импорт/экспорт'], ['changes', History, 'Что изменилось']
+    ['planner', Target, 'Планировщик цели'], ['grace', CalendarDays, 'Льготные периоды'], ['schedule', ReceiptText, 'График платежей'], ['export', ArrowDownToLine, 'Импорт/экспорт'], ['changes', History, 'Что изменилось']
   ] as const
   const openEarly = (repayment: EarlyRepayment | null = null, error = '') => { setEditingEarly(repayment); setEarlyError(error); setShowEarly(true) }
   const closeEarly = () => { setShowEarly(false); setEditingEarly(null); setEarlyError('') }
@@ -309,6 +310,7 @@ function App() {
             {section === 'overview' && (!comparison || !selected) && <section className="panel list-panel" role="status" aria-live="polite"><div className="panel-head"><div><h3>Расчёт временно остановлен</h3><p>Исправьте параметры кредита или правила досрочных платежей, чтобы построить график.</p></div></div></section>}
             {section === 'settings' && <Settings key={`settings-${store.activeLoanId}`} config={store.config} update={store.updateConfig} updateInterest={store.updateInterest} termUnit={store.termUnit} setTermUnit={store.setTermUnit} displayDecimals={store.displayDecimals} setDisplayDecimals={store.setDisplayDecimals} appFontSize={store.appFontSize} setAppFontSize={store.setAppFontSize} theme={store.theme} setTheme={store.setTheme} customAccentColor={store.customAccentColor} useCustomAccentColor={store.useCustomAccentColor} setCustomAccentColor={store.setCustomAccentColor} setUseCustomAccentColor={store.setUseCustomAccentColor} resetCustomAccentColor={store.resetCustomAccentColor} persistentStorageEnabled={store.persistentStorageEnabled} setPersistentStorageEnabled={store.setPersistentStorageEnabled} browserPersistence={pwaStatus.browserPersistence} requestBrowserPersistence={pwaStatus.requestBrowserPersistence}/>}
             {section === 'early' && <EarlyList key={`early-${store.activeLoanId}`} items={store.repayments} rules={store.repaymentRules} generated={generatedRepayments} currency={store.config.currency} displayDecimals={store.displayDecimals} remove={store.removeRepayment} edit={openEarly} toggle={toggleEarlyRepayment} open={() => openEarly()} addRule={store.addRepaymentRule} updateRule={store.updateRepaymentRule} removeRule={store.removeRepaymentRule} defaultStart={store.config.firstPaymentDate}/>}
+            {section === 'planner' && <GoalPlanner key={`planner-${store.activeLoanId}`} loanId={store.activeLoanId} sourceRevision={calculationSnapshot.revision} config={store.config} repayments={store.repayments} repaymentRules={store.repaymentRules} gracePeriods={store.gracePeriods} selectedScenario={store.selectedScenario} displayDecimals={store.displayDecimals} disabled={calculatedResultsUnavailable} applyGoalPlan={store.applyGoalPlan}/>}
             {section === 'grace' && <GraceList items={store.gracePeriods} remove={store.removeGrace} open={() => setShowGrace(true)}/>}
             {section === 'schedule' && selected && base && <Schedule schedule={selected.schedule} baseSchedule={base.schedule} repayments={allRepayments} config={calculationSnapshot.config} gracePeriods={calculationSnapshot.gracePeriods} currency={calculationSnapshot.config.currency} displayDecimals={calculationSnapshot.displayDecimals} rows={rows} setRows={setRows}/>}
             {section === 'schedule' && (!selected || !base) && <section className="panel list-panel"><div className="panel-head"><div><h3>График недоступен</h3><p>Сначала исправьте ошибки в параметрах расчёта.</p></div></div></section>}
