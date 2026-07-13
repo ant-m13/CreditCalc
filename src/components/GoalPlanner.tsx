@@ -11,7 +11,12 @@ import {
   type GoalPlannerSnapshot,
   type GoalPlanPreviewEnvelope
 } from '../goalPlannerRunner'
-import type { GoalPlannerGoal, GoalPlanVariant } from '../goalPlanner'
+import {
+  GOAL_TERM_REDUCTION_MONTHS,
+  type GoalPlannerGoal,
+  type GoalPlanVariant,
+  type GoalTermReductionMonths
+} from '../goalPlanner'
 import { useModalDialog } from '../hooks/useModalDialog'
 import { Schedule } from './Schedule'
 
@@ -31,6 +36,15 @@ interface GoalPlannerProps {
 const parseAmount = (value: string) => {
   const amount = Number(value.replace(/\s/g, '').replace(',', '.'))
   return Number.isFinite(amount) ? amount : 0
+}
+
+const termReductionLabels: Record<GoalTermReductionMonths, string> = {
+  6: 'На 6 месяцев',
+  12: 'На 1 год',
+  24: 'На 2 года',
+  36: 'На 3 года',
+  60: 'На 5 лет',
+  120: 'На 10 лет'
 }
 
 const defaultDates = (config: LoanConfig, gracePeriods: GracePeriod[]) => {
@@ -65,7 +79,7 @@ function GoalPlanPreviewModal({ envelope, repayments, displayDecimals, close }: 
 export function GoalPlanner({ loanId, sourceRevision, config, repayments, repaymentRules, gracePeriods, selectedScenario, displayDecimals, disabled = false, applyGoalPlan }: GoalPlannerProps) {
   const initialDates = useMemo(() => defaultDates(config, gracePeriods), [config, gracePeriods])
   const [goalType, setGoalType] = useState<GoalPlannerGoal['type']>('monthsEarlier')
-  const [months, setMonths] = useState<6 | 12 | 24>(12)
+  const [months, setMonths] = useState<GoalTermReductionMonths>(12)
   const [targetDate, setTargetDate] = useState(config.firstPaymentDate)
   const [monthlyBudget, setMonthlyBudget] = useState('50000')
   const [maxOverpayment, setMaxOverpayment] = useState('100000')
@@ -177,7 +191,7 @@ export function GoalPlanner({ loanId, sourceRevision, config, repayments, repaym
       <div className="panel-head"><div><span className="eyebrow">Планировщик цели</span><h3>Какого результата вы хотите достичь?</h3><p>Расчёт использует текущий график, комиссии, льготы, изменения ставки и уже добавленные операции.</p></div><Target/></div>
       <div className="form-grid">
         <label className="field"><span>Цель</span><select value={goalType} onChange={event => setGoalType(event.target.value as GoalPlannerGoal['type'])}><option value="monthsEarlier">Закрыть раньше</option><option value="targetDate">Закрыть к дате</option><option value="monthlyBudget">Уложиться в бюджет</option><option value="maxOverpayment">Ограничить переплату</option></select></label>
-        {goalType === 'monthsEarlier' && <label className="field"><span>Сократить срок</span><select value={months} onChange={event => setMonths(Number(event.target.value) as 6 | 12 | 24)}><option value={6}>На 6 месяцев</option><option value={12}>На 12 месяцев</option><option value={24}>На 24 месяца</option></select></label>}
+        {goalType === 'monthsEarlier' && <label className="field"><span>Сократить срок</span><select value={months} onChange={event => setMonths(Number(event.target.value) as GoalTermReductionMonths)}>{GOAL_TERM_REDUCTION_MONTHS.map(value => <option value={value} key={value}>{termReductionLabels[value]}</option>)}</select></label>}
         {goalType === 'targetDate' && <label className="field"><span>Закрыть не позже</span><input type="date" value={targetDate} onChange={event => setTargetDate(event.target.value)}/></label>}
         {goalType === 'monthlyBudget' && <label className="field"><span>Ежемесячный бюджет</span><input inputMode="decimal" value={monthlyBudget} onChange={event => setMonthlyBudget(event.target.value)}/></label>}
         {goalType === 'maxOverpayment' && <label className="field"><span>Переплата, проценты + комиссии</span><input inputMode="decimal" value={maxOverpayment} onChange={event => setMaxOverpayment(event.target.value)}/></label>}

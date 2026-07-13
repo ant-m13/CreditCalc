@@ -98,6 +98,24 @@ beforeEach(() => {
 afterEach(cleanup)
 
 describe('GoalPlanner UI', () => {
+  it('предлагает сокращение срока до десяти лет и передаёт выбранную цель в расчёт', async () => {
+    const user = userEvent.setup()
+    render(<GoalPlanner {...props()}/>)
+
+    const select = screen.getByLabelText('Сократить срок')
+    expect(screen.getByRole('option', { name: 'На 6 месяцев' })).toBeTruthy()
+    expect(screen.getByRole('option', { name: 'На 1 год' })).toBeTruthy()
+    expect(screen.getByRole('option', { name: 'На 2 года' })).toBeTruthy()
+    expect(screen.getByRole('option', { name: 'На 3 года' })).toBeTruthy()
+    expect(screen.getByRole('option', { name: 'На 5 лет' })).toBeTruthy()
+    expect(screen.getByRole('option', { name: 'На 10 лет' })).toBeTruthy()
+
+    await user.selectOptions(select, '120')
+    await user.click(screen.getByRole('button', { name: 'Рассчитать план' }))
+
+    expect(runnerMocks.calculate.mock.calls[0]?.[0]).toMatchObject({ goal: { type: 'monthsEarlier', months: 120 } })
+  })
+
   it('показывает варианты, сравнение и применяет план к исходной ревизии', async () => {
     const user = userEvent.setup()
     const applyGoalPlan = vi.fn()
