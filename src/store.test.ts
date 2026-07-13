@@ -454,6 +454,26 @@ describe('применение плана цели', () => {
     expect(useLoanStore.getState().repaymentRules).toEqual([])
   })
 
+  it('не применяет результат к другому активному кредиту', () => {
+    const first = loanProfile({ id: 'loan-first', name: 'Первый' })
+    const second = loanProfile({ id: 'loan-second', name: 'Второй' })
+    useLoanStore.setState({ ...first, loans: [first, second], activeLoanId: first.id })
+    const stale = useLoanStore.getState()
+    stale.switchLoan(second.id)
+
+    expect(() => useLoanStore.getState().applyGoalPlan({
+      expectedLoanId: stale.activeLoanId,
+      expectedConfig: stale.config,
+      expectedRepayments: stale.repayments,
+      expectedRepaymentRules: stale.repaymentRules,
+      expectedGracePeriods: stale.gracePeriods,
+      operations: planOperations()
+    })).toThrow('изменился')
+    expect(useLoanStore.getState().activeLoanId).toBe(second.id)
+    expect(useLoanStore.getState().repayments).toEqual([])
+    expect(useLoanStore.getState().loans.every(loan => loan.repayments.length === 0 && loan.repaymentRules.length === 0)).toBe(true)
+  })
+
   it('не сохраняет ни одну часть конфликтующего плана', () => {
     const existingTotal = { ...rule(1), type: 'monthlyTotalPayment' as const, amount: 100_000, startDate: defaultConfig.firstPaymentDate, endDate: '2027-12-01' }
     setStoreLoan(loanProfile({ repaymentRules: [existingTotal] }))

@@ -148,4 +148,40 @@ describe('GoalPlanner UI', () => {
     await waitFor(() => expect(screen.getByText(/Параметры изменились/)).toBeTruthy())
     expect(screen.queryByText(/Платите дополнительно/)).toBeNull()
   })
+
+  it('отменяет выполняющийся подбор без сохранения результата', async () => {
+    const user = userEvent.setup()
+    runnerMocks.calculate.mockImplementationOnce(() => undefined)
+    render(<GoalPlanner {...props()}/>)
+
+    await user.click(screen.getByRole('button', { name: 'Рассчитать план' }))
+    await user.click(screen.getByRole('button', { name: 'Отменить' }))
+
+    expect(runnerMocks.cancel).toHaveBeenCalledOnce()
+    expect(screen.getByText('Расчёт отменён')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Рассчитать план' })).toBeTruthy()
+  })
+
+  it('показывает ошибку Worker и снимает состояние загрузки', async () => {
+    const user = userEvent.setup()
+    runnerMocks.calculate.mockImplementationOnce((_snapshot: unknown, _onResult: unknown, onError: (message: string) => void) => onError('Worker недоступен'))
+    render(<GoalPlanner {...props()}/>)
+
+    await user.click(screen.getByRole('button', { name: 'Рассчитать план' }))
+
+    expect(screen.getByRole('alert').textContent).toContain('Worker недоступен')
+    expect(screen.getByRole('button', { name: 'Рассчитать план' })).toBeTruthy()
+  })
+
+  it('не показывает успех, если store отклонил применение плана', async () => {
+    const user = userEvent.setup()
+    const applyGoalPlan = vi.fn(() => { throw new Error('Кредит изменился') })
+    render(<GoalPlanner {...props({ applyGoalPlan })}/>)
+    await user.click(screen.getByRole('button', { name: 'Рассчитать план' }))
+
+    await user.click(await screen.findByRole('button', { name: 'Добавить этот план в кредит' }))
+
+    expect(screen.getByRole('alert').textContent).toContain('Кредит изменился')
+    expect(screen.queryByText(/добавлен в кредит/)).toBeNull()
+  })
 })
