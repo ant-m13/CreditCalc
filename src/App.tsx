@@ -295,7 +295,7 @@ function App() {
         {store.storageRecoveryDismissed && store.quarantinedLoansRaw.length > 0 && <button className="ghost compact" onClick={store.showStorageRecoveryReport}>Показать карантин ({store.quarantinedLoansRaw.length})</button>}
         {isStale && <div className="alert" role="status" aria-live="polite" aria-atomic="true">Пересчитываем график. На экране пока показан предыдущий согласованный расчёт.</div>}
         {errors.length > 0 && <div className="alert" role="alert" aria-live="assertive" aria-atomic="true">{errors.join(' · ')}</div>}
-        <SectionErrorBoundary resetKey={section}>
+        <SectionErrorBoundary resetKey={`${section}:${store.activeLoanId}`}>
           <Suspense fallback={<SectionLoading/>}>
             {section === 'overview' && comparison && selected && <Overview config={calculationSnapshot.config} displayDecimals={calculationSnapshot.displayDecimals} repayments={allRepayments} gracePeriods={calculationSnapshot.gracePeriods} comparison={comparison} selected={selected} chartData={overviewChartData} onSelect={store.selectScenario} onOpen={() => openEarly()}/>}
             {section === 'overview' && (!comparison || !selected) && <section className="panel list-panel" role="status" aria-live="polite"><div className="panel-head"><div><h3>Расчёт временно остановлен</h3><p>Исправьте параметры кредита или правила досрочных платежей, чтобы построить график.</p></div></div></section>}
