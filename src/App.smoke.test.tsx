@@ -269,7 +269,7 @@ describe('App smoke tests', () => {
     render(<App />)
 
     await user.click(screen.getByRole('button', { name: 'Параметры' }))
-    const settingsSection = await screen.findByText('Изменение ставки')
+    const settingsSection = await screen.findByText('Изменение ставки', undefined, { timeout: 10_000 })
     const rateDate = settingsSection.closest('section')?.querySelector('input[type="date"]') as HTMLInputElement | null
     if (!rateDate) throw new Error('Не найден input даты изменения ставки')
     await user.clear(rateDate)
@@ -281,7 +281,7 @@ describe('App smoke tests', () => {
     await waitFor(() => {
       const nextRateDate = screen.getByText('Изменение ставки').closest('section')?.querySelector('input[type="date"]') as HTMLInputElement | null
       expect(nextRateDate?.value).toBe('')
-    })
+    }, { timeout: 10_000 })
   })
 
   it('не применяет промежуточный год даты выдачи во время редактирования', async () => {

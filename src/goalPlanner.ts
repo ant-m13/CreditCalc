@@ -102,6 +102,7 @@ interface PlannerContext {
 interface EvaluatedPlan {
   schedule: PaymentScheduleItem[]
   plannerRepaymentIds: Set<string>
+  appliedPlannerRepaymentIds: Set<string>
 }
 
 interface SearchResult {
@@ -254,15 +255,24 @@ const evaluateOperations = (context: PlannerContext, operations: GoalPlanOperati
   const allRepayments = sortRepaymentsByApplicationOrder([...context.existingRepayments, ...plannerRepayments])
   const errors = validateScenario(context.input.config, allRepayments, context.input.gracePeriods)
   if (errors.length) throw new Error(errors.join(' · '))
-  return {
-    schedule: generateBaseSchedule(context.input.config, {
-      earlyRepayments: allRepayments,
-      gracePeriods: context.input.gracePeriods,
-      paymentCalendar: context.calendar,
-      scenarioAlreadyValidated: true
-    }),
-    plannerRepaymentIds: new Set(plannerRepayments.map(item => item.id))
+  const plannerRepaymentIds = new Set(plannerRepayments.map(item => item.id))
+  const schedule = generateBaseSchedule(context.input.config, {
+    earlyRepayments: allRepayments,
+    gracePeriods: context.input.gracePeriods,
+    paymentCalendar: context.calendar,
+    scenarioAlreadyValidated: true
+  })
+  const appliedPlannerRepaymentIds = new Set<string>()
+  for (const row of schedule) {
+    for (const outcome of row.repaymentOutcomes ?? []) {
+      if (plannerRepaymentIds.has(outcome.repaymentId)
+        && outcome.reason !== 'debtClosed'
+        && money(new Decimal(outcome.appliedInterest).plus(outcome.appliedPrincipal)) > 0) {
+        appliedPlannerRepaymentIds.add(outcome.repaymentId)
+      }
+    }
   }
+  return { schedule, plannerRepaymentIds, appliedPlannerRepaymentIds }
 }
 
 const toCents = (value: number) => Math.max(0, Math.round(value * 100))
@@ -294,53 +304,120 @@ const searchMinimum = (
     const evaluated = evaluate(cents)
     return evaluated ? predicate(evaluated.schedule) : false
   }
-  const objectiveAt = (cents: number) => {
-    const evaluated = evaluate(cents)
-    return evaluated && objective ? objective(evaluated.schedule) : null
-  }
-  const findObjectiveMinimum = () => {
-    let left = 0
-    let right = maxCents
-    while (right - left > 8) {
-      const distance = right - left
-      const first = left + Math.floor(distance / 3)
-      const second = right - Math.floor(distance / 3)
-      const firstValue = objectiveAt(first)
-      const secondValue = objectiveAt(second)
-      if (firstValue === null && secondValue === null) {
-        left = second + 1
-      } else if (firstValue === null) {
-        left = first + 1
-      } else if (secondValue === null || firstValue <= secondValue) {
-        right = second - 1
-      } else {
-        left = first + 1
-      }
-    }
-    let minimum: { cents: number; value: number } | null = null
-    for (let cents = left; cents <= right; cents += 1) {
-      const value = objectiveAt(cents)
-      if (value !== null && (!minimum || value < minimum.value)) minimum = { cents, value }
-    }
-    return minimum
-  }
   const zero = evaluate(0)
   if (zero && predicate(zero.schedule)) return { amount: 0, evaluated: zero, boundaryVerified: true }
 
   const maxCents = toCents(context.maxSearchAmount)
+  if (objective) {
+    type ObjectiveSample = {
+      cents: number
+      value: number | null
+      structure: string
+      matches: boolean
+    }
+    const samples = new Map<number, ObjectiveSample>()
+    const sampleAt = (cents: number) => {
+      const normalized = Math.max(0, Math.min(maxCents, cents))
+      const cached = samples.get(normalized)
+      if (cached) return cached
+      const evaluated = evaluate(normalized)
+      if (!evaluated) {
+        const sample = { cents: normalized, value: null, structure: 'invalid', matches: false }
+        samples.set(normalized, sample)
+        return sample
+      }
+      let applied = 0
+      let partiallyApplied = 0
+      let ignoredAfterClose = 0
+      for (const row of evaluated.schedule) {
+        for (const outcome of row.repaymentOutcomes ?? []) {
+          if (!evaluated.plannerRepaymentIds.has(outcome.repaymentId)) continue
+          if (outcome.reason === 'debtClosed') ignoredAfterClose += 1
+          else {
+            applied += 1
+            if (outcome.reason === 'partiallyApplied') partiallyApplied += 1
+          }
+        }
+      }
+      const sample = {
+        cents: normalized,
+        value: objective(evaluated.schedule),
+        structure: [
+          evaluated.schedule.at(-1)?.date ?? '',
+          evaluated.schedule.length,
+          applied,
+          partiallyApplied,
+          ignoredAfterClose
+        ].join('|'),
+        matches: predicate(evaluated.schedule)
+      }
+      samples.set(normalized, sample)
+      return sample
+    }
+    const monotonicSamples = (rangeSamples: ObjectiveSample[]) => {
+      const values = rangeSamples.map(sample => sample.value)
+      if (values.every(value => value === null)) return true
+      if (values.some(value => value === null)) return false
+      const numeric = values as number[]
+      const nonDecreasing = numeric.every((value, index) => index === 0 || value >= numeric[index - 1])
+      const nonIncreasing = numeric.every((value, index) => index === 0 || value <= numeric[index - 1])
+      return nonDecreasing || nonIncreasing
+    }
+    const findFirstMatch = (left: number, right: number, depth = 0): number | null => {
+      if (left > right) return null
+      if (right - left <= 8) {
+        for (let cents = left; cents <= right; cents += 1) {
+          if (sampleAt(cents).matches) return cents
+        }
+        return null
+      }
+      const distance = right - left
+      const rangeSamples = [...new Set([
+        left,
+        left + Math.floor(distance / 4),
+        left + Math.floor(distance / 2),
+        left + Math.floor(distance * 3 / 4),
+        right
+      ])].map(sampleAt)
+      const structureChanged = new Set(rangeSamples.map(sample => sample.structure)).size > 1
+      const potentialBoundary = rangeSamples.some(sample => sample.matches)
+      const objectiveChangedDirection = !monotonicSamples(rangeSamples)
+      const refineStructure = structureChanged && depth < 1
+      const refineObjective = objectiveChangedDirection && depth < 2
+
+      // Every band is sampled at five points. Further subdivision follows schedule/outcome
+      // transitions, bounded local valleys, or a sampled feasible boundary.
+      if (!potentialBoundary && !refineStructure && !refineObjective) return null
+
+      const middle = left + Math.floor(distance / 2)
+      return findFirstMatch(left, middle, depth + 1)
+        ?? findFirstMatch(middle + 1, right, depth + 1)
+    }
+
+    let bandStart = 1
+    let bandEnd = Math.min(100, maxCents)
+    while (bandStart <= maxCents) {
+      const match = findFirstMatch(bandStart, bandEnd)
+      if (match !== null) {
+        const evaluated = evaluate(match)
+        const boundaryVerified = Boolean(evaluated) && sampleAt(match).matches && !sampleAt(match - 1).matches
+        if (!evaluated || !boundaryVerified) throw new Error('Не удалось подтвердить глобально минимальную сумму с точностью до копейки')
+        return { amount: fromCents(match), evaluated, boundaryVerified }
+      }
+      if (bandEnd >= maxCents) break
+      bandStart = bandEnd + 1
+      bandEnd = Math.min(maxCents, Math.max(bandStart, bandEnd * 4))
+    }
+    return null
+  }
+
   let low = 0
   let high = Math.min(100, maxCents)
   while (high < maxCents && !satisfies(high)) {
     low = high
     high = Math.min(maxCents, high * 2)
   }
-  if (!satisfies(high)) {
-    if (!objective) return null
-    const minimum = findObjectiveMinimum()
-    if (!minimum || !satisfies(minimum.cents)) return null
-    low = 0
-    high = minimum.cents
-  }
+  if (!satisfies(high)) return null
 
   while (low + 1 < high) {
     const middle = low + Math.floor((high - low) / 2)
@@ -383,15 +460,20 @@ const achievedVariant = (
   evaluated: EvaluatedPlan,
   boundaryVerified: boolean,
   amounts: Pick<GoalPlanVariant, 'monthlyExtra' | 'totalMonthlyPayment' | 'oneTimePayment'>
-): GoalPlanVariant => ({
-  kind,
-  title: variantTitles[kind],
-  status: 'achieved',
-  boundaryVerified,
-  operations,
-  ...amounts,
-  summary: scheduleSummary(evaluated.schedule, context.input.config.principal, context.current, evaluated.plannerRepaymentIds)
-})
+): GoalPlanVariant => {
+  if (operations.repayments.some(repayment => !evaluated.appliedPlannerRepaymentIds.has(repayment.id))) {
+    return infeasibleVariant(kind, 'Разовый взнос не применяется: кредит закрывается раньше выбранной даты')
+  }
+  return {
+    kind,
+    title: variantTitles[kind],
+    status: 'achieved',
+    boundaryVerified,
+    operations,
+    ...amounts,
+    summary: scheduleSummary(evaluated.schedule, context.input.config.principal, context.current, evaluated.plannerRepaymentIds)
+  }
+}
 
 const searchVariant = (
   context: PlannerContext,

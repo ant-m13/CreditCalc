@@ -40,3 +40,10 @@ export const isPathInsideScope = (pathname: string, scopePath: string) =>
 
 export const isAppEntryPath = (pathname: string, scopePath: string) =>
   pathname === scopePath || pathname === `${scopePath}index.html`
+
+export const isSuccessfulNavigationResponse = (response: Response) =>
+  response.ok && response.type !== 'opaque'
+
+export const isCacheableNavigationResponse = (response: Response) =>
+  isSuccessfulNavigationResponse(response)
+  && (response.headers.get('content-type') ?? '').toLowerCase().includes('text/html')

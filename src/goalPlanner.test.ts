@@ -17,6 +17,30 @@ const input = (patch: Partial<GoalPlannerInput> = {}): GoalPlannerInput => ({
   ...patch
 })
 
+const seededRandom = (seed: number) => () => {
+  seed |= 0
+  seed = seed + 0x6D2B79F5 | 0
+  let value = Math.imul(seed ^ seed >>> 15, 1 | seed)
+  value = value + Math.imul(value ^ value >>> 7, 61 | value) ^ value
+  return ((value ^ value >>> 14) >>> 0) / 4_294_967_296
+}
+
+const operationsWithVariantAmount = (
+  variant: ReturnType<typeof buildGoalPlans>['variants'][number],
+  amount: number
+) => {
+  if (variant.kind === 'oneTime') {
+    return {
+      repayments: amount > 0 ? variant.operations.repayments.map(repayment => ({ ...repayment, amount })) : [],
+      repaymentRules: variant.operations.repaymentRules
+    }
+  }
+  return {
+    repayments: variant.operations.repayments,
+    repaymentRules: amount > 0 ? variant.operations.repaymentRules.map(rule => ({ ...rule, amount })) : []
+  }
+}
+
 describe('goal planner', { timeout: 30_000 }, () => {
   it('подбирает четыре варианта закрытия и подтверждает копеечную границу', () => {
     const result = buildGoalPlans(input())
@@ -75,6 +99,40 @@ describe('goal planner', { timeout: 30_000 }, () => {
     })
   })
 
+  it('не рекомендует комбинированный план с разовым взносом после закрытия кредита', () => {
+    const plannerInput = input({ goal: { type: 'maxOverpayment', amount: 150_000 }, oneTimeDate: '2035-01-01', availableNow: 100_000 })
+    const result = buildGoalPlans(plannerInput)
+    const combined = result.variants.find(item => item.kind === 'combined')!
+
+    expect(combined.status).toBe('infeasible')
+    expect(combined.operations.repayments).toEqual([])
+    expect(combined.oneTimePayment).toBeUndefined()
+    expect(combined.reason).toContain('раньше')
+  })
+
+  it('отбрасывает будущий разовый взнос, когда ежемесячный бюджет достигается без него', () => {
+    const plannerInput = input({
+      config: {
+        ...input().config,
+        annualRate: 5,
+        rateChangeMode: 'nextPeriod',
+        rateChanges: [{ id: 'late-rate', date: '2029-01-01', annualRate: 30 }]
+      },
+      goal: { type: 'monthlyBudget', amount: 23_000 },
+      planStartDate: '2026-03-01',
+      oneTimeDate: '2035-01-01',
+      availableNow: 100_000
+    })
+    const result = buildGoalPlans(plannerInput)
+    const combined = result.variants.find(item => item.kind === 'combined')!
+    expect(result.status).toBe('planned')
+    expect(combined).toMatchObject({
+      status: 'infeasible',
+      operations: { repayments: [], repaymentRules: [] }
+    })
+    expect(combined.reason).toContain('раньше')
+  })
+
   it('подбирает вариант для ограничения общей переплаты с комиссиями', () => {
     const current = buildGoalPlans(input({ goal: { type: 'targetDate', targetDate: '2035-01-01' } })).current
     const result = buildGoalPlans(input({ goal: { type: 'maxOverpayment', amount: Math.round(current.overpayment * 0.8 * 100) / 100 } }))
@@ -101,6 +159,82 @@ describe('goal planner', { timeout: 30_000 }, () => {
       repaymentRules: oneTime.operations.repaymentRules
     }
     expect(buildGoalPlanPreview(plannerInput, previousOperations).planned.overpayment).toBeGreaterThan(234_473.37)
+  })
+
+  it('подтверждает глобальную границу на случайных финансовых сценариях', { timeout: 90_000 }, () => {
+    const random = seededRandom(1_703_2026)
+    const frequencies = ['monthly', 'quarterly', 'monthly'] as const
+
+    for (let index = 0; index < frequencies.length; index += 1) {
+      const frequency = frequencies[index]
+      const principal = 80_000 + Math.floor(random() * 40_000)
+      const plannerInput = input({
+        config: {
+          ...input().config,
+          principal,
+          annualRate: 5 + Math.floor(random() * 1_500) / 100,
+          firstPaymentDate: frequency === 'quarterly' ? '2026-04-01' : '2026-02-01',
+          termMonths: frequency === 'quarterly' ? 36 : 24,
+          frequency,
+          rounding: random() > 0.5 ? 'kopecks' : 'rubles',
+          earlyRepaymentFeePercent: Math.floor(random() * 1_500) / 100,
+          rateChangeMode: index % 2 === 0 ? 'nextPeriod' : 'exactDate',
+          rateChanges: [{ id: `property-rate-${index}`, date: '2027-01-15', annualRate: 8 + Math.floor(random() * 2_000) / 100 }]
+        },
+        repayments: index === 1 ? [{
+          id: 'property-existing',
+          date: '2026-05-15',
+          amount: 5_000,
+          amountMode: 'extra',
+          strategy: 'reduceTerm',
+          source: 'own',
+          sameDayOrder: 'regularFirst',
+          interestFirst: true
+        }] : [],
+        gracePeriods: index === 2 ? [{
+          id: 'property-grace',
+          startDate: '2027-04-01',
+          endDate: '2027-05-31',
+          type: 'interestOnly',
+          extendTerm: true,
+          accrueInterest: true,
+          capitalizeInterest: false
+        }] : [],
+        planStartDate: frequency === 'quarterly' ? '2026-07-01' : '2026-03-01',
+        oneTimeDate: '2026-02-15',
+        availableNow: Math.floor(principal * (0.08 + random() * 0.12)),
+        goal: { type: 'maxOverpayment', amount: 0 }
+      })
+      const current = buildGoalPlanPreview(plannerInput, { repayments: [], repaymentRules: [] }).current
+      plannerInput.goal = { type: 'maxOverpayment', amount: Math.round(current.overpayment * (0.9 + random() * 0.06) * 100) / 100 }
+      const result = buildGoalPlans(plannerInput)
+
+      expect(result.status).toBe('planned')
+      for (const variant of result.variants.filter(item => item.status === 'achieved')) {
+        const amount = variant.kind === 'combined'
+          ? variant.monthlyExtra ?? variant.totalMonthlyPayment ?? 0
+          : variant.oneTimePayment ?? variant.monthlyExtra ?? variant.totalMonthlyPayment ?? 0
+        expect(variant.boundaryVerified).toBe(true)
+        expect(variant.summary!.overpayment).toBeLessThanOrEqual(plannerInput.goal.amount)
+        if (amount <= 0) continue
+
+        const earlierAmounts = new Set([
+          0,
+          Math.max(0, amount - 0.01),
+          ...Array.from({ length: 6 }, () => Math.floor(random() * amount * 100) / 100)
+        ])
+        for (const earlierAmount of earlierAmounts) {
+          const reachesGoal = (() => {
+            try {
+              return buildGoalPlanPreview(plannerInput, operationsWithVariantAmount(variant, earlierAmount)).planned.overpayment <= plannerInput.goal.amount
+            } catch {
+              return false
+            }
+          })()
+          expect(reachesGoal, `${variant.kind}: ${earlierAmount} не должна достигать цели раньше ${amount}`).toBe(false)
+        }
+      }
+    }
   })
 
   it('расширяет диапазон подбора срока с учётом высокой комиссии', () => {
