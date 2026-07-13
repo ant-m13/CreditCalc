@@ -23,11 +23,8 @@ pnpm typecheck
 pnpm test
 pnpm test:coverage
 pnpm build
-```
-
-For dependency security checks:
-
-```bash
+pnpm test:pwa
+pnpm test:e2e
 pnpm audit --prod
 ```
 
