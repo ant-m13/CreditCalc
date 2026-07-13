@@ -239,13 +239,18 @@ describe('миграция локального хранилища', () => {
     setStoreLoan(loanProfile())
     useLoanStore.setState({
       storageRecoveryReport: ['Кредит помещён в карантин'],
-      quarantinedLoansRaw: [{ id: 'bad', name: 'Сбой', reason: 'ошибка', raw: { id: 'bad' } }]
+      quarantinedLoansRaw: [{ id: 'bad', name: 'Сбой', reason: 'ошибка', raw: { id: 'bad' } }],
+      storageRecoveryDismissed: false
     })
 
     useLoanStore.getState().dismissStorageRecoveryReport()
 
-    expect(useLoanStore.getState().storageRecoveryReport).toEqual([])
+    expect(useLoanStore.getState().storageRecoveryReport).toEqual(['Кредит помещён в карантин'])
     expect(useLoanStore.getState().quarantinedLoansRaw).toEqual([{ id: 'bad', name: 'Сбой', reason: 'ошибка', raw: { id: 'bad' } }])
+    expect(useLoanStore.getState().storageRecoveryDismissed).toBe(true)
+
+    useLoanStore.getState().showStorageRecoveryReport()
+    expect(useLoanStore.getState().storageRecoveryDismissed).toBe(false)
 
     useLoanStore.getState().deleteQuarantinedLoans()
     expect(useLoanStore.getState().quarantinedLoansRaw).toEqual([])

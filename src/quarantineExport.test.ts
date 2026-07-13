@@ -27,6 +27,8 @@ describe('quarantine export', () => {
     }], '2026-07-08T00:00:00.000Z')
 
     expect(exported.limits).toEqual(QUARANTINE_EXPORT_LIMITS)
+    expect(exported).toMatchObject({ format: 'sanitized-quarantine-v1', rawIsComplete: false })
+    expect(exported.notice).toContain('не побайтовый backup')
     expect(exported.quarantinedLoans[0].raw).toEqual({ value: 'x' })
   })
 })

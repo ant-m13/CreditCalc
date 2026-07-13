@@ -357,13 +357,16 @@ describe('App smoke tests', () => {
     const user = userEvent.setup()
     useLoanStore.setState({
       storageRecoveryReport: ['Повреждённая запись помещена в карантин'],
-      quarantinedLoansRaw: [{ id: 'bad', name: 'Сбой', reason: 'ошибка', raw: { secret: 'raw' } }]
+      quarantinedLoansRaw: [{ id: 'bad', name: 'Сбой', reason: 'ошибка', raw: { secret: 'raw' } }],
+      storageRecoveryDismissed: false
     })
     render(<App />)
 
     await user.click(screen.getByRole('button', { name: 'Скрыть уведомление' }))
     expect(useLoanStore.getState().quarantinedLoansRaw).toHaveLength(1)
-    expect(screen.getByText(/В карантине 1/)).toBeTruthy()
+    expect(screen.queryByText(/Повреждённая запись помещена/)).toBeNull()
+    await user.click(screen.getByRole('button', { name: 'Показать карантин (1)' }))
+    expect(screen.getByText(/Повреждённая запись помещена/)).toBeTruthy()
 
     const confirm = vi.spyOn(window, 'confirm').mockReturnValueOnce(false).mockReturnValueOnce(true)
     await user.click(screen.getByRole('button', { name: 'Удалить данные' }))

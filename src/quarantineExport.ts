@@ -33,6 +33,9 @@ export const sanitizeQuarantineRaw = (value: unknown, depth = 0, seen = new Weak
 }
 
 export const createQuarantineExport = (items: QuarantinedLoanRaw[], exportedAt = new Date().toISOString()) => ({
+  format: 'sanitized-quarantine-v1',
+  rawIsComplete: false,
+  notice: 'Поле raw является ограниченной recovery-копией и может содержать маркеры усечения; это не побайтовый backup localStorage.',
   exportedAt,
   limits: QUARANTINE_EXPORT_LIMITS,
   quarantinedLoans: items.map(item => ({
