@@ -30,6 +30,7 @@ const ExportPanel = lazy(() => import('./components/ExportPanel').then(module =>
 const Changelog = lazy(() => import('./components/Changelog').then(module => ({ default: module.Changelog })))
 
 const STALE_EXPORT_MESSAGE = 'Дождитесь окончания пересчёта, чтобы экспортировать актуальный график'
+const drawerFocusableSelector = 'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])'
 
 function App() {
   const store = useLoanStore()
@@ -44,6 +45,7 @@ function App() {
   const [printReportVisible, setPrintReportVisible] = useState(false)
   const [rows, setRows] = useState(0)
   const shellRef = useRef<HTMLDivElement>(null)
+  const sidebarRef = useRef<HTMLElement>(null)
   const resetRows = useCallback(() => setRows(0), [])
   const {
     generatedRepayments,
@@ -126,6 +128,47 @@ function App() {
     media.addEventListener?.('change', updateViewport)
     return () => media.removeEventListener?.('change', updateViewport)
   }, [])
+
+  useEffect(() => {
+    if (!mobileViewport || !mobileNav) return
+    const drawer = sidebarRef.current
+    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    const previousOverflow = document.body.style.overflow
+    const focusable = () => Array.from(drawer?.querySelectorAll<HTMLElement>(drawerFocusableSelector) ?? [])
+      .filter(element => !element.classList.contains('sidebar-collapse'))
+    document.body.style.overflow = 'hidden'
+    const timer = window.setTimeout(() => (drawer?.querySelector<HTMLElement>('.close-nav') ?? focusable()[0] ?? drawer)?.focus(), 0)
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        setMobileNav(false)
+        return
+      }
+      if (event.key !== 'Tab') return
+      const elements = focusable()
+      if (!elements.length) {
+        event.preventDefault()
+        drawer?.focus()
+        return
+      }
+      const first = elements[0]
+      const last = elements.at(-1)!
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault()
+        last.focus()
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault()
+        first.focus()
+      }
+    }
+    document.addEventListener('keydown', handleKeyDown)
+    return () => {
+      window.clearTimeout(timer)
+      document.removeEventListener('keydown', handleKeyDown)
+      document.body.style.overflow = previousOverflow
+      previousFocus?.focus()
+    }
+  }, [mobileNav, mobileViewport])
 
   useEffect(() => {
     setShowEarly(false)
@@ -237,12 +280,12 @@ function App() {
   }, [setImportStatus, store])
 
   return <div ref={shellRef} className={sidebarCollapsed ? 'app-shell sidebar-collapsed' : 'app-shell'} data-theme={store.theme} data-ui-font={store.appFontSize} data-schedule-font={store.scheduleFontSize}>
-    <aside id="primary-sidebar" className={mobileNav ? 'sidebar open' : 'sidebar'} inert={mobileViewport && !mobileNav ? true : undefined} aria-hidden={mobileViewport && !mobileNav ? true : undefined}>
+    <aside ref={sidebarRef} id="primary-sidebar" className={mobileNav ? 'sidebar open' : 'sidebar'} inert={mobileViewport && !mobileNav ? true : undefined} aria-hidden={mobileViewport && !mobileNav ? true : undefined} role={mobileViewport && mobileNav ? 'dialog' : undefined} aria-modal={mobileViewport && mobileNav ? true : undefined} aria-label={mobileViewport && mobileNav ? 'Основное меню' : undefined} tabIndex={mobileViewport && mobileNav ? -1 : undefined}>
       <div className="brand"><div className="brand-mark"><Landmark size={22}/></div><div className="brand-copy"><b>Кредитный калькулятор</b><span>версия {APP_VERSION}</span></div><button className="icon-btn sidebar-collapse" aria-label={sidebarCollapsed ? 'Развернуть меню' : 'Свернуть меню'} aria-controls="primary-sidebar" aria-expanded={!sidebarCollapsed} onClick={() => setSidebarCollapsed(value => !value)}>{sidebarCollapsed ? <PanelLeftOpen/> : <PanelLeftClose/>}</button><button className="icon-btn close-nav" aria-label="Закрыть меню" onClick={() => setMobileNav(false)}><X/></button></div>
       <nav aria-label="Основная навигация">{nav.map(([id, Icon, label]) => <button key={id} className={section === id ? 'active' : ''} aria-label={label} aria-current={section === id ? 'page' : undefined} title={sidebarCollapsed ? label : undefined} onClick={() => { setSection(id); setMobileNav(false) }}><Icon size={18}/><span>{label}</span>{id === 'early' && store.repayments.length > 0 && <em>{store.repayments.length}</em>}</button>)}</nav>
       <div className="sidebar-note"><ShieldCheck size={20}/><div><b>Расчёт локально</b><span>Ваши данные не покидают устройство</span></div></div>
     </aside>
-    <main>
+    <main inert={mobileViewport && mobileNav ? true : undefined} aria-hidden={mobileViewport && mobileNav ? true : undefined}>
       <header><button className="icon-btn menu-btn" aria-label="Открыть меню" onClick={() => setMobileNav(true)}><Menu/></button><div className="header-title"><p>Финансовый план · v{APP_VERSION}</p><h1>{section === 'overview' ? 'Ваш кредит' : nav.find(x => x[0] === section)?.[2]}</h1></div><LoanSwitcher loans={store.loans} activeLoanId={store.activeLoanId} switchLoan={store.switchLoan} createLoan={store.createLoan} renameLoan={store.renameLoan} removeLoan={store.removeLoan}/><button className="icon-btn theme-toggle" onClick={toggleNightTheme} title={store.theme === 'night' ? 'Вернуть светлую тему' : 'Включить ночной режим'} aria-label={store.theme === 'night' ? 'Вернуть светлую тему' : 'Включить ночной режим'}>{store.theme === 'night' ? <Sun/> : <Moon/>}</button><FontControls fontSize={store.appFontSize} setFontSize={store.setAppFontSize}/><div className="header-actions"><span className={storageStatus.kind === 'saved' ? 'status-dot' : 'status-dot warning'}><i/> {storageStatus.kind === 'failed' ? 'Сохранение не удалось' : storageStatus.kind === 'nearQuota' ? 'Мало места' : storageStatus.kind === 'conflict' ? 'Конфликт сохранения' : 'Данные сохранены'}</span><button className="ghost print-action" onClick={printCalculated} disabled={calculatedResultsUnavailable} title={calculatedResultsUnavailable ? (isStale ? STALE_EXPORT_MESSAGE : 'Исправьте ошибки расчёта перед печатью') : undefined}><Printer size={16}/> Печать</button><button className="primary add-payment-action" onClick={() => openEarly()}><Plus size={17}/> Досрочный платёж</button></div></header>
       <div className="content">
         {importStatus?.kind === 'error' && section !== 'export' && <div className="alert alert-with-actions" role="alert"><span>{importStatus.text}</span><button className="ghost compact" onClick={() => setSection('export')}>Открыть импорт/экспорт</button></div>}

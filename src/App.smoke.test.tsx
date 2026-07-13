@@ -112,6 +112,30 @@ afterEach(() => {
 })
 
 describe('App smoke tests', () => {
+  it('удерживает фокус в мобильном меню и возвращает его кнопке открытия', async () => {
+    vi.stubGlobal('matchMedia', vi.fn().mockReturnValue({
+      matches: true,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn()
+    }))
+    const user = userEvent.setup()
+    render(<App />)
+    const open = screen.getByRole('button', { name: 'Открыть меню' })
+
+    await user.click(open)
+    const drawer = await screen.findByRole('dialog', { name: 'Основное меню' })
+    const close = screen.getByRole('button', { name: 'Закрыть меню' })
+    await waitFor(() => expect(document.activeElement).toBe(close))
+    const last = screen.getByRole('button', { name: 'Что изменилось' })
+    last.focus()
+    await user.tab()
+    expect(document.activeElement).toBe(close)
+
+    fireEvent.keyDown(document, { key: 'Escape' })
+    await waitFor(() => expect(drawer.getAttribute('aria-hidden')).toBe('true'))
+    expect(document.activeElement).toBe(open)
+  })
+
   it('открывает приложение и показывает обзор кредита', async () => {
     render(<App />)
 
