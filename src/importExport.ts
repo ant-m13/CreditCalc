@@ -6,6 +6,7 @@ import { assertLoanCandidateValid } from './loanCandidate'
 import { MAX_EARLY_REPAYMENTS, MAX_GRACE_PERIODS, MAX_ID_LENGTH, MAX_MONEY_AMOUNT, MAX_PERCENT, MAX_RATE_CHANGES, MAX_REPAYMENT_RULES, MAX_RULE_SKIP_MONTHS, MAX_TERM_MONTHS, MAX_TEXT_FIELD_LENGTH } from './loanEngine/limits'
 import { isISODate, isISOYearMonth } from './utils/dateValidation'
 import { balanceMoments, dayCountBases, fontSizes, frequencies, graceTypes, interestMethods, isOneOf as oneOf, paymentTypes, periodStarts, rateChangeModes, repaymentOperationSources, repaymentRuleTypes, repaymentSources, repaymentStrategies, roundingModes, sameDayOrders, scenarioIds, supportedCurrencies, termUnits, themeNames } from './portableSchemas'
+import { normalizeAccentColor } from './accentColor'
 
 export interface LoanBackupData {
   name?: string
@@ -289,7 +290,7 @@ export function parseLoanBackupObject(raw: unknown): ValidatedLoanData {
   const appFontSize = oneOf(settings.appFontSize, fontSizes) ? settings.appFontSize : 'normal'
   const scheduleFontSize = oneOf(settings.scheduleFontSize, fontSizes) ? settings.scheduleFontSize : 'large'
   const theme = oneOf(settings.theme, themeNames) ? settings.theme : 'emerald'
-  const customAccentColor = hexColor(settings.customAccentColor) ? settings.customAccentColor : '#0b9873'
+  const customAccentColor = normalizeAccentColor(hexColor(settings.customAccentColor) ? settings.customAccentColor : undefined)
   const useCustomAccentColor = typeof settings.useCustomAccentColor === 'boolean' ? settings.useCustomAccentColor : false
   const result: ValidatedLoanData = { __validatedLoanData: VALIDATED_LOAN_DATA_MARKER, name, config, repayments, repaymentRules, gracePeriods, selectedScenario, termUnit, displayDecimals, appFontSize, scheduleFontSize, theme, customAccentColor, useCustomAccentColor, ...(importWarnings.length ? { importWarnings } : {}) }
   assertLoanCandidateValid(config, repayments, repaymentRules, gracePeriods)

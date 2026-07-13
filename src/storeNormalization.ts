@@ -22,9 +22,10 @@ import type { LoanData, LoanImportData, LoanPersistedState, LoanProfile, Quarant
 import { createId } from './utils/createId'
 import { isISODate, isISOYearMonth } from './utils/dateValidation'
 import { balanceMoments, dayCountBases, fontSizes, frequencies, graceTypes, interestMethods, isOneOf, paymentTypes, periodStarts, rateChangeModes, repaymentRuleTypes, repaymentSources, repaymentStrategies, roundingModes, sameDayOrders, scenarioIds, supportedCurrencies, termUnits, themeNames } from './portableSchemas'
+import { defaultAccentColor, normalizeAccentColor } from './accentColor'
 
 export const MAX_LOANS = 100
-export const defaultAccentColor = '#0b9873'
+export { defaultAccentColor, normalizeAccentColor } from './accentColor'
 
 const boundedCandidates = <T>(value: T[], limit: number) => value.slice(0, limit * 2)
 
@@ -67,9 +68,6 @@ const createSeedRepayments = (config: LoanConfig): EarlyRepayment[] => [{
 
 const normalizeTheme = (value: unknown): ThemeName =>
   isOneOf(value, themeNames) ? value : 'emerald'
-
-export const normalizeAccentColor = (value: unknown): string =>
-  typeof value === 'string' && /^#[0-9a-fA-F]{6}$/.test(value) ? value : defaultAccentColor
 
 export const normalizeText = (value: unknown, fallback = '') => {
   const text = typeof value === 'string' ? value.trim() : fallback
