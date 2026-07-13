@@ -268,7 +268,8 @@ const fromCents = (value: number) => value / 100
 const searchMinimum = (
   context: PlannerContext,
   operationsAt: (amount: number) => GoalPlanOperations,
-  predicate: (schedule: PaymentScheduleItem[]) => boolean
+  predicate: (schedule: PaymentScheduleItem[]) => boolean,
+  objective?: (schedule: PaymentScheduleItem[]) => number
 ): SearchResult | null => {
   const cache = new Map<number, EvaluatedPlan>()
   const failed = new Set<number>()
@@ -290,6 +291,36 @@ const searchMinimum = (
     const evaluated = evaluate(cents)
     return evaluated ? predicate(evaluated.schedule) : false
   }
+  const objectiveAt = (cents: number) => {
+    const evaluated = evaluate(cents)
+    return evaluated && objective ? objective(evaluated.schedule) : null
+  }
+  const findObjectiveMinimum = () => {
+    let left = 0
+    let right = maxCents
+    while (right - left > 8) {
+      const distance = right - left
+      const first = left + Math.floor(distance / 3)
+      const second = right - Math.floor(distance / 3)
+      const firstValue = objectiveAt(first)
+      const secondValue = objectiveAt(second)
+      if (firstValue === null && secondValue === null) {
+        left = second + 1
+      } else if (firstValue === null) {
+        left = first + 1
+      } else if (secondValue === null || firstValue <= secondValue) {
+        right = second - 1
+      } else {
+        left = first + 1
+      }
+    }
+    let minimum: { cents: number; value: number } | null = null
+    for (let cents = left; cents <= right; cents += 1) {
+      const value = objectiveAt(cents)
+      if (value !== null && (!minimum || value < minimum.value)) minimum = { cents, value }
+    }
+    return minimum
+  }
   const zero = evaluate(0)
   if (zero && predicate(zero.schedule)) return { amount: 0, evaluated: zero, boundaryVerified: true }
 
@@ -300,7 +331,13 @@ const searchMinimum = (
     low = high
     high = Math.min(maxCents, high * 2)
   }
-  if (!satisfies(high)) return null
+  if (!satisfies(high)) {
+    if (!objective) return null
+    const minimum = findObjectiveMinimum()
+    if (!minimum || !satisfies(minimum.cents)) return null
+    low = 0
+    high = minimum.cents
+  }
 
   while (low + 1 < high) {
     const middle = low + Math.floor((high - low) / 2)
@@ -358,10 +395,11 @@ const searchVariant = (
   kind: GoalPlanVariantKind,
   operationsAt: (amount: number) => GoalPlanOperations,
   predicate: (schedule: PaymentScheduleItem[]) => boolean,
-  amountField: 'monthlyExtra' | 'totalMonthlyPayment' | 'oneTimePayment'
+  amountField: 'monthlyExtra' | 'totalMonthlyPayment' | 'oneTimePayment',
+  objective?: (schedule: PaymentScheduleItem[]) => number
 ) => {
   try {
-    const result = searchMinimum(context, operationsAt, predicate)
+    const result = searchMinimum(context, operationsAt, predicate, objective)
     if (!result) return infeasibleVariant(kind, 'Цель недостижима в допустимом диапазоне сумм')
     const operations = operationsAt(result.amount)
     return achievedVariant(context, kind, operations, result.evaluated, result.boundaryVerified, { [amountField]: result.amount })
@@ -370,18 +408,23 @@ const searchVariant = (
   }
 }
 
-const planTargetGoal = (context: PlannerContext, predicate: (schedule: PaymentScheduleItem[]) => boolean, targetDate?: string) => {
+const planTargetGoal = (
+  context: PlannerContext,
+  predicate: (schedule: PaymentScheduleItem[]) => boolean,
+  targetDate?: string,
+  objective?: (schedule: PaymentScheduleItem[]) => number
+) => {
   const monthlyStartTooLate = Boolean(targetDate && context.input.planStartDate > targetDate)
   const oneTimeTooLate = Boolean(targetDate && context.input.oneTimeDate > targetDate)
   const monthlyExtra = monthlyStartTooLate
     ? infeasibleVariant('monthlyExtra', 'Дата начала ежемесячных платежей позже целевой даты')
-    : searchVariant(context, 'monthlyExtra', amount => ({ repayments: [], repaymentRules: amount > 0 ? [makeRule(context, 'monthlyFixed', amount, 'reduceTerm')] : [] }), predicate, 'monthlyExtra')
+    : searchVariant(context, 'monthlyExtra', amount => ({ repayments: [], repaymentRules: amount > 0 ? [makeRule(context, 'monthlyFixed', amount, 'reduceTerm')] : [] }), predicate, 'monthlyExtra', objective)
   const monthlyTotalPayment = monthlyStartTooLate
     ? infeasibleVariant('monthlyTotalPayment', 'Дата начала общего платежа позже целевой даты')
-    : searchVariant(context, 'monthlyTotalPayment', amount => ({ repayments: [], repaymentRules: amount > 0 ? [makeRule(context, 'monthlyTotalPayment', amount, 'reduceTerm')] : [] }), predicate, 'totalMonthlyPayment')
+    : searchVariant(context, 'monthlyTotalPayment', amount => ({ repayments: [], repaymentRules: amount > 0 ? [makeRule(context, 'monthlyTotalPayment', amount, 'reduceTerm')] : [] }), predicate, 'totalMonthlyPayment', objective)
   const oneTime = oneTimeTooLate
     ? infeasibleVariant('oneTime', 'Дата разового взноса позже целевой даты')
-    : searchVariant(context, 'oneTime', amount => ({ repayments: amount > 0 ? [makeOneTime(context, amount, 'reduceTerm')] : [], repaymentRules: [] }), predicate, 'oneTimePayment')
+    : searchVariant(context, 'oneTime', amount => ({ repayments: amount > 0 ? [makeOneTime(context, amount, 'reduceTerm')] : [], repaymentRules: [] }), predicate, 'oneTimePayment', objective)
   const combined = context.input.availableNow <= 0
     ? infeasibleVariant('combined', 'Укажите сумму, доступную для разового взноса')
     : monthlyStartTooLate || oneTimeTooLate
@@ -389,7 +432,7 @@ const planTargetGoal = (context: PlannerContext, predicate: (schedule: PaymentSc
       : searchVariant(context, 'combined', amount => ({
         repayments: [makeOneTime(context, context.input.availableNow, 'reduceTerm')],
         repaymentRules: amount > 0 ? [makeRule(context, 'monthlyFixed', amount, 'reduceTerm')] : []
-      }), predicate, 'monthlyExtra')
+      }), predicate, 'monthlyExtra', objective)
   if (combined.status === 'achieved') combined.oneTimePayment = context.input.availableNow
   return [monthlyExtra, monthlyTotalPayment, oneTime, combined]
 }
@@ -448,7 +491,8 @@ export function buildGoalPlans(input: GoalPlannerInput): GoalPlannerResult {
   if (targetDate) {
     variants = planTargetGoal(context, schedule => (schedule.at(-1)?.date ?? input.config.issueDate) <= targetDate, targetDate)
   } else if (goal.type === 'maxOverpayment') {
-    variants = planTargetGoal(context, schedule => overpaymentFor(schedule, input.config.principal) <= goal.amount)
+    const objective = (schedule: PaymentScheduleItem[]) => overpaymentFor(schedule, input.config.principal)
+    variants = planTargetGoal(context, schedule => objective(schedule) <= goal.amount, undefined, objective)
   } else if (goal.type === 'monthlyBudget') {
     variants = planBudgetGoal(context, goal.amount)
   } else {
