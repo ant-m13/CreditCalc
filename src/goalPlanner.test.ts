@@ -28,6 +28,7 @@ describe('goal planner', { timeout: 30_000 }, () => {
     expect(result.variants.filter(item => item.summary).every(item => item.summary!.closingDate <= result.targetDate!)).toBe(true)
 
     const monthly = result.variants.find(item => item.kind === 'monthlyExtra')!
+    expect(monthly.summary!.plannerContribution.unused).toBe(0)
     const previousOperations = {
       repayments: monthly.operations.repayments,
       repaymentRules: monthly.operations.repaymentRules.map(rule => ({ ...rule, amount: Math.max(0, (rule.amount ?? 0) - 0.01) }))
@@ -98,6 +99,8 @@ describe('goal planner', { timeout: 30_000 }, () => {
 
     expect(preview.planned.closingDate).toBe(variant.summary?.closingDate)
     expect(preview.planned.closingDate < preview.current.closingDate).toBe(true)
+    expect(preview.repayments.some(repayment => repayment.id.startsWith('rule-goal-plan-'))).toBe(true)
+    expect(preview.repayments.every(repayment => preview.planned.schedule.some(row => row.date === repayment.date))).toBe(true)
   })
 
   it('не предлагает операции, начинающиеся после целевой даты', () => {
