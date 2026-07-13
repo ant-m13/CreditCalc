@@ -3,6 +3,7 @@ import { addMonths, format, parseISO } from 'date-fns'
 import { defaultConfig } from './loanDefaults'
 import { buildGoalPlanPreview, buildGoalPlans, type GoalPlannerInput } from './goalPlanner'
 import type { EarlyRepayment } from './loanEngine'
+import type { RepaymentRule } from './repaymentRules'
 
 const input = (patch: Partial<GoalPlannerInput> = {}): GoalPlannerInput => ({
   config: { ...defaultConfig, principal: 1_000_000, annualRate: 12, issueDate: '2026-01-01', firstPaymentDate: '2026-02-01', paymentDay: 1, termMonths: 60, firstPaymentInterestOnly: false, earlyRepaymentFeePercent: 1 },
@@ -70,6 +71,30 @@ describe('goal planner', { timeout: 30_000 }, () => {
 
     expect(withExisting.current.closingDate < withoutExisting.current.closingDate).toBe(true)
     expect(withExisting.variants.find(item => item.kind === 'monthlyExtra')?.monthlyExtra).not.toBe(withoutExisting.variants.find(item => item.kind === 'monthlyExtra')?.monthlyExtra)
+  })
+
+  it('учитывает существующие правила досрочного погашения при подборе цели', () => {
+    const repaymentRule: RepaymentRule = {
+      id: 'existing-rule',
+      name: 'Уже запланированная доплата',
+      type: 'monthlyFixed',
+      startDate: '2026-03-01',
+      endDate: '2030-12-01',
+      amount: 1_000,
+      enabled: true,
+      strategy: 'reduceTerm',
+      source: 'own',
+      sameDayOrder: 'regularFirst',
+      interestFirst: true,
+      skipMonths: []
+    }
+    const withoutExisting = buildGoalPlans(input())
+    const withExisting = buildGoalPlans(input({ repaymentRules: [repaymentRule] }))
+
+    expect(withExisting.current.closingDate < withoutExisting.current.closingDate).toBe(true)
+    expect(withExisting.current.totalInterest).toBeLessThan(withoutExisting.current.totalInterest)
+    expect(withExisting.variants.find(item => item.kind === 'monthlyExtra')?.monthlyExtra)
+      .not.toBe(withoutExisting.variants.find(item => item.kind === 'monthlyExtra')?.monthlyExtra)
   })
 
   it('возвращает alreadyAchieved для более поздней целевой даты', () => {
