@@ -152,8 +152,15 @@ jobs:
           VITE_BASE_PATH: /${{ github.event.repository.name }}/
           VITE_COMMIT_SHA: ${{ steps.revision.outputs.sha }}
 
+      - name: Verify PWA build
+        run: pnpm test:pwa
+        env:
+          VITE_BASE_PATH: /${{ github.event.repository.name }}/
+
       - name: Run production browser E2E
         run: pnpm test:e2e
+        env:
+          E2E_BASE_PATH: /${{ github.event.repository.name }}/
 
       - name: Upload site artifact
         uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3

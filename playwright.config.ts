@@ -1,6 +1,9 @@
 import { defineConfig, devices } from '@playwright/test'
 
 const port = 4318
+const configuredBasePath = (process.env.E2E_BASE_PATH ?? '').replace(/^\/+|\/+$/g, '')
+const basePath = configuredBasePath ? `/${configuredBasePath}/` : '/'
+const appUrl = `http://127.0.0.1:${port}${basePath}`
 
 export default defineConfig({
   testDir: './e2e',
@@ -10,12 +13,12 @@ export default defineConfig({
   },
   reporter: process.env.CI ? 'github' : 'list',
   use: {
-    baseURL: `http://127.0.0.1:${port}/`,
+    baseURL: appUrl,
     trace: 'retain-on-failure'
   },
   webServer: {
     command: 'node ./scripts/serve-dist.mjs',
-    url: `http://127.0.0.1:${port}/`,
+    url: appUrl,
     reuseExistingServer: !process.env.CI,
     timeout: 60_000
   },

@@ -50,5 +50,8 @@ jobs:
         env:
           VITE_BASE_PATH: ./
 
+      - name: Verify PWA build
+        run: pnpm test:pwa
+
       - name: Run production browser E2E
         run: pnpm test:e2e

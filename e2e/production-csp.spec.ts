@@ -31,7 +31,7 @@ test('production dist CSP позволяет рабочие inline styles при
   })
   page.on('pageerror', (error) => pageErrors.push(error.message))
 
-  await page.goto('/')
+  await page.goto('./')
 
   await expect(page.getByRole('heading', { name: 'Ваш кредит' })).toBeVisible()
   await expect(page.getByText('Сумма кредита')).toBeVisible()
@@ -40,6 +40,7 @@ test('production dist CSP позволяет рабочие inline styles при
   expect(csp).toContain("default-src 'self'")
   expect(csp).toContain("style-src-elem 'self'")
   expect(csp).toContain("style-src-attr 'unsafe-inline'")
+  expect(csp).toContain("worker-src 'self'")
 
   await expect(page.locator('.progress-panel .progress-item em').first()).toHaveAttribute('style', /width:\s*\d+(\.\d+)?%;/)
   const progressTrack = await page.locator('.progress-panel .progress-item i').first().boundingBox()

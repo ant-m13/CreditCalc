@@ -11,7 +11,7 @@ test.beforeEach(async ({ page }) => {
 })
 
 test('копирует существующий кредит под новым именем без связи с исходником', async ({ page }) => {
-  await page.goto('/')
+  await page.goto('./')
   await page.getByRole('button', { name: 'Параметры' }).click()
 
   const principal = page.getByRole('spinbutton', { name: 'Сумма кредита' })
