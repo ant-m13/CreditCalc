@@ -39,6 +39,7 @@ export type LoanPersistedState = LoanData & {
   activeLoanId: string
   storageRecoveryReport: string[]
   quarantinedLoansRaw: QuarantinedLoanRaw[]
+  storageRecoveryDismissed: boolean
   persistedRevision: number
   persistedUpdatedAt: string
   persistedEpoch: string

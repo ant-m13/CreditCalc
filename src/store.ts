@@ -99,6 +99,7 @@ const storageRecoveryState = (raw: string, reason: string): StorageValue<LoanSta
   version: 11,
   state: {
     storageRecoveryReport: [`Сохранённое состояние localStorage помещено в карантин: ${reason}. Автосохранение заблокировано до удаления повреждённых данных.`],
+    storageRecoveryDismissed: false,
     quarantinedLoansRaw: [{
       id: 'persisted-storage',
       name: 'Повреждённое состояние localStorage',
@@ -259,6 +260,7 @@ interface LoanState extends LoanData {
   retryStorageSave: () => void
   overwriteExternalStorageChanges: () => void
   dismissStorageRecoveryReport: () => void
+  showStorageRecoveryReport: () => void
   deleteQuarantinedLoans: () => void
   switchLoan: (id: string) => void
   createLoan: (name?: string) => void
@@ -269,6 +271,7 @@ interface LoanState extends LoanData {
   replaceData: (data: LoanImportData | ValidatedLoanData) => void
   storageRecoveryReport: string[]
   quarantinedLoansRaw: QuarantinedLoanRaw[]
+  storageRecoveryDismissed: boolean
 }
 
 const loanToPublicState = (loan: LoanProfile) => ({
@@ -297,6 +300,7 @@ export const useLoanStore = create<LoanState>()(persist((set) => ({
   activeLoanId: initialLoan.id,
   storageRecoveryReport: [],
   quarantinedLoansRaw: [],
+  storageRecoveryDismissed: false,
   updateConfig: (patch) => set(s => {
     const config = normalizeConfigPatch(s.config, patch)
     assertRepaymentPlanStructurallyValid(config, s.repayments, s.gracePeriods)
@@ -379,13 +383,14 @@ export const useLoanStore = create<LoanState>()(persist((set) => ({
     pendingExternalConflict = null
     set(s => ({ activeLoanId: s.activeLoanId, loans: s.loans }))
   },
-  dismissStorageRecoveryReport: () => set({ storageRecoveryReport: [] }),
+  dismissStorageRecoveryReport: () => set({ storageRecoveryDismissed: true }),
+  showStorageRecoveryReport: () => set({ storageRecoveryDismissed: false }),
   deleteQuarantinedLoans: () => {
     if (storageWriteBlockedReason) {
       safePersistStorage.removeItem(PERSISTED_LOAN_STORAGE_KEY)
       storageWriteBlockedReason = null
     }
-    set({ quarantinedLoansRaw: [], storageRecoveryReport: [] })
+    set({ quarantinedLoansRaw: [], storageRecoveryReport: [], storageRecoveryDismissed: false })
   },
   switchLoan: (id) => set(s => switchToLoan(s, id)),
   createLoan: (name = 'Новый кредит') => set(s => {

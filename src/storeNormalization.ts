@@ -476,5 +476,6 @@ export const normalizePersistedState = (persisted: unknown): Partial<LoanPersist
   const persistedUpdatedAt = typeof state.persistedUpdatedAt === 'string' ? state.persistedUpdatedAt : ''
   const persistedEpoch = typeof state.persistedEpoch === 'string' ? state.persistedEpoch : ''
   const persistedWriterId = typeof state.persistedWriterId === 'string' ? state.persistedWriterId : ''
-  return { loans, activeLoanId, ...publicData(active), storageRecoveryReport, quarantinedLoansRaw: quarantinedLoansRaw.slice(0, MAX_LOANS), persistedRevision, persistedUpdatedAt, persistedEpoch, persistedWriterId }
+  const storageRecoveryDismissed = storageRecoveryReport.length === 0 && state.storageRecoveryDismissed === true
+  return { loans, activeLoanId, ...publicData(active), storageRecoveryReport, quarantinedLoansRaw: quarantinedLoansRaw.slice(0, MAX_LOANS), storageRecoveryDismissed, persistedRevision, persistedUpdatedAt, persistedEpoch, persistedWriterId }
 }
