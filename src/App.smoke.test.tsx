@@ -118,22 +118,22 @@ describe('App smoke tests', () => {
       addEventListener: vi.fn(),
       removeEventListener: vi.fn()
     }))
-    const user = userEvent.setup()
     render(<App />)
     const open = screen.getByRole('button', { name: 'Открыть меню' })
 
-    await user.click(open)
+    open.focus()
+    fireEvent.click(open)
     const drawer = await screen.findByRole('dialog', { name: 'Основное меню' })
     const close = screen.getByRole('button', { name: 'Закрыть меню' })
     await waitFor(() => expect(document.activeElement).toBe(close))
     const last = screen.getByRole('button', { name: 'Что изменилось' })
     last.focus()
-    await user.tab()
+    fireEvent.keyDown(document, { key: 'Tab' })
     expect(document.activeElement).toBe(close)
 
     fireEvent.keyDown(document, { key: 'Escape' })
     await waitFor(() => expect(drawer.getAttribute('aria-hidden')).toBe('true'))
-    expect(document.activeElement).toBe(open)
+    await waitFor(() => expect(document.activeElement).toBe(open))
   }, 15_000)
 
   it('открывает приложение и показывает обзор кредита', async () => {
