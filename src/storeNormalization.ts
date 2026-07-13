@@ -16,7 +16,7 @@ import {
 import { MAX_EARLY_REPAYMENTS, MAX_GRACE_PERIODS, MAX_RATE_CHANGES, MAX_REPAYMENT_RULES, MAX_RULE_SKIP_MONTHS, MAX_TERM_MONTHS, MAX_TEXT_FIELD_LENGTH } from './loanEngine/limits'
 import { createDefaultConfig, defaultConfig } from './loanDefaults'
 import { assertLoanCandidateValid } from './loanCandidate'
-import type { LoanBackupData } from './importExport'
+import type { LoanBackupData, ValidatedLoanData } from './importExport'
 import { sortRepaymentRulesByApplicationOrder, validateRepaymentRuleStructure, type RepaymentRule } from './repaymentRules'
 import type { LoanData, LoanImportData, LoanPersistedState, LoanProfile, QuarantinedLoanRaw, ThemeName } from './storeTypes'
 import { createId } from './utils/createId'
@@ -299,6 +299,27 @@ export const loanFromData = (data: Partial<LoanImportData | LoanData>, name = '�
   id,
   name: normalizeText(name, 'Мой кредит') || 'Мой кредит',
   ...normalizeLoanData(data)
+})
+
+export const loanDataFromValidated = (data: ValidatedLoanData): LoanData => ({
+  config: data.config,
+  repayments: data.repayments,
+  repaymentRules: data.repaymentRules,
+  gracePeriods: data.gracePeriods,
+  selectedScenario: data.selectedScenario,
+  termUnit: data.termUnit,
+  displayDecimals: data.displayDecimals,
+  appFontSize: data.appFontSize ?? 'normal',
+  scheduleFontSize: data.scheduleFontSize ?? 'large',
+  theme: data.theme,
+  customAccentColor: data.customAccentColor ?? defaultAccentColor,
+  useCustomAccentColor: data.useCustomAccentColor ?? false
+})
+
+export const loanFromValidatedData = (data: ValidatedLoanData, name = 'Мой кредит', id = createId('loan')): LoanProfile => ({
+  id,
+  name: data.name ?? name,
+  ...loanDataFromValidated(data)
 })
 
 export const publicData = (state: LoanData): LoanData => ({

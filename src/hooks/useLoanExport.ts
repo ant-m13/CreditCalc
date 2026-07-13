@@ -1,5 +1,5 @@
 import { useCallback } from 'react'
-import type { LoanBackupData } from '../importExport'
+import type { ValidatedLoanData } from '../importExport'
 import type { PaymentScheduleItem } from '../loanEngine'
 import type { LoanCalculationSnapshot } from '../loanCalculationRunner'
 import { buildShareUrl, createLoanSnapshot, decodeSharedCalculation, encodeSharedCalculation, looksLikeSharedCalculationUrl, normalizeSharedCalculationPayload } from '../shareCalculation'
@@ -179,7 +179,7 @@ export function useLoanExport({ loans, activeLoanId, calculatedSchedule, calcula
     return encodeSharedCalculation(createSnapshotFromReadyCalculation(loan, calculatedExportsReady, calculationErrors, readyCalculationSnapshot))
   }, [activeLoan, calculatedExportsReady, calculationErrors, readyCalculationSnapshot])
 
-  const decodeParameterCode = useCallback((code: string): Promise<LoanBackupData> =>
+  const decodeParameterCode = useCallback((code: string): Promise<ValidatedLoanData> =>
     decodeSharedCalculation(normalizeSharedCalculationPayload(code)), [])
 
   return {

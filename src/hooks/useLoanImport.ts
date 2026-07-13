@@ -1,21 +1,21 @@
 import { useCallback, useState } from 'react'
-import type { LoanBackupData } from '../importExport'
+import type { ValidatedLoanData } from '../importExport'
 
 export type ImportStatus = { kind: 'success' | 'error'; text: string }
 
 interface UseLoanImportOptions {
-  addLoanFromData: (data: LoanBackupData) => void
-  replaceData: (data: LoanBackupData) => void
+  addLoanFromData: (data: ValidatedLoanData) => void
+  replaceData: (data: ValidatedLoanData) => void
   resetRows: () => void
 }
 
-const successMessage = (message: string, data: LoanBackupData) =>
+const successMessage = (message: string, data: ValidatedLoanData) =>
   data.importWarnings?.length ? `${message}. Предупреждение: ${data.importWarnings.join(' · ')}` : message
 
 export function useLoanImport({ addLoanFromData, replaceData, resetRows }: UseLoanImportOptions) {
   const [importStatus, setImportStatus] = useState<ImportStatus | null>(null)
 
-  const createLoanFromData = useCallback((data: LoanBackupData, source = 'данных') => {
+  const createLoanFromData = useCallback((data: ValidatedLoanData, source = 'данных') => {
     try {
       addLoanFromData(data)
       resetRows()
@@ -27,7 +27,7 @@ export function useLoanImport({ addLoanFromData, replaceData, resetRows }: UseLo
     }
   }, [addLoanFromData, resetRows])
 
-  const replaceActiveWithData = useCallback((data: LoanBackupData, source = 'данных') => {
+  const replaceActiveWithData = useCallback((data: ValidatedLoanData, source = 'данных') => {
     try {
       replaceData(data)
       resetRows()

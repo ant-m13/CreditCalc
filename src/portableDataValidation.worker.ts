@@ -1,14 +1,14 @@
-import { parseLoanBackupObject } from './importExport'
+import { validatePortableInput, type PortableValidationInput } from './portableDataValidationCore'
 
 interface PortableValidationRequest {
   requestId: number
-  raw: unknown
+  input: PortableValidationInput
 }
 
-self.onmessage = (event: MessageEvent<PortableValidationRequest>) => {
-  const { requestId, raw } = event.data
+self.onmessage = async (event: MessageEvent<PortableValidationRequest>) => {
+  const { requestId, input } = event.data
   try {
-    self.postMessage({ requestId, data: parseLoanBackupObject(raw) })
+    self.postMessage({ requestId, data: await validatePortableInput(input) })
   } catch (error) {
     self.postMessage({
       requestId,

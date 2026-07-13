@@ -24,6 +24,13 @@ export interface LoanBackupData {
   importWarnings?: string[]
 }
 
+export const VALIDATED_LOAN_DATA_MARKER = 'validated-loan-data-v1' as const
+export interface ValidatedLoanData extends LoanBackupData {
+  readonly __validatedLoanData: typeof VALIDATED_LOAN_DATA_MARKER
+}
+export const isValidatedLoanData = (value: unknown): value is ValidatedLoanData =>
+  isObject(value) && value.__validatedLoanData === VALIDATED_LOAN_DATA_MARKER
+
 const isObject = (value: unknown): value is Record<string, unknown> => Boolean(value) && typeof value === 'object' && !Array.isArray(value)
 const finite = (value: unknown, minimum = 0, maximum = MAX_MONEY_AMOUNT) => typeof value === 'number' && Number.isFinite(value) && value >= minimum && value <= maximum
 const integer = (value: unknown, minimum = 0) => finite(value, minimum) && Number.isInteger(value)
@@ -70,13 +77,13 @@ const ensureUniqueRuleSequences = (rules: RepaymentRule[]) => {
   })
 }
 
-export function parseLoanBackup(text: string): LoanBackupData {
+export function parseLoanBackup(text: string): ValidatedLoanData {
   let raw: unknown
   try { raw = JSON.parse(text) } catch { throw new Error('Файл не является корректным JSON') }
   return parseLoanBackupObject(raw)
 }
 
-export function parseLoanBackupObject(raw: unknown): LoanBackupData {
+export function parseLoanBackupObject(raw: unknown): ValidatedLoanData {
   if (!isObject(raw) || !isObject(raw.config)) throw new Error('В файле отсутствуют параметры кредита')
   if (raw.version !== undefined && !SUPPORTED_BACKUP_VERSIONS.includes(raw.version as 1)) {
     throw new Error(`Версия JSON-резервной копии ${String(raw.version)} не поддерживается. Поддерживается версия 1`)
@@ -220,7 +227,7 @@ export function parseLoanBackupObject(raw: unknown): LoanBackupData {
   const theme = oneOf(settings.theme, themeNames) ? settings.theme : 'emerald'
   const customAccentColor = hexColor(settings.customAccentColor) ? settings.customAccentColor : '#0b9873'
   const useCustomAccentColor = typeof settings.useCustomAccentColor === 'boolean' ? settings.useCustomAccentColor : false
-  const result: LoanBackupData = { name, config, repayments, repaymentRules, gracePeriods, selectedScenario, termUnit, displayDecimals, appFontSize, scheduleFontSize, theme, customAccentColor, useCustomAccentColor, ...(importWarnings.length ? { importWarnings } : {}) }
+  const result: ValidatedLoanData = { __validatedLoanData: VALIDATED_LOAN_DATA_MARKER, name, config, repayments, repaymentRules, gracePeriods, selectedScenario, termUnit, displayDecimals, appFontSize, scheduleFontSize, theme, customAccentColor, useCustomAccentColor, ...(importWarnings.length ? { importWarnings } : {}) }
   assertLoanCandidateValid(config, repayments, repaymentRules, gracePeriods)
   return result
 }
