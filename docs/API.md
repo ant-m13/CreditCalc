@@ -115,12 +115,14 @@ JSON-файл создаётся кнопкой экспорта в прилож
 ```ts
 {
   method: 'annuity' | 'daily'
-  dayCountBasis: '365' | '366' | '360' | 'actual365' | 'actualActual'
+  dayCountBasis: '366' | '360' | 'actual365' | 'actualActual'
   includePaymentDate: boolean
   periodStart: 'inclusive' | 'exclusive'
   balanceMoment: 'startOfDay' | 'endOfDay'
 }
 ```
+
+Legacy-значение `365` при импорте и миграции persisted state преобразуется в эквивалентное `actual365`. Поле `dayCountBasis` используется только при `method: 'daily'`; периодический метод делит номинальную ставку на число платёжных периодов в году.
 
 ### `repayments`
 

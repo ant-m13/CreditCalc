@@ -21,7 +21,7 @@ import { sortRepaymentRulesByApplicationOrder, validateRepaymentRuleStructure, t
 import type { LoanData, LoanImportData, LoanPersistedState, LoanProfile, QuarantinedLoanRaw, ThemeName } from './storeTypes'
 import { createId } from './utils/createId'
 import { isISODate, isISOYearMonth } from './utils/dateValidation'
-import { balanceMoments, dayCountBases, fontSizes, frequencies, graceTypes, interestMethods, isOneOf, paymentTypes, periodStarts, rateChangeModes, repaymentRuleTypes, repaymentSources, repaymentStrategies, roundingModes, sameDayOrders, scenarioIds, supportedCurrencies, termUnits, themeNames } from './portableSchemas'
+import { balanceMoments, dayCountBases, fontSizes, frequencies, graceTypes, interestMethods, isOneOf, migrateLegacyDayCountBasis, paymentTypes, periodStarts, rateChangeModes, repaymentRuleTypes, repaymentSources, repaymentStrategies, roundingModes, sameDayOrders, scenarioIds, supportedCurrencies, termUnits, themeNames } from './portableSchemas'
 import { defaultAccentColor, normalizeAccentColor } from './accentColor'
 
 export const MAX_LOANS = 100
@@ -167,7 +167,7 @@ const normalizeConfig = (config: Partial<LoanConfig> | undefined): LoanConfig =>
       ...defaultConfig.interest,
       ...interest,
       method: oneOf(interest.method, interestMethods, defaultConfig.interest.method),
-      dayCountBasis: oneOf(interest.dayCountBasis, dayCountBases, defaultConfig.interest.dayCountBasis),
+      dayCountBasis: oneOf(migrateLegacyDayCountBasis(interest.dayCountBasis), dayCountBases, defaultConfig.interest.dayCountBasis),
       includePaymentDate: typeof interest.includePaymentDate === 'boolean' ? interest.includePaymentDate : defaultConfig.interest.includePaymentDate,
       periodStart: oneOf(interest.periodStart, periodStarts, defaultConfig.interest.periodStart),
       balanceMoment: oneOf(interest.balanceMoment, balanceMoments, defaultConfig.interest.balanceMoment)

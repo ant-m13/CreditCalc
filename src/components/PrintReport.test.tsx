@@ -8,6 +8,14 @@ import { PrintReport } from './PrintReport'
 afterEach(() => cleanup())
 
 describe('PrintReport', () => {
+  it('не показывает day-count как действующую настройку для периодического метода', () => {
+    const periodicConfig = { ...defaultConfig, interest: { ...defaultConfig.interest, method: 'annuity' as const } }
+    const result = buildLoanCalculation({ config: periodicConfig, repayments: [], repaymentRules: [], gracePeriods: [], selectedScenario: 'combined' })
+    render(<PrintReport config={periodicConfig} displayDecimals={2} repayments={[]} repaymentRules={[]} gracePeriods={[]} comparison={result.comparison!} selected={result.selected!}/>)
+
+    expect(screen.getByText('Номинальная ставка / период; база года не применяется')).toBeTruthy()
+  })
+
   it('отличает выключенные операции и правила от применённых', () => {
     const result = buildLoanCalculation({ config: defaultConfig, repayments: [], repaymentRules: [], gracePeriods: [], selectedScenario: 'combined' })
     render(<PrintReport

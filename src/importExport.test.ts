@@ -170,6 +170,14 @@ describe('импорт резервной копии', () => {
     expect(() => parseLoanBackup(JSON.stringify({ config: { ...defaultConfig, currency: 'NOT-A-CURRENCY' } }))).toThrow('не поддерживается')
   })
 
+  it('мигрирует дублирующую legacy-базу 365 в Actual/365', () => {
+    const legacy = { ...defaultConfig, interest: { ...defaultConfig.interest, dayCountBasis: '365' } }
+    const result = parseLoanBackup(JSON.stringify({ config: legacy, repayments: [], gracePeriods: [] }))
+
+    expect(result.config.interest.dayCountBasis).toBe('actual365')
+    expect(result.importWarnings).toContain('Legacy-база 365 преобразована в однозначную Actual/365 без изменения расчёта')
+  })
+
   it.each([
     ['тип платежа', { paymentType: 'broken' }],
     ['частоту', { frequency: 'broken' }],

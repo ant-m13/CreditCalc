@@ -77,6 +77,11 @@ describe('миграция локального хранилища', () => {
     expect(normalized.repayments).toEqual([])
   })
 
+  it('мигрирует persisted-базу 365 в Actual/365', () => {
+    const normalized = normalizePersistedState({ config: { ...defaultConfig, interest: { ...defaultConfig.interest, dayCountBasis: '365' } } }) as any
+    expect(normalized.config.interest.dayCountBasis).toBe('actual365')
+  })
+
   it('нормализует старые кредиты и очищает повреждённые массивы', () => {
     const normalized = normalizePersistedState({
       activeLoanId: 'legacy',
