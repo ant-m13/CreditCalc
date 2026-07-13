@@ -3,7 +3,7 @@ import { regularPaymentDateMatches, repaymentAmountModeContextForRegularDate, re
 import { defaultConfig } from './loanDefaults'
 import type { RepaymentRule } from './repaymentRules'
 import { assertLoanCandidateValid } from './loanCandidate'
-import { MAX_EARLY_REPAYMENTS, MAX_GRACE_PERIODS, MAX_MONEY_AMOUNT, MAX_PERCENT, MAX_RATE_CHANGES, MAX_REPAYMENT_RULES, MAX_RULE_SKIP_MONTHS, MAX_TERM_MONTHS, MAX_TEXT_FIELD_LENGTH } from './loanEngine/limits'
+import { MAX_EARLY_REPAYMENTS, MAX_GRACE_PERIODS, MAX_ID_LENGTH, MAX_MONEY_AMOUNT, MAX_PERCENT, MAX_RATE_CHANGES, MAX_REPAYMENT_RULES, MAX_RULE_SKIP_MONTHS, MAX_TERM_MONTHS, MAX_TEXT_FIELD_LENGTH } from './loanEngine/limits'
 import { isISODate, isISOYearMonth } from './utils/dateValidation'
 import { balanceMoments, dayCountBases, fontSizes, frequencies, graceTypes, interestMethods, isOneOf as oneOf, paymentTypes, periodStarts, rateChangeModes, repaymentOperationSources, repaymentRuleTypes, repaymentSources, repaymentStrategies, roundingModes, sameDayOrders, scenarioIds, supportedCurrencies, termUnits, themeNames } from './portableSchemas'
 
@@ -32,8 +32,8 @@ export const isValidatedLoanData = (value: unknown): value is ValidatedLoanData 
   isObject(value) && value.__validatedLoanData === VALIDATED_LOAN_DATA_MARKER
 
 const isObject = (value: unknown): value is Record<string, unknown> => Boolean(value) && typeof value === 'object' && !Array.isArray(value)
-const finite = (value: unknown, minimum = 0, maximum = MAX_MONEY_AMOUNT) => typeof value === 'number' && Number.isFinite(value) && value >= minimum && value <= maximum
-const integer = (value: unknown, minimum = 0) => finite(value, minimum) && Number.isInteger(value)
+const finite = (value: unknown, minimum = 0, maximum = MAX_MONEY_AMOUNT): value is number => typeof value === 'number' && Number.isFinite(value) && value >= minimum && value <= maximum
+const integer = (value: unknown, minimum = 0): value is number => finite(value, minimum) && Number.isInteger(value)
 const positive = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value) && value > 0
 const hexColor = (value: unknown): value is string => typeof value === 'string' && /^#[0-9a-fA-F]{6}$/.test(value)
 export const SUPPORTED_BACKUP_VERSIONS = [1] as const
@@ -50,6 +50,22 @@ const explicitBooleanOrDefault = (value: unknown, fallback: boolean, label: stri
 const ensureTextLength = (value: unknown, label: string) => {
   if (typeof value === 'string' && value.length > MAX_TEXT_FIELD_LENGTH) throw new Error(`${label} слишком длинное. Максимум: ${MAX_TEXT_FIELD_LENGTH} символов`)
 }
+const requiredId = (value: unknown, label: string) => {
+  if (typeof value !== 'string' || !value.trim()) throw new Error(`${label}: ID повреждён`)
+  if (value.length > MAX_ID_LENGTH) throw new Error(`${label}: ID слишком длинный. Максимум: ${MAX_ID_LENGTH} символов`)
+  return value
+}
+const optionalId = (value: unknown, label: string) => {
+  if (value === undefined) return undefined
+  return requiredId(value, label)
+}
+const optionalText = (value: unknown, label: string) => {
+  if (value === undefined) return undefined
+  if (typeof value !== 'string') throw new Error(`${label} должно быть строкой`)
+  ensureTextLength(value, label)
+  return value
+}
+const valueOrDefault = <T>(value: unknown, fallback: T) => value === undefined ? fallback : value
 
 const ensureUniqueIds = (items: { id: string }[], label: string) => {
   const seen = new Set<string>()
@@ -105,36 +121,42 @@ export function parseLoanBackupObject(raw: unknown): ValidatedLoanData {
   } else {
     throw new Error(`Валюта ${String(source.currency)} не поддерживается`)
   }
-  const config = {
-    ...defaultConfig,
-    ...source,
+  const config: LoanConfig = {
+    principal: valueOrDefault(source.principal, defaultConfig.principal) as number,
+    annualRate: valueOrDefault(source.annualRate, defaultConfig.annualRate) as number,
+    rateChanges: [],
+    rateChangeMode: explicitOneOfOrDefault(source.rateChangeMode, rateChangeModes, defaultConfig.rateChangeMode, 'Режим изменения ставки'),
+    issueDate: valueOrDefault(source.issueDate, defaultConfig.issueDate) as string,
+    firstPaymentDate: valueOrDefault(source.firstPaymentDate, defaultConfig.firstPaymentDate) as string,
     firstPaymentInterestOnly: explicitBooleanOrDefault(source.firstPaymentInterestOnly, defaultConfig.firstPaymentInterestOnly, 'Настройка первого платежа'),
+    termMonths: valueOrDefault(source.termMonths, defaultConfig.termMonths) as number,
+    paymentDay: valueOrDefault(source.paymentDay, defaultConfig.paymentDay) as number,
     paymentType: explicitOneOfOrDefault(source.paymentType, paymentTypes, defaultConfig.paymentType, 'Тип платежа'),
     frequency: explicitOneOfOrDefault(source.frequency, frequencies, defaultConfig.frequency, 'Частота платежей'),
     currency,
     rounding: explicitOneOfOrDefault(source.rounding, roundingModes, defaultConfig.rounding, 'Режим округления'),
+    closeThreshold: valueOrDefault(source.closeThreshold, defaultConfig.closeThreshold) as number,
+    oneTimeFee: valueOrDefault(source.oneTimeFee, defaultConfig.oneTimeFee) as number,
+    monthlyFee: valueOrDefault(source.monthlyFee, defaultConfig.monthlyFee) as number,
+    earlyRepaymentFeePercent: valueOrDefault(source.earlyRepaymentFeePercent, defaultConfig.earlyRepaymentFeePercent) as number,
     interest: {
-      ...defaultConfig.interest,
-      ...interest,
       method: explicitOneOfOrDefault(interest.method, interestMethods, defaultConfig.interest.method, 'Метод начисления процентов'),
       dayCountBasis: explicitOneOfOrDefault(interest.dayCountBasis, dayCountBases, defaultConfig.interest.dayCountBasis, 'База расчёта дней'),
       includePaymentDate: explicitBooleanOrDefault(interest.includePaymentDate, defaultConfig.interest.includePaymentDate, 'Правило включения даты платежа'),
       periodStart: explicitOneOfOrDefault(interest.periodStart, periodStarts, defaultConfig.interest.periodStart, 'Начало процентного периода'),
       balanceMoment: explicitOneOfOrDefault(interest.balanceMoment, balanceMoments, defaultConfig.interest.balanceMoment, 'Момент остатка для процентов')
     }
-  } as LoanConfig
+  }
   if (!positive(config.principal) || config.principal > MAX_MONEY_AMOUNT || !finite(config.annualRate, 0, MAX_PERCENT) || !integer(config.termMonths, 1) || config.termMonths > MAX_TERM_MONTHS || !integer(config.paymentDay, 1) || config.paymentDay > 31 || !finite(config.closeThreshold) || !finite(config.oneTimeFee) || !finite(config.monthlyFee) || !finite(config.earlyRepaymentFeePercent, 0, MAX_PERCENT)) throw new Error('Параметры кредита содержат недопустимые числа')
   if (!isISODate(config.issueDate) || !isISODate(config.firstPaymentDate)) throw new Error('Проверьте даты выдачи и первого платежа')
   if (config.firstPaymentDate <= config.issueDate) throw new Error('Первый платёж должен быть после даты выдачи')
-  config.rateChangeMode = explicitOneOfOrDefault(source.rateChangeMode, rateChangeModes, defaultConfig.rateChangeMode, 'Режим изменения ставки')
-
   const rateChangesRaw = source.rateChanges === undefined ? [] : source.rateChanges
   if (!Array.isArray(rateChangesRaw)) throw new Error('История ставок повреждена')
   if (rateChangesRaw.length > MAX_RATE_CHANGES) throw new Error(`Слишком много изменений ставки. Максимум: ${MAX_RATE_CHANGES}`)
   const rateChanges = sortRateChanges(rateChangesRaw.map((item, index): RateChange => {
-    if (!isObject(item) || typeof item.id !== 'string' || !isISODate(item.date) || typeof item.annualRate !== 'number' || !Number.isFinite(item.annualRate) || item.annualRate < 0 || item.annualRate > MAX_PERCENT) throw new Error(`Ошибка в изменении ставки №${index + 1}`)
+    if (!isObject(item) || !isISODate(item.date) || typeof item.annualRate !== 'number' || !Number.isFinite(item.annualRate) || item.annualRate < 0 || item.annualRate > MAX_PERCENT) throw new Error(`Ошибка в изменении ставки №${index + 1}`)
     if (item.date <= config.issueDate) throw new Error(`Ошибка в изменении ставки №${index + 1}: дата должна быть после выдачи кредита`)
-    return { id: item.id, date: item.date, annualRate: item.annualRate }
+    return { id: requiredId(item.id, `Ошибка в изменении ставки №${index + 1}`), date: item.date, annualRate: item.annualRate }
   }))
   ensureUniqueIds(rateChanges, 'Изменения ставки')
   ensureUniqueIds(rateChanges.map(item => ({ id: item.date })), 'Даты изменения ставки')
@@ -147,11 +169,13 @@ export function parseLoanBackupObject(raw: unknown): ValidatedLoanData {
     isObject(item) && isISODate(item.date) && item.amountMode !== 'extra' ? [item.date] : []
   ), config)
   const repayments = repaymentsRaw.map((item, index) => {
-    if (!isObject(item) || typeof item.id !== 'string' || !isISODate(item.date) || !finite(item.amount) || !oneOf(item.strategy, repaymentStrategies) || !oneOf(item.source, repaymentSources) || !oneOf(item.sameDayOrder, sameDayOrders) || typeof item.interestFirst !== 'boolean') throw new Error(`Ошибка в досрочном платеже №${index + 1}`)
+    const label = `Ошибка в досрочном платеже №${index + 1}`
+    if (!isObject(item) || !isISODate(item.date) || !finite(item.amount) || !oneOf(item.strategy, repaymentStrategies) || !oneOf(item.source, repaymentSources) || !oneOf(item.sameDayOrder, sameDayOrders) || typeof item.interestFirst !== 'boolean') throw new Error(label)
+    const id = requiredId(item.id, label)
     if (item.enabled !== undefined && typeof item.enabled !== 'boolean') throw new Error(`Ошибка в досрочном платеже №${index + 1}`)
     if (item.operationSource !== undefined && !oneOf(item.operationSource, repaymentOperationSources)) throw new Error(`Ошибка в досрочном платеже №${index + 1}: источник операции повреждён`)
-    if (item.sourceRuleId !== undefined && typeof item.sourceRuleId !== 'string') throw new Error(`Ошибка в досрочном платеже №${index + 1}: ID правила повреждён`)
-    ensureTextLength(item.comment, `Комментарий досрочного платежа №${index + 1}`)
+    const sourceRuleId = optionalId(item.sourceRuleId, `${label}: правило-источник`)
+    const comment = optionalText(item.comment, `Комментарий досрочного платежа №${index + 1}`)
     const sameDaySequence = typeof item.sameDaySequence === 'number' && Number.isInteger(item.sameDaySequence) && item.sameDaySequence >= 0 ? item.sameDaySequence : undefined
     if (item.sameDaySequence !== undefined && sameDaySequence === undefined) throw new Error(`Ошибка в досрочном платеже №${index + 1}`)
     const context = repaymentAmountModeContextForRegularDate({
@@ -160,7 +184,6 @@ export function parseLoanBackupObject(raw: unknown): ValidatedLoanData {
       enabled: item.enabled,
       sameDayOrder: item.sameDayOrder
     }, regularRepaymentDates.has(item.date))
-    const label = `Ошибка в досрочном платеже №${index + 1}`
     const amountModeErrors = repaymentAmountModeValidationErrors(context, label, {
       invalidMode: label,
       totalBeforeRegularPayment: `${label}: общая сумма списания с учётом комиссии применяется после регулярного платежа`
@@ -170,7 +193,21 @@ export function parseLoanBackupObject(raw: unknown): ValidatedLoanData {
     if (item.amountMode === undefined) importWarnings.push(`${label}: отсутствующий legacy amountMode преобразован в ${amountMode}`)
     else if (item.amountMode === 'total') importWarnings.push(`${label}: legacy amountMode total преобразован в totalWithFee`)
     const enabled = item.enabled ?? true
-    return { ...item, enabled, amountMode, sameDaySequence: sameDaySequence ?? index, sameDayOrder: amountMode === 'totalWithFee' ? 'regularFirst' : item.sameDayOrder } as unknown as EarlyRepayment
+    return {
+      id,
+      date: item.date,
+      amount: item.amount,
+      enabled,
+      amountMode,
+      sameDaySequence: sameDaySequence ?? index,
+      ...(item.operationSource !== undefined ? { operationSource: item.operationSource } : {}),
+      ...(sourceRuleId !== undefined ? { sourceRuleId } : {}),
+      strategy: item.strategy,
+      source: item.source,
+      sameDayOrder: amountMode === 'totalWithFee' ? 'regularFirst' : item.sameDayOrder,
+      interestFirst: item.interestFirst,
+      ...(comment !== undefined ? { comment } : {})
+    } satisfies EarlyRepayment
   })
   ensureUniqueIds(repayments, 'Досрочные платежи')
   ensureUniqueSameDaySequences(repayments)
@@ -180,10 +217,21 @@ export function parseLoanBackupObject(raw: unknown): ValidatedLoanData {
   if (!Array.isArray(graceRaw)) throw new Error('Список льготных периодов повреждён')
   if (graceRaw.length > MAX_GRACE_PERIODS) throw new Error(`Слишком много льготных периодов. Максимум: ${MAX_GRACE_PERIODS}`)
   const gracePeriods = graceRaw.map((item, index) => {
-    if (!isObject(item) || typeof item.id !== 'string' || !isISODate(item.startDate) || !isISODate(item.endDate) || !oneOf(item.type, graceTypes) || typeof item.extendTerm !== 'boolean' || typeof item.accrueInterest !== 'boolean' || typeof item.capitalizeInterest !== 'boolean') throw new Error(`Ошибка в льготном периоде №${index + 1}`)
+    const label = `Ошибка в льготном периоде №${index + 1}`
+    if (!isObject(item) || !isISODate(item.startDate) || !isISODate(item.endDate) || !oneOf(item.type, graceTypes) || typeof item.extendTerm !== 'boolean' || typeof item.accrueInterest !== 'boolean' || typeof item.capitalizeInterest !== 'boolean') throw new Error(label)
+    const id = requiredId(item.id, label)
     if (item.endDate < item.startDate) throw new Error(`Ошибка в льготном периоде №${index + 1}: окончание раньше начала`)
     if (item.paymentAmount !== undefined && !finite(item.paymentAmount)) throw new Error(`Ошибка в льготном периоде №${index + 1}`)
-    return item as unknown as GracePeriod
+    return {
+      id,
+      startDate: item.startDate,
+      endDate: item.endDate,
+      type: item.type,
+      ...(item.paymentAmount !== undefined ? { paymentAmount: item.paymentAmount } : {}),
+      extendTerm: item.extendTerm,
+      accrueInterest: item.accrueInterest,
+      capitalizeInterest: item.capitalizeInterest
+    } satisfies GracePeriod
   })
   ensureUniqueIds(gracePeriods, 'Льготные периоды')
   const sortedGrace = [...gracePeriods].sort((a, b) => a.startDate.localeCompare(b.startDate))
@@ -195,27 +243,43 @@ export function parseLoanBackupObject(raw: unknown): ValidatedLoanData {
   if (!Array.isArray(rulesRaw)) throw new Error('Список правил досрочных платежей повреждён')
   if (rulesRaw.length > MAX_REPAYMENT_RULES) throw new Error(`Слишком много правил досрочных платежей. Максимум: ${MAX_REPAYMENT_RULES}`)
   const repaymentRules = rulesRaw.map((item, index) => {
-    if (!isObject(item) || typeof item.id !== 'string' || typeof item.name !== 'string' || !oneOf(item.type, repaymentRuleTypes) || !isISODate(item.startDate) || !isISODate(item.endDate) || !oneOf(item.strategy, repaymentStrategies) || !oneOf(item.source, repaymentSources) || !oneOf(item.sameDayOrder, sameDayOrders) || typeof item.interestFirst !== 'boolean' || !Array.isArray(item.skipMonths)) throw new Error(`Ошибка в правиле досрочных платежей №${index + 1}`)
+    const label = `Ошибка в правиле досрочных платежей №${index + 1}`
+    if (!isObject(item) || typeof item.name !== 'string' || !oneOf(item.type, repaymentRuleTypes) || !isISODate(item.startDate) || !isISODate(item.endDate) || !oneOf(item.strategy, repaymentStrategies) || !oneOf(item.source, repaymentSources) || !oneOf(item.sameDayOrder, sameDayOrders) || typeof item.interestFirst !== 'boolean' || !Array.isArray(item.skipMonths)) throw new Error(label)
+    const id = requiredId(item.id, label)
     if (item.skipMonths.length > MAX_RULE_SKIP_MONTHS) throw new Error(`Ошибка в правиле досрочных платежей №${index + 1}: слишком много месяцев пропуска. Максимум: ${MAX_RULE_SKIP_MONTHS}`)
     if (!item.skipMonths.every(isISOYearMonth)) throw new Error(`Ошибка в правиле досрочных платежей №${index + 1}`)
     ensureTextLength(item.name, `Название правила досрочных платежей №${index + 1}`)
-    ensureTextLength(item.comment, `Комментарий правила досрочных платежей №${index + 1}`)
+    const comment = optionalText(item.comment, `Комментарий правила досрочных платежей №${index + 1}`)
     if (item.endDate < item.startDate) throw new Error(`Ошибка в правиле досрочных платежей №${index + 1}: окончание раньше начала`)
     if (item.type === 'paymentPercent' ? item.percent === undefined : item.amount === undefined) throw new Error(`Ошибка в правиле досрочных платежей №${index + 1}`)
     if (item.amount !== undefined && !finite(item.amount)) throw new Error(`Ошибка в правиле досрочных платежей №${index + 1}`)
     if (item.percent !== undefined && !finite(item.percent, 0, MAX_PERCENT)) throw new Error(`Ошибка в правиле досрочных платежей №${index + 1}`)
     if (item.enabled !== undefined && typeof item.enabled !== 'boolean') throw new Error(`Ошибка в правиле досрочных платежей №${index + 1}`)
-    if (item.comment !== undefined && typeof item.comment !== 'string') throw new Error(`Ошибка в правиле досрочных платежей №${index + 1}`)
     const ruleSequence = typeof item.ruleSequence === 'number' && Number.isInteger(item.ruleSequence) && item.ruleSequence >= 0 ? item.ruleSequence : undefined
     if (item.ruleSequence !== undefined && ruleSequence === undefined) throw new Error(`Ошибка в правиле досрочных платежей №${index + 1}: порядок повреждён`)
-    return { ...item, skipMonths: [...new Set(item.skipMonths)], ...(ruleSequence !== undefined ? { ruleSequence } : {}), enabled: item.enabled ?? true, sameDayOrder: item.type === 'monthlyTotalPayment' ? 'regularFirst' : item.sameDayOrder } as unknown as RepaymentRule
+    return {
+      id,
+      name: item.name,
+      ...(ruleSequence !== undefined ? { ruleSequence } : {}),
+      type: item.type,
+      startDate: item.startDate,
+      endDate: item.endDate,
+      ...(item.amount !== undefined ? { amount: item.amount } : {}),
+      ...(item.percent !== undefined ? { percent: item.percent } : {}),
+      enabled: item.enabled ?? true,
+      strategy: item.strategy,
+      source: item.source,
+      sameDayOrder: item.type === 'monthlyTotalPayment' ? 'regularFirst' : item.sameDayOrder,
+      interestFirst: item.interestFirst,
+      skipMonths: [...new Set(item.skipMonths)],
+      ...(comment !== undefined ? { comment } : {})
+    } satisfies RepaymentRule
   })
   ensureUniqueIds(repaymentRules, 'Правила досрочных платежей')
   ensureUniqueRuleSequences(repaymentRules)
 
   const settings = isObject(raw.settings) ? raw.settings : raw
-  ensureTextLength(raw.name, 'Название кредита')
-  const name = typeof raw.name === 'string' ? raw.name : undefined
+  const name = optionalText(raw.name, 'Название кредита')
   const scenarioFromLegacyExport = isObject(raw.scenario) && typeof raw.scenario.id === 'string' ? raw.scenario.id : undefined
   const selectedCandidate = typeof raw.selectedScenario === 'string' ? raw.selectedScenario : scenarioFromLegacyExport ?? 'reduceTerm'
   if (!oneOf(selectedCandidate, scenarioIds)) throw new Error('Файл содержит неизвестный сценарий')

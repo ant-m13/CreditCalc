@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { parseLoanBackup } from './importExport'
-import { MAX_RATE_CHANGES, MAX_REPAYMENT_RULES, MAX_RULE_SKIP_MONTHS } from './loanEngine/limits'
+import { MAX_ID_LENGTH, MAX_RATE_CHANGES, MAX_REPAYMENT_RULES, MAX_RULE_SKIP_MONTHS } from './loanEngine/limits'
 import { defaultConfig } from './store'
 
 const repayment = { id: 'early-1', date: defaultConfig.firstPaymentDate, amount: 8704.99, amountMode: 'extra', strategy: 'reduceTerm', source: 'own', sameDayOrder: 'regularFirst', interestFirst: true }
@@ -253,6 +253,44 @@ describe('импорт резервной копии', () => {
     const grace = { id: 'same', startDate: '2026-08-01', endDate: '2026-08-31', type: 'full', extendTerm: true, accrueInterest: true, capitalizeInterest: false }
     expect(() => parseLoanBackup(JSON.stringify({ config: defaultConfig, repayments: [{ ...repayment, id: 'same' }, { ...repayment, id: 'same' }], gracePeriods: [] }))).toThrow('дублирующийся ID')
     expect(() => parseLoanBackup(JSON.stringify({ config: defaultConfig, repayments: [], gracePeriods: [grace, grace] }))).toThrow('дублирующийся ID')
+  })
+
+  it('отклоняет нестроковый комментарий до передачи данных в React', () => {
+    expect(() => parseLoanBackup(JSON.stringify({
+      config: defaultConfig,
+      repayments: [{ ...repayment, comment: { text: 'не строка' } }]
+    }))).toThrow('Комментарий досрочного платежа №1 должно быть строкой')
+  })
+
+  it('ограничивает длину всех импортируемых ID', () => {
+    const longId = 'x'.repeat(MAX_ID_LENGTH + 1)
+    const rule = { id: longId, name: 'Правило', type: 'monthlyFixed', startDate: '2026-08-15', endDate: '2026-12-15', amount: 20000, strategy: 'reduceTerm', source: 'own', sameDayOrder: 'regularFirst', interestFirst: true, skipMonths: [] }
+    const grace = { id: longId, startDate: '2026-08-01', endDate: '2026-08-31', type: 'full', extendTerm: true, accrueInterest: true, capitalizeInterest: false }
+    expect(() => parseLoanBackup(JSON.stringify({ config: { ...defaultConfig, rateChanges: [{ id: longId, date: '2026-08-26', annualRate: 8 }] } }))).toThrow(String(MAX_ID_LENGTH))
+    expect(() => parseLoanBackup(JSON.stringify({ config: defaultConfig, repayments: [{ ...repayment, id: longId }] }))).toThrow(String(MAX_ID_LENGTH))
+    expect(() => parseLoanBackup(JSON.stringify({ config: defaultConfig, repayments: [], repaymentRules: [rule] }))).toThrow(String(MAX_ID_LENGTH))
+    expect(() => parseLoanBackup(JSON.stringify({ config: defaultConfig, repayments: [], gracePeriods: [grace] }))).toThrow(String(MAX_ID_LENGTH))
+  })
+
+  it('проецирует только известные поля во всех вложенных объектах', () => {
+    const rule = { id: 'rule-safe', name: 'Правило', type: 'monthlyFixed', startDate: '2026-08-15', endDate: '2026-12-15', amount: 20000, strategy: 'reduceTerm', source: 'own', sameDayOrder: 'regularFirst', interestFirst: true, skipMonths: [], unknownRule: 'drop' }
+    const grace = { id: 'grace-safe', startDate: '2026-08-01', endDate: '2026-08-14', type: 'full', extendTerm: true, accrueInterest: true, capitalizeInterest: false, unknownGrace: 'drop' }
+    const result = parseLoanBackup(JSON.stringify({
+      version: 1,
+      config: { ...defaultConfig, unknownConfig: 'drop', interest: { ...defaultConfig.interest, unknownInterest: 'drop' }, rateChanges: [{ id: 'rate-safe', date: '2026-08-26', annualRate: 8, unknownRate: 'drop' }] },
+      repayments: [{ ...repayment, unknownRepayment: 'drop' }],
+      repaymentRules: [rule],
+      gracePeriods: [grace],
+      unknownRoot: 'drop'
+    }))
+
+    expect(result).not.toHaveProperty('unknownRoot')
+    expect(result.config).not.toHaveProperty('unknownConfig')
+    expect(result.config.interest).not.toHaveProperty('unknownInterest')
+    expect(result.config.rateChanges[0]).not.toHaveProperty('unknownRate')
+    expect(result.repayments[0]).not.toHaveProperty('unknownRepayment')
+    expect(result.repaymentRules[0]).not.toHaveProperty('unknownRule')
+    expect(result.gracePeriods[0]).not.toHaveProperty('unknownGrace')
   })
 
   it('отклоняет обратный льготный период', () => {
