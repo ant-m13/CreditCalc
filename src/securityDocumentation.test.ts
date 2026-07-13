@@ -24,4 +24,10 @@ describe('security documentation', () => {
     expect(policy).toContain('`credit-calculator-seen-version`')
     expect(policy).toContain('may also remove data belonging to other projects')
   })
+
+  it('не представляет PWA-кеш или persistent storage как backup', () => {
+    expect(policy).toContain('user-provided financial values are not written to Cache Storage')
+    expect(policy).toContain('it is not a backup')
+    expect(policy).toContain('does not encrypt, duplicate or synchronize loan data')
+  })
 })

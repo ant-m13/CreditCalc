@@ -27,8 +27,9 @@ Workflow:
 7. запускает ESLint;
 8. запускает тесты;
 9. собирает проект;
-10. запускает production E2E smoke-test;
-11. публикует `dist` через GitHub Pages.
+10. проверяет состав PWA-артефакта;
+11. запускает production E2E в repository scope, включая автономный запуск;
+12. публикует `dist` через GitHub Pages.
 
 Для GitHub Pages используется переменная:
 
@@ -61,9 +62,10 @@ Workflow:
 5. запускает ESLint;
 6. запускает тесты;
 7. собирает проект;
-8. создаёт и отправляет тег `vX.Y.Z`, если такого тега ещё нет;
-9. архивирует содержимое `dist`;
-10. создаёт или обновляет GitHub Release с архивом `credit-calculator-dist.zip`.
+8. проверяет состав PWA-артефакта и автономный запуск;
+9. создаёт и отправляет тег `vX.Y.Z`, если такого тега ещё нет;
+10. архивирует содержимое `dist`;
+11. создаёт или обновляет GitHub Release с архивом `credit-calculator-dist.zip`.
 
 Workflow создаёт Release сам, потому что tag push, выполненный стандартным `GITHUB_TOKEN`, не запускает следующий workflow автоматически.
 
@@ -90,8 +92,9 @@ Workflow:
 6. запускает ESLint;
 7. запускает тесты;
 8. собирает проект с `VITE_BASE_PATH=./`;
-9. архивирует содержимое `dist`;
-10. прикрепляет `credit-calculator-dist.zip` к GitHub Release.
+9. проверяет состав PWA-артефакта и автономный запуск;
+10. архивирует содержимое `dist`;
+11. прикрепляет `credit-calculator-dist.zip` к GitHub Release.
 
 `VITE_BASE_PATH=./` делает архив пригодным для размещения на любом статическом хостинге, а не только на GitHub Pages.
 
@@ -108,6 +111,8 @@ pnpm typecheck
 pnpm test
 pnpm test:coverage
 pnpm build
+pnpm test:pwa
+pnpm test:e2e
 pnpm audit --prod
 ```
 

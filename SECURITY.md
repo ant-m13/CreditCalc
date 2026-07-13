@@ -32,6 +32,14 @@ A meta CSP cannot enforce the `frame-ancestors` directive, and `X-Frame-Options`
 
 The CSP and local-only architecture do not protect against a malicious browser extension, a compromised browser profile or operating system, modified same-origin content, or a compromised production dependency.
 
+## PWA Cache and Offline Data
+
+The service worker is registered under the application base path and ignores requests outside that scope. Cache names include an application prefix plus a scope hash. The precache contains only the static production shell: HTML, hashed JavaScript/CSS/Workers, icons, the web manifest, local fonts and the offline fallback. Loan state, imported or exported JSON, share payloads and other user-provided financial values are not written to Cache Storage.
+
+Cache Storage, service workers and `localStorage` still belong to the browser origin. Same-origin sibling content can inspect or delete origin caches even when it cannot be controlled by the `/CreditCalc/` worker. No confidential data is placed in those caches, and a dedicated origin remains the recommended isolation boundary.
+
+The “Повысить надёжность” action calls the browser Storage API only after a user gesture. A successful persistent-storage grant may reduce automatic eviction, but it is not a backup and does not protect against manual site-data clearing, profile deletion or device loss. Installing the PWA provides the same guarantees: it does not encrypt, duplicate or synchronize loan data.
+
 ## Clearing Local Data
 
 Export a recovery backup first if the data may still be needed. Then clear the following keys through the browser's developer tools under Application/Storage → Local Storage → `https://ant-m13.github.io`:
@@ -41,3 +49,5 @@ Export a recovery backup first if the data may still be needed. Then clear the f
 - `credit-calculator-seen-version` — last acknowledged version.
 
 Alternatively, use the browser's “clear site data” control for `ant-m13.github.io`. Because storage is origin-wide, that action may also remove data belonging to other projects on the same GitHub Pages host. Deleting browser storage does not delete downloaded JSON/recovery files, copied parameter codes, shared URLs from browser history or copies already sent to other people; remove those separately.
+
+The same origin-wide clear operation also removes the PWA service worker and Cache Storage. The static shell will be downloaded again on the next online visit; financial data can be restored only from a separately retained JSON export.

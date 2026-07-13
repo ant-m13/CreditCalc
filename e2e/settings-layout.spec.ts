@@ -12,7 +12,7 @@ test.beforeEach(async ({ page }) => {
 
 test('desktop-подсказка даты платежа не перекрывается боковым меню', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 720 })
-  await page.goto('/')
+  await page.goto('./')
   await page.getByRole('button', { name: 'Параметры' }).click()
 
   const setting = page.locator('.interest-settings-panel .toggle-row').filter({ hasText: 'Включать дату платежа' })
@@ -28,7 +28,7 @@ test('desktop-подсказка даты платежа не перекрыва
 
 test('desktop-меню сворачивается до панели иконок и разворачивается обратно', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 720 })
-  await page.goto('/')
+  await page.goto('./')
 
   await page.getByRole('button', { name: 'Свернуть меню' }).click()
   await expect(page.locator('.app-shell')).toHaveClass(/sidebar-collapsed/)

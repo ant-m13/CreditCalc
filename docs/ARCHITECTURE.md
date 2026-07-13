@@ -27,6 +27,7 @@ generateBaseSchedule
 - `src/loanCalculationRunner.ts` — общий сервис запуска расчёта: Web Worker в production и синхронный fallback в средах без Worker.
 - `src/loanCalculation.ts`, `src/loanCalculation.worker.ts` — чистая сборка расчёта и worker-обёртка для тяжёлого пересчёта.
 - `src/hooks/useLoanImport.ts`, `src/hooks/useLoanExport.ts`, `src/hooks/useSharedCalculation.ts`, `src/hooks/useStorageStatus.ts` — прикладные потоки импорта, экспорта, ссылок, onboarding и статуса localStorage.
+- `src/service-worker.ts`, `src/pwa` — scoped offline shell, стратегии кеширования, регистрация, установка, обновления и Storage API.
 - `src/store.ts` — Zustand-действия и persist-конфигурация для кредитов, активного кредита и настроек интерфейса.
 - `src/storageKeys.ts` — совместимостные ключи хранилища, включая legacy ключ persisted-состояния.
 - `src/storeNormalization.ts`, `src/storeTypes.ts` — нормализация входящих данных, миграции localStorage, лимиты и публичные типы store.
@@ -39,6 +40,8 @@ generateBaseSchedule
 - `src/styles` — разделённые CSS-файлы по областям интерфейса.
 - `CHANGELOG.md` — источник страницы “Что изменилось” внутри приложения.
 - `vite.config.ts` — версия приложения, дата сборки и базовый путь для GitHub Pages.
+
+PWA не меняет основной поток финансовых данных: service worker кеширует только статическую оболочку и не имеет маршрута записи пользовательского state в Cache Storage. Подробная политика описана в [PWA.md](PWA.md).
 
 ## Хранение данных
 

@@ -15,6 +15,16 @@ describe('release workflows', () => {
     expect(workflow).not.toMatch(/continue-on-error:\s*true/)
   })
 
+  it.each(workflowNames)('проверяет готовый PWA-артефакт в %s', name => {
+    expect(readWorkflow(name)).toContain('run: pnpm test:pwa')
+  })
+
+  it('тестирует GitHub Pages в реальном repository scope', () => {
+    const deployPages = readWorkflow('deploy-pages.yml')
+
+    expect(deployPages).toContain('E2E_BASE_PATH: /${{ github.event.repository.name }}/')
+  })
+
   it('не называет блокирующий audit non-blocking в release-документации', () => {
     const releaseDocumentation = `${readRepositoryDocument('README.md')}\n${readRepositoryDocument('docs/RELEASES.md')}`
 
