@@ -489,6 +489,9 @@ export function buildGoalPlans(input: GoalPlannerInput): GoalPlannerResult {
   if (goal.type === 'maxOverpayment' && context.current.overpayment <= goal.amount) {
     return { status: 'alreadyAchieved', targetOverpayment: goal.amount, message: 'Текущая переплата уже не превышает цель', current, variants: [] }
   }
+  if (goal.type === 'monthlyBudget' && maxRegularTransfer(context.current.schedule, input.planStartDate) <= goal.amount) {
+    return { status: 'alreadyAchieved', monthlyBudget: goal.amount, message: 'Текущий план уже укладывается в заданный ежемесячный бюджет', current, variants: [] }
+  }
 
   let variants: GoalPlanVariant[]
   if (targetDate) {

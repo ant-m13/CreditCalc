@@ -54,13 +54,25 @@ describe('goal planner', { timeout: 30_000 }, () => {
   })
 
   it('ограничивает общий регулярный перевод заданным бюджетом', () => {
-    const result = buildGoalPlans(input({ goal: { type: 'monthlyBudget', amount: 30_000 } }))
-    const total = result.variants.find(item => item.kind === 'monthlyTotalPayment')
+    const plannerInput = input({ goal: { type: 'monthlyBudget', amount: 18_000 } })
+    const result = buildGoalPlans(plannerInput)
+    const oneTime = result.variants.find(item => item.kind === 'oneTime')!
 
-    expect(total?.status).toBe('achieved')
-    expect(total?.totalMonthlyPayment).toBe(30_000)
-    expect(total?.summary?.closingDate).toBeDefined()
-    expect(total!.summary!.closingDate < result.current.closingDate).toBe(true)
+    expect(oneTime.status).toBe('achieved')
+    expect(oneTime.oneTimePayment).toBeGreaterThan(0)
+    const preview = buildGoalPlanPreview(plannerInput, oneTime.operations)
+    expect(Math.max(...preview.planned.schedule.filter(row => row.isRegularPayment && row.date >= plannerInput.planStartDate).map(row => row.cashFlowTotal))).toBeLessThanOrEqual(18_000)
+  })
+
+  it('не предлагает пустой план, если текущий платёж уже укладывается в бюджет', () => {
+    const result = buildGoalPlans(input({ goal: { type: 'monthlyBudget', amount: 30_000 } }))
+
+    expect(result).toMatchObject({
+      status: 'alreadyAchieved',
+      monthlyBudget: 30_000,
+      variants: [],
+      message: expect.stringContaining('уже укладывается')
+    })
   })
 
   it('подбирает вариант для ограничения общей переплаты с комиссиями', () => {
