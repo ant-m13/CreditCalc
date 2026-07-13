@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest'
 
 const workflowNames = ['pr-checks.yml', 'auto-release.yml', 'deploy-pages.yml', 'release-dist.yml']
 const readWorkflow = (name: string) => readFileSync(new URL(`../.github/workflows/${name}`, import.meta.url), 'utf8')
+const readRepositoryDocument = (path: string) => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8')
 
 describe('release workflows', () => {
   it.each(workflowNames)('делает production audit блокирующим в %s', name => {
@@ -12,6 +13,20 @@ describe('release workflows', () => {
 
     expect(workflow).toContain('run: pnpm audit --prod')
     expect(workflow).not.toMatch(/continue-on-error:\s*true/)
+  })
+
+  it('не называет блокирующий audit non-blocking в release-документации', () => {
+    const releaseDocumentation = `${readRepositoryDocument('README.md')}\n${readRepositoryDocument('docs/RELEASES.md')}`
+
+    expect(releaseDocumentation).not.toContain('non-blocking audit')
+    expect(releaseDocumentation).toContain('блокирующий audit production-зависимостей')
+  })
+
+  it('документирует реальную политику неизвестных валют', () => {
+    const readme = readRepositoryDocument('README.md')
+
+    expect(readme).toContain('legacy-код `RUR` мигрирует в `RUB`')
+    expect(readme).toContain('другие явно неизвестные валюты отклоняются')
   })
 
   it('отделяет read-only проверку от публикации с повышенными правами', () => {
