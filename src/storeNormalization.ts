@@ -26,6 +26,8 @@ import { balanceMoments, dayCountBases, fontSizes, frequencies, graceTypes, inte
 export const MAX_LOANS = 100
 export const defaultAccentColor = '#0b9873'
 
+const boundedCandidates = <T>(value: T[], limit: number) => value.slice(0, limit * 2)
+
 const oneOf = <T extends string>(value: unknown, values: readonly T[], fallback: T): T =>
   isOneOf(value, values) ? value : fallback
 
@@ -121,8 +123,9 @@ export const defaultLoanData = (withSeedRepayment = false, today = new Date()): 
 
 const normalizeRateChanges = (value: unknown, issueDate: string): RateChange[] => {
   if (!Array.isArray(value)) return []
+  const limitedValue = boundedCandidates(value, MAX_RATE_CHANGES)
   const seenDates = new Set<string>()
-  const changes = value.flatMap((item): RateChange[] => {
+  const changes = limitedValue.flatMap((item): RateChange[] => {
     if (!isObject(item) || !isISODate(item.date)) return []
     if (isISODate(issueDate) && item.date <= issueDate) return []
     const annualRate = typeof item.annualRate === 'number' && Number.isFinite(item.annualRate) && item.annualRate >= 0 && item.annualRate <= 100 ? item.annualRate : undefined
@@ -176,7 +179,8 @@ const normalizeConfig = (config: Partial<LoanConfig> | undefined): LoanConfig =>
 
 const normalizeRepayments = (value: unknown, config: LoanConfig): EarlyRepayment[] => {
   if (!Array.isArray(value)) return []
-  const regularRepaymentDates = regularPaymentDateMatches(value.flatMap(item =>
+  const limitedValue = boundedCandidates(value, MAX_EARLY_REPAYMENTS)
+  const regularRepaymentDates = regularPaymentDateMatches(limitedValue.flatMap(item =>
     isObject(item) && isISODate(item.date) && item.amountMode !== 'extra' ? [item.date] : []
   ), config)
   const usedSequences = new Map<string, Set<number>>()
@@ -188,7 +192,7 @@ const normalizeRepayments = (value: unknown, config: LoanConfig): EarlyRepayment
     usedSequences.set(date, used)
     return sequence
   }
-  return withUniqueIds(sortRepayments(value.flatMap((item, index): EarlyRepayment[] => {
+  return withUniqueIds(sortRepayments(limitedValue.flatMap((item, index): EarlyRepayment[] => {
     if (!isObject(item) || typeof item.id !== 'string' || !isISODate(item.date)) return []
     const amount = optionalFiniteNumber(item.amount, 0)
     if (amount === undefined) return []
@@ -220,6 +224,7 @@ const normalizeRepayments = (value: unknown, config: LoanConfig): EarlyRepayment
 
 const normalizeRepaymentRules = (value: unknown): RepaymentRule[] => {
   if (!Array.isArray(value)) return []
+  const limitedValue = boundedCandidates(value, MAX_REPAYMENT_RULES)
   const usedSequences = new Set<number>()
   const nextRuleSequence = (candidate: number) => {
     let sequence = candidate
@@ -227,7 +232,7 @@ const normalizeRepaymentRules = (value: unknown): RepaymentRule[] => {
     usedSequences.add(sequence)
     return sequence
   }
-  return withUniqueIds(sortRules(value.flatMap((item, index): RepaymentRule[] => {
+  return withUniqueIds(sortRules(limitedValue.flatMap((item, index): RepaymentRule[] => {
     if (!isObject(item) || typeof item.id !== 'string' || typeof item.name !== 'string' || !isISODate(item.startDate) || !isISODate(item.endDate) || item.endDate < item.startDate) return []
     const type = oneOf(item.type, repaymentRuleTypes, 'monthlyFixed')
     const amount = optionalFiniteNumber(item.amount, 0)
@@ -255,7 +260,8 @@ const normalizeRepaymentRules = (value: unknown): RepaymentRule[] => {
 
 const normalizeGracePeriods = (value: unknown): GracePeriod[] => {
   if (!Array.isArray(value)) return []
-  return withUniqueIds(value.flatMap((item): GracePeriod[] => {
+  const limitedValue = boundedCandidates(value, MAX_GRACE_PERIODS)
+  return withUniqueIds(limitedValue.flatMap((item): GracePeriod[] => {
     if (!isObject(item) || typeof item.id !== 'string' || !isISODate(item.startDate) || !isISODate(item.endDate) || item.endDate < item.startDate) return []
     const paymentAmount = item.paymentAmount === undefined ? undefined : optionalFiniteNumber(item.paymentAmount, 0)
     return [{
@@ -388,7 +394,7 @@ export const loanToBackupData = (loan: LoanProfile): LoanBackupData => ({
 
 const normalizeQuarantinedLoansRaw = (value: unknown): QuarantinedLoanRaw[] => {
   if (!Array.isArray(value)) return []
-  return value.flatMap((item): QuarantinedLoanRaw[] => {
+  return boundedCandidates(value, MAX_LOANS).flatMap((item): QuarantinedLoanRaw[] => {
     if (!isObject(item) || !('raw' in item)) return []
     const id = normalizeText(item.id)
     const name = normalizeText(item.name)
@@ -401,8 +407,9 @@ const normalizeQuarantinedLoansRaw = (value: unknown): QuarantinedLoanRaw[] => {
 export const normalizePersistedState = (persisted: unknown): Partial<LoanPersistedState> => {
   const state = (isObject(persisted) ? persisted : {}) as Partial<LoanPersistedState>
   const rawLoans = Array.isArray(state.loans)
-    ? state.loans.filter(loan =>
+    ? boundedCandidates(state.loans, MAX_LOANS).filter(loan =>
       isObject(loan) && (isObject(loan.config) || Array.isArray(loan.repayments) || Array.isArray(loan.repaymentRules) || Array.isArray(loan.gracePeriods)))
+      .slice(0, MAX_LOANS)
     : []
   const seenLoanIds = new Set<string>()
   const uniqueLoanId = (value: unknown) => {
@@ -434,7 +441,7 @@ export const normalizePersistedState = (persisted: unknown): Partial<LoanPersist
     ? rawLoans.flatMap((loan, index) => {
       const normalized = recoverLoan(loan, typeof loan.name === 'string' ? loan.name : `Кредит ${index + 1}`, uniqueLoanId(loan.id))
       return normalized ? [normalized] : []
-    }).slice(0, MAX_LOANS)
+    })
     : []
   const fallbackLoan = () => {
     const normalized = recoverLoan(state, 'Мой кредит', 'loan-default')
