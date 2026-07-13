@@ -270,7 +270,7 @@ interface LoanState extends LoanData {
   showStorageRecoveryReport: () => void
   deleteQuarantinedLoans: () => void
   switchLoan: (id: string) => void
-  createLoan: (name?: string) => void
+  createLoan: (name?: string, sourceLoanId?: string) => void
   renameLoan: (id: string, name: string) => void
   removeLoan: (id: string) => void
   loadExampleLoan: () => void
@@ -411,9 +411,11 @@ export const useLoanStore = create<LoanState>()(persist((set) => ({
     set({ quarantinedLoansRaw: [], storageRecoveryReport: [], storageRecoveryDismissed: false })
   },
   switchLoan: (id) => set(s => switchToLoan(s, id)),
-  createLoan: (name = 'Новый кредит') => set(s => {
+  createLoan: (name = 'Новый кредит', sourceLoanId) => set(s => {
     assertCanAddLoan(s.loans.length)
-    const loan = loanFromData(defaultLoanData(false), name)
+    const sourceLoan = sourceLoanId ? s.loans.find(loan => loan.id === sourceLoanId) : undefined
+    if (sourceLoanId && !sourceLoan) throw new Error('Кредит для копирования не найден')
+    const loan = loanFromData(sourceLoan ? publicData(sourceLoan) : defaultLoanData(false), name)
     return { loans: [...s.loans, loan], ...loanToPublicState(loan) }
   }),
   renameLoan: (id, name) => set(s => ({ loans: s.loans.map(loan => loan.id === id ? { ...loan, name: normalizeText(name) || loan.name } : loan) })),
