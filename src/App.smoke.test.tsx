@@ -190,6 +190,8 @@ describe('App smoke tests', () => {
     render(<App />)
 
     expect(await screen.findByRole('dialog', { name: 'Короткое знакомство' })).toBeTruthy()
+    expect(screen.getByText(/общего origin/)).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Работать без сохранения' })).toBeTruthy()
   })
 
   it('на первом запуске по ссылке сначала предлагает загрузить кредит из ссылки', async () => {

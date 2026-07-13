@@ -41,7 +41,7 @@ export const STORAGE_SYNC_CHANNEL = 'credit-calculator-storage-sync'
 export const MAX_PERSISTED_STATE_BYTES = 4_000_000
 export const MAX_PERSISTED_INPUT_BYTES = 8 * 1024 * 1024
 
-export type StorageStatusKind = 'saved' | 'nearQuota' | 'failed' | 'conflict'
+export type StorageStatusKind = 'saved' | 'nearQuota' | 'failed' | 'conflict' | 'memoryOnly'
 type StorageConflictKind = 'newer' | 'deleted' | 'race'
 interface PersistedMetadata { revision: number; updatedAt: string; epoch: string; writerId: string }
 export interface StorageConflictDetail extends PersistedMetadata { kind: StorageConflictKind }
@@ -51,6 +51,7 @@ let lastKnownPersistedWriterId = ''
 let pendingExternalConflict: StorageConflictDetail | null = null
 let storageWriteBlockedReason: string | null = null
 let lastReadPersistedRaw: string | null = null
+let persistenceDisabledForSession = false
 
 const storageId = () => typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
   ? crypto.randomUUID()
@@ -148,6 +149,10 @@ const broadcastStorageSignal = (detail: StorageConflictDetail) => {
 }
 
 const writePersistedItem = (name: string, value: StorageValue<LoanState>) => {
+  if (persistenceDisabledForSession) {
+    notifyStorageStatus('memoryOnly', 'Режим без постоянного сохранения: изменения останутся только в этой вкладке. Скачайте JSON до её закрытия')
+    return
+  }
   if (storageWriteBlockedReason) {
     notifyStorageStatus('failed', `Автосохранение заблокировано: ${storageWriteBlockedReason}. Сначала скачайте backup или удалите повреждённые данные`)
     return
@@ -257,6 +262,8 @@ interface LoanState extends LoanData {
   setCustomAccentColor: (color: string) => void
   setUseCustomAccentColor: (enabled: boolean) => void
   resetCustomAccentColor: () => void
+  persistentStorageEnabled: boolean
+  setPersistentStorageEnabled: (enabled: boolean) => void
   retryStorageSave: () => void
   overwriteExternalStorageChanges: () => void
   dismissStorageRecoveryReport: () => void
@@ -301,6 +308,7 @@ export const useLoanStore = create<LoanState>()(persist((set) => ({
   storageRecoveryReport: [],
   quarantinedLoansRaw: [],
   storageRecoveryDismissed: false,
+  persistentStorageEnabled: true,
   updateConfig: (patch) => set(s => {
     const config = normalizeConfigPatch(s.config, patch)
     assertRepaymentPlanStructurallyValid(config, s.repayments, s.gracePeriods)
@@ -369,6 +377,16 @@ export const useLoanStore = create<LoanState>()(persist((set) => ({
   setCustomAccentColor: (customAccentColor) => set(s => syncActive(s, { customAccentColor: normalizeAccentColor(customAccentColor), useCustomAccentColor: true })),
   setUseCustomAccentColor: (useCustomAccentColor) => set(s => syncActive(s, { useCustomAccentColor })),
   resetCustomAccentColor: () => set(s => syncActive(s, { customAccentColor: defaultAccentColor, useCustomAccentColor: false })),
+  setPersistentStorageEnabled: (enabled) => {
+    persistenceDisabledForSession = !enabled
+    if (!enabled) {
+      safePersistStorage.removeItem(PERSISTED_LOAN_STORAGE_KEY)
+      set({ persistentStorageEnabled: false })
+      notifyStorageStatus('memoryOnly', 'Режим без постоянного сохранения: изменения останутся только в этой вкладке. Скачайте JSON до её закрытия')
+      return
+    }
+    set({ persistentStorageEnabled: true })
+  },
   retryStorageSave: () => set(s => ({ activeLoanId: s.activeLoanId, loans: s.loans })),
   overwriteExternalStorageChanges: () => {
     if (pendingExternalConflict?.kind === 'deleted') {
