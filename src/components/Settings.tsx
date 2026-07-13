@@ -251,7 +251,7 @@ export function Settings({
             <option value="night">Ночная</option>
           </select>
         </Field></div>
-        <div className="setting-item"><Field label="Акцентный цвет" help="Задает пользовательский цвет кнопок, выделений и ключевых элементов интерфейса.">
+        <div className="setting-item"><Field label="Акцентный цвет" help="Задает пользовательский цвет кнопок, выделений и ключевых элементов. Слишком светлый или тёмный оттенок автоматически корректируется до доступного контраста.">
           <div className="accent-picker">
             <input aria-label="Свой акцентный цвет" type="color" value={customAccentColor} onChange={e => setCustomAccentColor(e.target.value)}/>
             <span>{customAccentColor.toUpperCase()}</span>

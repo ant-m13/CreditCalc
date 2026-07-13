@@ -9,6 +9,7 @@ import { LoanSwitcher } from './components/LoanSwitcher'
 import { SharedCalculationModal } from './components/SharedCalculationModal'
 import { PrintReport, StalePrintReport } from './components/PrintReport'
 import { SectionErrorBoundary } from './components/SectionErrorBoundary'
+import { accentPresentation } from './accentColor'
 import { WhatsNewModal } from './components/WhatsNewModal'
 import { OnboardingModal } from './components/OnboardingModal'
 import { EarlyModal } from './components/EarlyModal'
@@ -183,15 +184,18 @@ function App() {
     const shell = shellRef.current
     if (!shell) return
     if (store.useCustomAccentColor) {
-      shell.style.setProperty('--green', store.customAccentColor)
-      shell.style.setProperty('--theme-accent', store.customAccentColor)
-      shell.style.setProperty('--theme-accent-text', store.customAccentColor)
+      const presentation = accentPresentation(store.customAccentColor, store.theme === 'night')
+      shell.style.setProperty('--green', presentation.accent)
+      shell.style.setProperty('--theme-accent', presentation.accent)
+      shell.style.setProperty('--theme-accent-text', presentation.text)
+      shell.style.setProperty('--theme-accent-contrast', presentation.contrast)
       return
     }
     shell.style.removeProperty('--green')
     shell.style.removeProperty('--theme-accent')
     shell.style.removeProperty('--theme-accent-text')
-  }, [store.customAccentColor, store.useCustomAccentColor])
+    shell.style.removeProperty('--theme-accent-contrast')
+  }, [store.customAccentColor, store.theme, store.useCustomAccentColor])
 
   const nav = [
     ['overview', Landmark, 'Обзор'], ['settings', Settings2, 'Параметры'], ['early', TrendingDown, 'Досрочные'],
