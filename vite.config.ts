@@ -1,13 +1,14 @@
 import { defineConfig } from 'vitest/config'
 import { loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
+import { VitePWA } from 'vite-plugin-pwa'
 import packageJson from './package.json'
 
 interface PackageMetadata {
   version?: string
 }
 
-const productionCsp = "default-src 'self'; script-src 'self'; style-src 'self'; style-src-elem 'self'; style-src-attr 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; base-uri 'self'; form-action 'none'; object-src 'none'"
+const productionCsp = "default-src 'self'; script-src 'self'; worker-src 'self'; style-src 'self'; style-src-elem 'self'; style-src-attr 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; base-uri 'self'; form-action 'none'; object-src 'none'"
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, '.', '')
@@ -17,6 +18,19 @@ export default defineConfig(({ mode }) => {
     base: env.VITE_BASE_PATH || '/',
     plugins: [
       react(),
+      VitePWA({
+        strategies: 'injectManifest',
+        srcDir: 'src',
+        filename: 'service-worker.ts',
+        injectRegister: false,
+        manifest: false,
+        injectManifest: {
+          rollupFormat: 'iife',
+          globPatterns: ['**/*.{js,css,html,png,svg,webmanifest,woff2}'],
+          maximumFileSizeToCacheInBytes: 1_500_000
+        },
+        devOptions: { enabled: false }
+      }),
       {
         name: 'credit-calculator-production-csp',
         apply: 'build',

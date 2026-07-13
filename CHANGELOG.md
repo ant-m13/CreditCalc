@@ -5,6 +5,7 @@
 ### PWA и офлайн-режим
 
 - Manifest получил явные переносимые `start_url` и `scope`, отдельные PNG-иконки 192×192 и 512×512, безопасную maskable-иконку и Apple touch icon.
+- Scoped service worker предварительно кеширует только production shell, обслуживает `index.html` по network-first, хешированные ресурсы по cache-first и использует отдельный offline fallback; кеши изолированы префиксом `creditcalc-` и не содержат пользовательские данные.
 
 ## 1.7.1 — 13.07.2026
 
