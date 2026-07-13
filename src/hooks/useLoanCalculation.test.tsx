@@ -114,12 +114,15 @@ describe('useLoanCalculation', () => {
 
     rerender(<Probe {...loanInput({ config: { ...defaultConfig, currency: 'USD' } })}/>)
 
-    await waitFor(() => expect(worker.messages).toHaveLength(2))
+    await waitFor(() => expect(DeferredWorker.instances).toHaveLength(2))
+    const latestWorker = DeferredWorker.instances[1]
+    await waitFor(() => expect(latestWorker.messages).toHaveLength(1))
+    expect(worker.terminate).toHaveBeenCalledOnce()
     expect(current().isStale).toBe(true)
     expect(current().calculationSnapshot.config.currency).toBe('RUB')
     expect(screen.getByTestId('snapshot-currency').textContent).toBe('RUB')
 
-    await act(async () => worker.resolve(1))
+    await act(async () => latestWorker.resolve(0))
     await waitFor(() => expect(current().isStale).toBe(false))
     expect(current().calculationSnapshot.config.currency).toBe('USD')
   })
@@ -173,8 +176,10 @@ describe('useLoanCalculation', () => {
 
     rerender(<Probe {...loanInput({ config: { ...defaultConfig, currency: 'USD' } })}/>)
 
-    await waitFor(() => expect(worker.messages).toHaveLength(2))
-    await act(async () => worker.onerror?.(new Event('error')))
+    await waitFor(() => expect(DeferredWorker.instances).toHaveLength(2))
+    const latestWorker = DeferredWorker.instances[1]
+    await waitFor(() => expect(latestWorker.messages).toHaveLength(1))
+    await act(async () => latestWorker.onerror?.(new Event('error')))
 
     expect(current().isStale).toBe(true)
     expect(screen.getByTestId('snapshot-currency').textContent).toBe('RUB')
