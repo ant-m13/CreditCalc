@@ -112,4 +112,32 @@ describe('goal planner', { timeout: 30_000 }, () => {
     expect(result.status).toBe('planned')
     expect(result.variants.some(item => item.status === 'achieved' && item.boundaryVerified)).toBe(true)
   })
+
+  it('не завышает общий платёж будущим ростом обязательного платежа после целевой даты', () => {
+    const plannerInput = input({
+      config: {
+        ...defaultConfig,
+        principal: 1_000_000,
+        annualRate: 5,
+        issueDate: '2026-01-01',
+        firstPaymentDate: '2026-02-01',
+        paymentDay: 1,
+        termMonths: 60,
+        firstPaymentInterestOnly: false,
+        rateChangeMode: 'exactDate',
+        rateChanges: [{ id: 'late-rate', date: '2030-08-01', annualRate: 100 }]
+      },
+      planStartDate: '2026-03-01',
+      oneTimeDate: '2026-02-15',
+      goal: { type: 'monthsEarlier', months: 6 }
+    })
+    const current = buildGoalPlanPreview(plannerInput, { repayments: [], repaymentRules: [] }).current
+    const highestCurrentPayment = Math.max(...current.schedule.filter(row => row.isRegularPayment).map(row => row.payment))
+    const result = buildGoalPlans(plannerInput)
+    const total = result.variants.find(item => item.kind === 'monthlyTotalPayment')!
+
+    expect(total.status).toBe('achieved')
+    expect(total.totalMonthlyPayment).toBeLessThan(highestCurrentPayment)
+    expect(total.summary!.closingDate < '2030-08-01').toBe(true)
+  })
 })
