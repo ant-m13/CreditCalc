@@ -32,8 +32,8 @@ export const subscribeServiceWorker = (listener: () => void) => {
   return () => listeners.delete(listener)
 }
 
-export const registerPwaServiceWorker = async () => {
-  if (started || !import.meta.env.PROD || !supported) return
+export const registerPwaServiceWorker = async (production = import.meta.env.PROD) => {
+  if (started || !production || !supported) return
   started = true
   try {
     const baseUrl = new URL(import.meta.env.BASE_URL, window.location.href)
