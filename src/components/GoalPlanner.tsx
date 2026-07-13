@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { format } from 'date-fns'
-import { CalendarCheck, Check, Eye, Scale, Target, X } from 'lucide-react'
+import { CalendarCheck, Check, ChevronDown, ChevronUp, Eye, Scale, Target, X } from 'lucide-react'
 import { scheduledPaymentDates, type EarlyRepayment, type GracePeriod, type LoanConfig } from '../loanEngine'
 import type { RepaymentRule } from '../repaymentRules'
 import { createMoneyFormatter, shortDate } from '../formatters'
@@ -59,11 +59,22 @@ const defaultDates = (config: LoanConfig, gracePeriods: GracePeriod[]) => {
 }
 
 const recommendation = (variant: GoalPlanVariant, money: (value: number) => string) => {
-  if (variant.kind === 'monthlyExtra') return `Платите дополнительно ${money(variant.monthlyExtra ?? 0)} каждый месяц`
-  if (variant.kind === 'monthlyTotalPayment') return `Переводите банку ${money(variant.totalMonthlyPayment ?? 0)} в платёжную дату`
+  if (variant.kind === 'monthlyExtra') return `Доплачивайте сверх обязательного платежа ${money(variant.monthlyExtra ?? 0)} каждый месяц`
+  if (variant.kind === 'monthlyTotalPayment') return `Переводите банку всего ${money(variant.totalMonthlyPayment ?? 0)} в платёжную дату`
   if (variant.kind === 'oneTime') return `Внесите разово ${money(variant.oneTimePayment ?? 0)}`
-  const parts = [variant.oneTimePayment ? `${money(variant.oneTimePayment)} разово` : '', variant.monthlyExtra ? `+ ${money(variant.monthlyExtra)} ежемесячно` : '', variant.totalMonthlyPayment ? `${money(variant.totalMonthlyPayment)} общий платёж` : ''].filter(Boolean)
-  return parts.join(' и ') || 'Комбинированный план'
+  const parts = [
+    variant.oneTimePayment ? `внесите ${money(variant.oneTimePayment)} разово` : '',
+    variant.monthlyExtra ? `доплачивайте ${money(variant.monthlyExtra)} сверх обязательного платежа ежемесячно` : '',
+    variant.totalMonthlyPayment ? `переводите банку всего ${money(variant.totalMonthlyPayment)} в платёжную дату` : ''
+  ].filter(Boolean)
+  return parts.length ? `${parts.join(', затем ')}`.replace(/^./, letter => letter.toUpperCase()) : 'Комбинированный план'
+}
+
+const variantDescriptions: Record<GoalPlanVariant['kind'], string> = {
+  monthlyExtra: 'Обязательный платёж сохраняется, указанная сумма добавляется к нему каждый месяц.',
+  monthlyTotalPayment: 'Указана вся сумма перевода в платёжную дату: обязательная часть уже включена.',
+  oneTime: 'Один досрочный взнос в выбранную дату без нового регулярного правила.',
+  combined: 'Доступный разовый взнос сочетается с минимальной регулярной суммой, необходимой для цели.'
 }
 
 function GoalPlanPreviewModal({ envelope, repayments, displayDecimals, close }: { envelope: GoalPlanPreviewEnvelope; repayments: EarlyRepayment[]; displayDecimals: 0 | 2; close: () => void }) {
@@ -92,6 +103,7 @@ export function GoalPlanner({ loanId, sourceRevision, config, repayments, repaym
   const [previewLoading, setPreviewLoading] = useState(false)
   const [error, setError] = useState('')
   const [status, setStatus] = useState('')
+  const [showResults, setShowResults] = useState(true)
   const [showComparison, setShowComparison] = useState(false)
   const runnerRef = useRef<GoalPlannerRunner | null>(null)
   const { money } = createMoneyFormatter(config.currency, displayDecimals)
@@ -106,6 +118,7 @@ export function GoalPlanner({ loanId, sourceRevision, config, repayments, repaym
     setPreviewLoading(false)
     setPreview(null)
     setError('')
+    setShowComparison(false)
   }, [signature, config, repayments, repaymentRules, gracePeriods])
 
   useEffect(() => () => runnerRef.current?.dispose(), [])
@@ -135,6 +148,7 @@ export function GoalPlanner({ loanId, sourceRevision, config, repayments, repaym
     setError('')
     setStatus('')
     setPreview(null)
+    setShowResults(true)
     setShowComparison(false)
     setLoading(true)
     runnerRef.current ??= new GoalPlannerRunner()
@@ -186,9 +200,17 @@ export function GoalPlanner({ loanId, sourceRevision, config, repayments, repaym
     }
   }
 
+  const toggleResults = () => {
+    if (showResults) setShowComparison(false)
+    setShowResults(value => !value)
+  }
+
   return <div className="goal-planner-layout">
     <section className="panel form-panel goal-form-panel">
-      <div className="panel-head"><div><span className="eyebrow">Планировщик цели</span><h3>Какого результата вы хотите достичь?</h3><p>Расчёт использует текущий график, комиссии, льготы, изменения ставки и уже добавленные операции.</p></div><Target/></div>
+      <div className="panel-head">
+        <div><span className="eyebrow">Планировщик цели</span><h3>Какого результата вы хотите достичь?</h3><p>Расчёт использует текущий график, комиссии, льготы, изменения ставки и уже добавленные операции.</p></div>
+        <Target/>
+      </div>
       <div className="form-grid">
         <label className="field"><span>Цель</span><select value={goalType} onChange={event => setGoalType(event.target.value as GoalPlannerGoal['type'])}><option value="monthsEarlier">Закрыть раньше</option><option value="targetDate">Закрыть к дате</option><option value="monthlyBudget">Уложиться в бюджет</option><option value="maxOverpayment">Ограничить переплату</option></select></label>
         {goalType === 'monthsEarlier' && <label className="field"><span>Сократить срок</span><select value={months} onChange={event => setMonths(Number(event.target.value) as GoalTermReductionMonths)}>{GOAL_TERM_REDUCTION_MONTHS.map(value => <option value={value} key={value}>{termReductionLabels[value]}</option>)}</select></label>}
@@ -200,29 +222,34 @@ export function GoalPlanner({ loanId, sourceRevision, config, repayments, repaym
         <label className="field"><span>Можно внести разово</span><input inputMode="decimal" value={availableNow} onChange={event => setAvailableNow(event.target.value)}/></label>
       </div>
       <p className="goal-form-note">Комбинированный вариант фиксирует доступный разовый взнос и подбирает минимальную регулярную доплату. Разовый взнос и его комиссия показываются отдельно.</p>
-      <div className="goal-form-actions"><button className="primary" disabled={disabled || loading} onClick={calculate}><Target/> {loading ? 'Подбираем варианты…' : 'Рассчитать план'}</button>{loading && <button className="ghost" onClick={cancel}>Отменить</button>}</div>
+      <div className="goal-form-actions">
+        <button className="primary" disabled={disabled || loading} onClick={calculate}><Target/> {loading ? 'Подбираем варианты…' : 'Рассчитать план'}</button>
+        {loading && <button className="ghost" onClick={cancel}>Отменить</button>}
+        {result && <button className="ghost" aria-controls="goal-planner-results" aria-expanded={showResults} onClick={toggleResults}>{showResults ? <ChevronUp/> : <ChevronDown/>} {showResults ? 'Скрыть результаты' : 'Показать результаты'}</button>}
+        {result && showResults && result.variants.some(item => item.status === 'achieved') && <button className="ghost" aria-controls="goal-planner-comparison" aria-expanded={showComparison} onClick={() => setShowComparison(value => !value)}><Scale/> {showComparison ? 'Скрыть сравнение' : 'Сравнить варианты'}</button>}
+      </div>
       {disabled && <p className="inline-error" role="status">Дождитесь актуального расчёта кредита и исправьте ошибки перед запуском планировщика.</p>}
+      {(loading || previewLoading) && <div className="alert goal-progress" role="status" aria-live="polite">{previewLoading ? 'Строим выбранный график…' : 'Подбираем минимальные суммы в отдельном Worker…'}</div>}
+      {error && <div className="alert" role="alert">{error}</div>}
+      {status && <div className="alert ready-notice" role="status"><Check/> {status}</div>}
+      {!resultIsCurrent && envelope && <div className="alert" role="status">Параметры изменились. Пересчитайте план, чтобы применить актуальный результат.</div>}
+
+      {result && showResults && <section className="goal-results goal-results-inline" id="goal-planner-results" aria-live="polite">
+        <div className="section-heading"><div><span className="eyebrow">Результат</span><h2>{result.status === 'alreadyAchieved' ? 'Цель уже достигнута текущим планом' : result.status === 'infeasible' ? 'Цель пока недостижима' : 'Варианты достижения цели'}</h2></div></div>
+        {result.message && <div className="alert ready-notice">{result.message}</div>}
+        {showComparison && <div className="table-wrap force-mobile-table goal-comparison" id="goal-planner-comparison"><table><caption className="sr-only">Сравнение рассчитанных вариантов достижения цели.</caption><thead><tr><th>Вариант</th><th>Закрытие</th><th>Проценты</th><th>Комиссии</th><th>Доп. вложения</th><th>Всего банку</th></tr></thead><tbody>{result.variants.filter(item => item.status === 'achieved').map(variant => <tr key={`compare-${variant.kind}`}><td>{variant.title}</td><td>{shortDate(variant.summary!.closingDate)}</td><td>{money(variant.summary!.total.interest)}</td><td>{money(variant.summary!.total.fees)}</td><td>{money(variant.summary!.plannerContribution.additionalInvestment)}</td><td>{money(variant.summary!.total.bankTransfer)}</td></tr>)}</tbody></table></div>}
+        <div className="goal-current"><span>Текущий план</span><b>Закрытие {shortDate(result.current.closingDate)}</b><small>Переплата {money(result.current.overpayment)} · процентов {money(result.current.totalInterest)}</small></div>
+        <div className="goal-variant-grid">{result.variants.map(variant => <article className={variant.status === 'achieved' ? 'goal-variant' : 'goal-variant infeasible'} key={variant.kind}>
+          <div className="goal-variant-head"><span>{variant.status === 'achieved' ? <CalendarCheck/> : <X/>}</span><div><small>{variant.status === 'achieved' ? 'Цель выполнима' : 'Недоступно'}</small><h3>{variant.title}</h3></div></div>
+          <p className="goal-variant-description">{variantDescriptions[variant.kind]}</p>
+          {variant.status === 'infeasible' ? <p className="goal-reason">{variant.reason}</p> : <>
+            <strong>{recommendation(variant, money)}</strong>
+            <dl className="goal-metrics"><div><dt>Дата закрытия</dt><dd>{shortDate(variant.summary!.closingDate)}</dd></div><div><dt>Экономия процентов</dt><dd>{money(variant.summary!.interestSavings)}</dd></div><div><dt>Дополнительные вложения</dt><dd>{money(variant.summary!.plannerContribution.additionalInvestment)}</dd></div><div><dt>По операциям плана банку</dt><dd>{money(variant.summary!.plannerContribution.bankTransfer)}</dd></div><div><dt>Обязательная часть в операциях</dt><dd>{money(variant.summary!.plannerContribution.regularPayment)}</dd></div><div><dt>Досрочно в тело</dt><dd>{money(variant.summary!.plannerContribution.principal)}</dd></div><div><dt>Проценты в операциях</dt><dd>{money(variant.summary!.plannerContribution.interest)}</dd></div><div><dt>Комиссия плана</dt><dd>{money(variant.summary!.plannerContribution.fees)}</dd></div>{variant.summary!.plannerContribution.unused > 0 && <div><dt>Не потребуется из указанного</dt><dd>{money(variant.summary!.plannerContribution.unused)}</dd></div>}<div><dt>Всего банку за кредит</dt><dd>{money(variant.summary!.total.bankTransfer)}</dd></div></dl>
+            <div className="goal-card-actions"><button className="ghost" disabled={previewLoading} onClick={() => openPreview(variant)}><Eye/> Посмотреть новый график</button><button className="primary" onClick={() => apply(variant)}>Добавить этот план в кредит</button></div>
+          </>}
+        </article>)}</div>
+      </section>}
     </section>
-
-    {(loading || previewLoading) && <div className="alert goal-progress" role="status" aria-live="polite">{previewLoading ? 'Строим выбранный график…' : 'Подбираем минимальные суммы в отдельном Worker…'}</div>}
-    {error && <div className="alert" role="alert">{error}</div>}
-    {status && <div className="alert ready-notice" role="status"><Check/> {status}</div>}
-    {!resultIsCurrent && envelope && <div className="alert" role="status">Параметры изменились. Пересчитайте план, чтобы применить актуальный результат.</div>}
-
-    {result && <section className="goal-results" aria-live="polite">
-      <div className="section-heading"><div><span className="eyebrow">Результат</span><h2>{result.status === 'alreadyAchieved' ? 'Цель уже достигнута текущим планом' : result.status === 'infeasible' ? 'Цель пока недостижима' : 'Варианты достижения цели'}</h2></div>{result.variants.some(item => item.status === 'achieved') && <button className="ghost" onClick={() => setShowComparison(value => !value)}><Scale/> {showComparison ? 'Скрыть сравнение' : 'Сравнить варианты'}</button>}</div>
-      {result.message && <div className="alert ready-notice">{result.message}</div>}
-      <div className="goal-current"><span>Текущий план</span><b>Закрытие {shortDate(result.current.closingDate)}</b><small>Переплата {money(result.current.overpayment)} · процентов {money(result.current.totalInterest)}</small></div>
-      <div className="goal-variant-grid">{result.variants.map(variant => <article className={variant.status === 'achieved' ? 'goal-variant' : 'goal-variant infeasible'} key={variant.kind}>
-        <div className="goal-variant-head"><span>{variant.status === 'achieved' ? <CalendarCheck/> : <X/>}</span><div><small>{variant.status === 'achieved' ? 'Цель выполнима' : 'Недоступно'}</small><h3>{variant.title}</h3></div></div>
-        {variant.status === 'infeasible' ? <p className="goal-reason">{variant.reason}</p> : <>
-          <strong>{recommendation(variant, money)}</strong>
-          <dl className="goal-metrics"><div><dt>Дата закрытия</dt><dd>{shortDate(variant.summary!.closingDate)}</dd></div><div><dt>Экономия процентов</dt><dd>{money(variant.summary!.interestSavings)}</dd></div><div><dt>Дополнительные вложения</dt><dd>{money(variant.summary!.plannerContribution.additionalInvestment)}</dd></div><div><dt>По операциям плана банку</dt><dd>{money(variant.summary!.plannerContribution.bankTransfer)}</dd></div><div><dt>Обязательная часть в операциях</dt><dd>{money(variant.summary!.plannerContribution.regularPayment)}</dd></div><div><dt>Досрочно в тело</dt><dd>{money(variant.summary!.plannerContribution.principal)}</dd></div><div><dt>Проценты в операциях</dt><dd>{money(variant.summary!.plannerContribution.interest)}</dd></div><div><dt>Комиссия плана</dt><dd>{money(variant.summary!.plannerContribution.fees)}</dd></div>{variant.summary!.plannerContribution.unused > 0 && <div><dt>Не потребуется из указанного</dt><dd>{money(variant.summary!.plannerContribution.unused)}</dd></div>}<div><dt>Всего банку за кредит</dt><dd>{money(variant.summary!.total.bankTransfer)}</dd></div></dl>
-          <div className="goal-card-actions"><button className="ghost" disabled={previewLoading} onClick={() => openPreview(variant)}><Eye/> Посмотреть новый график</button><button className="primary" onClick={() => apply(variant)}>Добавить этот план в кредит</button></div>
-        </>}
-      </article>)}</div>
-      {showComparison && <div className="table-wrap goal-comparison"><table><caption className="sr-only">Сравнение рассчитанных вариантов достижения цели.</caption><thead><tr><th>Вариант</th><th>Закрытие</th><th>Проценты</th><th>Комиссии</th><th>Доп. вложения</th><th>Всего банку</th></tr></thead><tbody>{result.variants.filter(item => item.status === 'achieved').map(variant => <tr key={`compare-${variant.kind}`}><td>{variant.title}</td><td>{shortDate(variant.summary!.closingDate)}</td><td>{money(variant.summary!.total.interest)}</td><td>{money(variant.summary!.total.fees)}</td><td>{money(variant.summary!.plannerContribution.additionalInvestment)}</td><td>{money(variant.summary!.total.bankTransfer)}</td></tr>)}</tbody></table></div>}
-    </section>}
     {preview && <GoalPlanPreviewModal envelope={preview} repayments={preview.result.repayments} displayDecimals={displayDecimals} close={() => setPreview(null)}/>}
   </div>
 }

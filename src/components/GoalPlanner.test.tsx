@@ -121,16 +121,27 @@ describe('GoalPlanner UI', () => {
     const applyGoalPlan = vi.fn()
     render(<GoalPlanner {...props({ applyGoalPlan })}/>)
 
-    await user.click(screen.getByRole('button', { name: 'Рассчитать план' }))
-    expect(await screen.findByText(/Платите дополнительно/)).toBeTruthy()
+    const calculateButton = screen.getByRole('button', { name: 'Рассчитать план' })
+    await user.click(calculateButton)
+    expect(await screen.findByText(/Доплачивайте сверх обязательного платежа/)).toBeTruthy()
+    expect(screen.getByText(/Обязательный платёж сохраняется/)).toBeTruthy()
     expect(screen.getByText('Укажите разовый взнос')).toBeTruthy()
     expect(screen.getByText('По операциям плана банку')).toBeTruthy()
     expect(screen.getByText('Обязательная часть в операциях')).toBeTruthy()
     expect(screen.getByText('Досрочно в тело')).toBeTruthy()
     expect(screen.getByText('Проценты в операциях')).toBeTruthy()
 
-    await user.click(screen.getByRole('button', { name: 'Сравнить варианты' }))
-    expect(screen.getByRole('table')).toBeTruthy()
+    const compareButton = screen.getByRole('button', { name: 'Сравнить варианты' })
+    expect(compareButton.parentElement).toBe(calculateButton.parentElement)
+    await user.click(compareButton)
+    expect(screen.getByRole('table').parentElement?.classList.contains('force-mobile-table')).toBe(true)
+    await user.click(screen.getByRole('button', { name: 'Скрыть сравнение' }))
+    expect(screen.queryByRole('table')).toBeNull()
+
+    await user.click(screen.getByRole('button', { name: 'Скрыть результаты' }))
+    expect(screen.queryByText(/Доплачивайте сверх обязательного платежа/)).toBeNull()
+    await user.click(screen.getByRole('button', { name: 'Показать результаты' }))
+    expect(screen.getByText(/Доплачивайте сверх обязательного платежа/)).toBeTruthy()
     await user.click(screen.getByRole('button', { name: 'Добавить этот план в кредит' }))
 
     expect(applyGoalPlan).toHaveBeenCalledWith(expect.objectContaining({
@@ -159,12 +170,12 @@ describe('GoalPlanner UI', () => {
     const user = userEvent.setup()
     const { rerender } = render(<GoalPlanner {...props()}/>)
     await user.click(screen.getByRole('button', { name: 'Рассчитать план' }))
-    expect(await screen.findByText(/Платите дополнительно/)).toBeTruthy()
+    expect(await screen.findByText(/Доплачивайте сверх обязательного платежа/)).toBeTruthy()
 
     rerender(<GoalPlanner {...props({ sourceRevision: 'source-2' })}/>)
 
     await waitFor(() => expect(screen.getByText(/Параметры изменились/)).toBeTruthy())
-    expect(screen.queryByText(/Платите дополнительно/)).toBeNull()
+    expect(screen.queryByText(/Доплачивайте сверх обязательного платежа/)).toBeNull()
   })
 
   it('отменяет выполняющийся подбор без сохранения результата', async () => {
