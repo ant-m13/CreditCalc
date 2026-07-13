@@ -92,7 +92,7 @@ export function accrueInterestSegmentsRaw(
     const afterGrace = addIsoDays(period.endDate, 1)
     if (afterGrace > range.start && afterGrace < range.endExclusive) boundaries.add(afterGrace)
   })
-  if (config.interest.dayCountBasis === 'actualActual') {
+  if (config.interest.method === 'daily' && config.interest.dayCountBasis === 'actualActual') {
     for (let year = Number(range.start.slice(0, 4)) + 1; ; year += 1) {
       const yearStart = `${String(year).padStart(4, '0')}-01-01`
       if (yearStart >= range.endExclusive) break

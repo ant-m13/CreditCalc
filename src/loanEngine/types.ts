@@ -151,6 +151,7 @@ export interface PaymentScheduleItem {
     segmentEnd?: string
     segmentDays?: number
     days: number
+    interestMethod: InterestConfig['method']
     dayCountBasis: DayCountBasis
     interestBalance: number
     interestBeforeRounding: number

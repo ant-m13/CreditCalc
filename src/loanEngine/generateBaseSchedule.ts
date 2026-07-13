@@ -296,6 +296,7 @@ export function generateBaseSchedule(config: LoanConfig, options: Options = {}):
       segmentEnd: to,
       segmentDays: periodDays(from, to, includeTo, shouldExcludeStartDate(config)),
       days: segments.reduce((sum, segment) => sum + segment.days, 0),
+      interestMethod: config.interest.method,
       dayCountBasis: config.interest.dayCountBasis,
       interestBalance: num(segments[0]?.balance ?? currentBalance, config.rounding),
       interestBeforeRounding: sumRawInterest(segments).toNumber(),

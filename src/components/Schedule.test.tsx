@@ -1,12 +1,14 @@
 // @vitest-environment jsdom
 import { useState } from 'react'
-import { fireEvent, render, screen } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { PaymentScheduleItem } from '../loanEngine'
 import { calculateDebtAtDate, generateBaseSchedule } from '../loanEngine'
 import { defaultConfig } from '../loanDefaults'
 import { createMoneyFormatter } from '../formatters'
 import { getScheduleScrollBehavior, Schedule } from './Schedule'
+
+afterEach(() => cleanup())
 
 const scheduleRow = (patch: Partial<PaymentScheduleItem> = {}): PaymentScheduleItem => ({
   number: 1,
@@ -63,6 +65,19 @@ describe('Schedule', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Перейти' }))
 
     expect(screen.getByText('Дата/месяц не найден')).toBeTruthy()
+  })
+
+  it('помечает базу года как неприменимую в формуле периодического метода', () => {
+    const periodicConfig = { ...defaultConfig, interest: { ...defaultConfig.interest, method: 'annuity' as const } }
+    const schedule = generateBaseSchedule(periodicConfig)
+    function AuditProbe() {
+      const [rows, setRows] = useState(0)
+      return <Schedule schedule={schedule} baseSchedule={schedule} repayments={[]} config={periodicConfig} gracePeriods={[]} currency="RUB" displayDecimals={2} rows={rows} setRows={setRows}/>
+    }
+    render(<AuditProbe/>)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Показать формулу строки 2' }))
+    expect(screen.getAllByText('Не применяется при расчёте по периодам').length).toBeGreaterThan(0)
   })
 
   it('не монтирует весь большой график и переключает страницы', () => {

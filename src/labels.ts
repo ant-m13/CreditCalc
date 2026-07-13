@@ -42,7 +42,7 @@ export const graceTypeName = (type: GracePeriod['type']) =>
 export const dayCountBasisLabel = (value: LoanConfig['interest']['dayCountBasis']) =>
   value === 'actualActual' ? 'фактические дни / фактический год' :
   value === 'actual365' ? 'фактические дни / 365 дней' :
-  `${value} дней`
+  `фактические дни / ${value} дней`
 
 export const roundingName = (value: LoanConfig['rounding']) =>
   value === 'kopecks' ? 'До копеек' :

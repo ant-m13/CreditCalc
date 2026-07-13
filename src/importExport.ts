@@ -5,7 +5,7 @@ import type { RepaymentRule } from './repaymentRules'
 import { assertLoanCandidateValid } from './loanCandidate'
 import { MAX_EARLY_REPAYMENTS, MAX_GRACE_PERIODS, MAX_ID_LENGTH, MAX_MONEY_AMOUNT, MAX_PERCENT, MAX_RATE_CHANGES, MAX_REPAYMENT_RULES, MAX_RULE_SKIP_MONTHS, MAX_TERM_MONTHS, MAX_TEXT_FIELD_LENGTH } from './loanEngine/limits'
 import { isISODate, isISOYearMonth } from './utils/dateValidation'
-import { balanceMoments, dayCountBases, fontSizes, frequencies, graceTypes, interestMethods, isOneOf as oneOf, paymentTypes, periodStarts, rateChangeModes, repaymentOperationSources, repaymentRuleTypes, repaymentSources, repaymentStrategies, roundingModes, sameDayOrders, scenarioIds, supportedCurrencies, termUnits, themeNames } from './portableSchemas'
+import { balanceMoments, dayCountBases, fontSizes, frequencies, graceTypes, interestMethods, isOneOf as oneOf, migrateLegacyDayCountBasis, paymentTypes, periodStarts, rateChangeModes, repaymentOperationSources, repaymentRuleTypes, repaymentSources, repaymentStrategies, roundingModes, sameDayOrders, scenarioIds, supportedCurrencies, termUnits, themeNames } from './portableSchemas'
 import { normalizeAccentColor } from './accentColor'
 
 export interface LoanBackupData {
@@ -110,6 +110,8 @@ export function parseLoanBackupObject(raw: unknown): ValidatedLoanData {
   if (source.interest !== undefined && !isObject(source.interest)) throw new Error('Правила начисления процентов повреждены')
   const interest = isObject(source.interest) ? source.interest : {}
   const importWarnings: string[] = []
+  const dayCountBasisCandidate = migrateLegacyDayCountBasis(interest.dayCountBasis)
+  if (interest.dayCountBasis === '365') importWarnings.push('Legacy-база 365 преобразована в однозначную Actual/365 без изменения расчёта')
   let currency: LoanConfig['currency']
   if (source.currency === undefined) {
     currency = defaultConfig.currency
@@ -142,7 +144,7 @@ export function parseLoanBackupObject(raw: unknown): ValidatedLoanData {
     earlyRepaymentFeePercent: valueOrDefault(source.earlyRepaymentFeePercent, defaultConfig.earlyRepaymentFeePercent) as number,
     interest: {
       method: explicitOneOfOrDefault(interest.method, interestMethods, defaultConfig.interest.method, 'Метод начисления процентов'),
-      dayCountBasis: explicitOneOfOrDefault(interest.dayCountBasis, dayCountBases, defaultConfig.interest.dayCountBasis, 'База расчёта дней'),
+      dayCountBasis: explicitOneOfOrDefault(dayCountBasisCandidate, dayCountBases, defaultConfig.interest.dayCountBasis, 'База расчёта дней'),
       includePaymentDate: explicitBooleanOrDefault(interest.includePaymentDate, defaultConfig.interest.includePaymentDate, 'Правило включения даты платежа'),
       periodStart: explicitOneOfOrDefault(interest.periodStart, periodStarts, defaultConfig.interest.periodStart, 'Начало процентного периода'),
       balanceMoment: explicitOneOfOrDefault(interest.balanceMoment, balanceMoments, defaultConfig.interest.balanceMoment, 'Момент остатка для процентов')

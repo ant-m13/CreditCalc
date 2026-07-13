@@ -288,7 +288,7 @@ describe('loan engine', () => {
       firstPaymentDate: '2024-02-01',
       paymentDay: 1,
       firstPaymentInterestOnly: false,
-      interest: { method: 'daily', dayCountBasis: '365', includePaymentDate: true, periodStart: 'exclusive', balanceMoment: 'endOfDay' }
+      interest: { method: 'daily', dayCountBasis: 'actual365', includePaymentDate: true, periodStart: 'exclusive', balanceMoment: 'endOfDay' }
     }
     const schedule = generateBaseSchedule(dailyEnd, {
       earlyRepayments: [early({ date: '2024-01-15', amount: 65_000, strategy: 'reduceTerm', interestFirst: false })]
@@ -972,7 +972,6 @@ describe('variable rate history', () => {
 describe('day count bases', () => {
   it.each([
     ['360', 1_000_000 * 0.10 * 31 / 360],
-    ['365', 1_000_000 * 0.10 * 31 / 365],
     ['366', 1_000_000 * 0.10 * 31 / 366],
     ['actual365', 1_000_000 * 0.10 * 31 / 365],
     ['actualActual', 1_000_000 * 0.10 * 31 / 366],

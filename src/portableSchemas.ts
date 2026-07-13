@@ -3,7 +3,7 @@ export const paymentTypes = ['annuity', 'differentiated'] as const
 export const frequencies = ['monthly', 'biweekly', 'quarterly'] as const
 export const roundingModes = ['kopecks', 'rubles', 'bank'] as const
 export const interestMethods = ['annuity', 'daily'] as const
-export const dayCountBases = ['365', '366', '360', 'actual365', 'actualActual'] as const
+export const dayCountBases = ['366', '360', 'actual365', 'actualActual'] as const
 export const periodStarts = ['inclusive', 'exclusive'] as const
 export const balanceMoments = ['startOfDay', 'endOfDay'] as const
 export const rateChangeModes = ['nextPeriod', 'exactDate'] as const
@@ -21,3 +21,5 @@ export const themeNames = ['emerald', 'ocean', 'violet', 'graphite', 'warm', 'ni
 
 export const isOneOf = <T extends string>(value: unknown, values: readonly T[]): value is T =>
   typeof value === 'string' && values.includes(value as T)
+
+export const migrateLegacyDayCountBasis = (value: unknown) => value === '365' ? 'actual365' : value
