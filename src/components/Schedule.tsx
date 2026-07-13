@@ -3,7 +3,7 @@ import type React from 'react'
 import { format, parseISO } from 'date-fns'
 import { ru } from 'date-fns/locale'
 import { ChevronDown, CircleHelp } from 'lucide-react'
-import type { EarlyRepayment, PaymentScheduleItem } from '../loanEngine'
+import { calculateDebtAtDate, type EarlyRepayment, type GracePeriod, type LoanConfig, type PaymentScheduleItem } from '../loanEngine'
 import { createMoneyFormatter, plural, shortDate } from '../formatters'
 import { dayCountBasisLabel, roundingName } from '../labels'
 import { useBoundedPage } from '../hooks/useBoundedPage'
@@ -12,6 +12,8 @@ interface ScheduleProps {
   schedule: PaymentScheduleItem[]
   baseSchedule: PaymentScheduleItem[]
   repayments: EarlyRepayment[]
+  config: LoanConfig
+  gracePeriods: GracePeriod[]
   currency: string
   displayDecimals: 0 | 2
   rows: number
@@ -76,7 +78,7 @@ function ScheduleTable({ rows, expandedRows, toggleRow, showFees, showDeferred, 
 
 const collapsedColumnCount = (showFees: boolean, showDeferred: boolean) => 7 + (showFees ? 1 : 0) + (showDeferred ? 2 : 0)
 
-export function Schedule({ schedule, baseSchedule, repayments, currency, displayDecimals, rows, setRows }: ScheduleProps) {
+export function Schedule({ schedule, baseSchedule, repayments, config, gracePeriods, currency, displayDecimals, rows, setRows }: ScheduleProps) {
   const { money } = createMoneyFormatter(currency, displayDecimals)
   const [jump, setJump] = useState('')
   const [jumpError, setJumpError] = useState('')
@@ -99,8 +101,8 @@ export function Schedule({ schedule, baseSchedule, repayments, currency, display
   const today = format(new Date(), 'yyyy-MM-dd')
   const nextRow = schedule.find(row => row.date >= today) ?? schedule.at(-1)
   const nextEarly = repayments.find(item => item.date >= today)
-  const currentRow = [...schedule].reverse().find(row => row.date <= today)
-  const currentBalance = currentRow ? rowTotalDebt(currentRow) : schedule[0]?.openingBalance ?? 0
+  const currentDebt = calculateDebtAtDate(config, schedule, gracePeriods, today)
+  const currentBalance = today < config.issueDate ? config.principal : currentDebt.total
   const years = useMemo(() => [...new Set(schedule.map(row => row.date.slice(0, 4)))], [schedule])
   const amount = parseAmount(amountSearch)
   const filteredSchedule = useMemo(() => schedule.filter(row => (yearFilter === 'all' || row.date.startsWith(yearFilter)) && (amount === null || matchesAmount(row, amount))), [schedule, yearFilter, amount])
@@ -185,7 +187,7 @@ export function Schedule({ schedule, baseSchedule, repayments, currency, display
 
   return <section className="panel table-panel">
     <div className="panel-head schedule-head"><div><h3>График платежей</h3><p>{schedule.length} строк · показано {visibleRows.length} · закрытие {closingDate ? shortDate(closingDate) : '—'}</p></div><div className="schedule-tools"><input value={jump} onChange={event => { setJump(event.target.value); if (jumpError) setJumpError('') }} onKeyDown={event => { if (event.key === 'Enter') jumpTo() }} placeholder="Дата, месяц или год" aria-label="Дата или месяц для перехода по графику" aria-describedby={jumpError ? 'schedule-jump-error' : undefined}/><button className="ghost" onClick={jumpTo}>Перейти</button>{jumpError && <p id="schedule-jump-error" className="inline-error schedule-jump-error" role="status">{jumpError}</p>}</div></div>
-    <div className="mobile-schedule-bar"><div><span>Остаток долга</span><b>{money(currentBalance)}</b></div><div className="mobile-quick-actions"><button className="ghost compact" onClick={() => quickJump(today.slice(0,4))}>Текущий год</button>{nextRow && <button className="ghost compact" onClick={() => quickJump(nextRow.date)}>Следующий платёж</button>}{nextEarly && <button className="ghost compact" onClick={() => quickJump(nextEarly.date)}>Досрочные</button>}<button className="ghost compact" onClick={() => setMobileTableMode(value => !value)}>{mobileTableMode ? 'Карточки' : 'Таблица'}</button></div></div>
+    <div className="mobile-schedule-bar"><div><span>Общая текущая задолженность</span><b>{money(currentBalance)}</b><small>Основной долг + начисленные и отложенные проценты</small></div><div className="mobile-quick-actions"><button className="ghost compact" onClick={() => quickJump(today.slice(0,4))}>Текущий год</button>{nextRow && <button className="ghost compact" onClick={() => quickJump(nextRow.date)}>Следующий платёж</button>}{nextEarly && <button className="ghost compact" onClick={() => quickJump(nextEarly.date)}>Досрочные</button>}<button className="ghost compact" onClick={() => setMobileTableMode(value => !value)}>{mobileTableMode ? 'Карточки' : 'Таблица'}</button></div></div>
     <div className="schedule-filters"><label><span>Год</span><select value={yearFilter} onChange={event => setYearFilter(event.target.value)}><option value="all">Все годы</option>{years.map(year => <option value={year} key={year}>{year}</option>)}</select></label><label><span>Поиск суммы</span><input inputMode="decimal" value={amountSearch} onChange={event => setAmountSearch(event.target.value)} placeholder="Например 35479,81"/></label><button className="ghost" onClick={() => { setYearFilter('all'); setAmountSearch(''); setMonthsCollapsed(false); setOpenMonths(new Set()) }}>Сбросить</button><label className="schedule-collapse-toggle"><input type="checkbox" checked={monthsCollapsed} onChange={event => setMonthsCollapsed(event.target.checked)}/><span>Свернуть месяцы</span></label></div>
     <div className={mobileTableMode ? 'table-wrap force-mobile-table' : 'table-wrap'}>
       {monthsCollapsed ? <table className="bank-schedule"><caption className="sr-only">Свёрнутый график платежей по месяцам: количество строк, суммы погашения, проценты, комиссии, итог и задолженность на конец месяца.</caption><thead><tr><th>Месяц</th><th>Строк</th><th>По кредиту</th><th>По процентам</th>{showFees && <th>Комиссия</th>}<th>Итого</th><th>Остаток задолженности</th>{showDeferred && <><th>Отложенные проценты</th><th>Общая задолженность</th></>}<th>Действие</th></tr></thead><tbody>{groupedRows.map(group => {
