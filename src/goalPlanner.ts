@@ -210,7 +210,9 @@ const prepareContext = (input: GoalPlannerInput): PlannerContext => {
     ...input.repaymentRules.map(item => item.ruleSequence ?? 0)
   ]
   const nextSequence = Math.max(0, ...sequences) + 1
-  const maxSearchAmount = Math.min(MAX_MONEY_AMOUNT, Math.max(100, input.config.principal, current.totalPaid))
+  const principalShare = 1 - input.config.earlyRepaymentFeePercent / 100
+  const feeAdjustedUpperBound = principalShare > 0 ? current.totalPaid / principalShare : current.totalPaid
+  const maxSearchAmount = Math.min(MAX_MONEY_AMOUNT, Math.max(100, input.config.principal, current.totalPaid, feeAdjustedUpperBound))
   return { input, calendar, existingRepayments, current, maxSearchAmount, nextSequence }
 }
 

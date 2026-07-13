@@ -91,6 +91,21 @@ describe('goal planner', { timeout: 30_000 }, () => {
     expect(buildGoalPlanPreview(plannerInput, previousOperations).planned.overpayment).toBeGreaterThan(234_473.37)
   })
 
+  it('расширяет диапазон подбора срока с учётом высокой комиссии', () => {
+    const plannerInput = input({
+      config: { ...input().config, principal: 100_000, earlyRepaymentFeePercent: 90 },
+      goal: { type: 'targetDate', targetDate: '2026-08-01' },
+      availableNow: 0
+    })
+    const result = buildGoalPlans(plannerInput)
+    const oneTime = result.variants.find(item => item.kind === 'oneTime')!
+
+    expect(oneTime.status).toBe('achieved')
+    expect(oneTime.oneTimePayment).toBeGreaterThan(result.current.totalPaid)
+    expect(oneTime.summary!.closingDate <= '2026-08-01').toBe(true)
+    expect(oneTime.boundaryVerified).toBe(true)
+  })
+
   it('строит новый график из выбранного плана', () => {
     const plannerInput = input()
     const result = buildGoalPlans(plannerInput)
