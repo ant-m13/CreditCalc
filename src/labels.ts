@@ -52,5 +52,8 @@ export const roundingName = (value: LoanConfig['rounding']) =>
 export const rateChangeModeName = (value: LoanConfig['rateChangeMode']) =>
   value === 'exactDate' ? 'Точно с даты изменения' : 'Со следующего платёжного периода'
 
+export const firstInterestOnlyModeName = (value: LoanConfig['firstPaymentInterestOnlyMode']) =>
+  value === 'withinTerm' ? 'включён в договорный срок' : 'добавлен к договорному сроку'
+
 export const balanceMomentName = (value: LoanConfig['interest']['balanceMoment']) =>
   value === 'startOfDay' ? 'На начало дня' : 'На конец дня'

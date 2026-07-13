@@ -4,7 +4,7 @@ import { MAX_CALENDAR_DAYS, MAX_CALENDAR_YEARS, MAX_EARLY_REPAYMENTS, MAX_FINANC
 import { contractualFinalPaymentDate, preparePaymentCalendar, regularPaymentDateMatches, totalPaymentPeriods } from './dates'
 import { repaymentAmountModeContextForRegularDate, repaymentAmountModeValidationErrors } from './repaymentAmountMode'
 import { isISODate } from '../utils/dateValidation'
-import { balanceMoments, dayCountBases, frequencies, graceTypes, interestMethods, isOneOf as oneOf, paymentTypes, periodStarts, rateChangeModes, repaymentSources, repaymentStrategies, roundingModes, sameDayOrders } from '../portableSchemas'
+import { balanceMoments, dayCountBases, firstInterestOnlyModes, frequencies, graceTypes, interestMethods, isOneOf as oneOf, paymentTypes, periodStarts, rateChangeModes, repaymentSources, repaymentStrategies, roundingModes, sameDayOrders } from '../portableSchemas'
 
 const finite = (value: unknown) => typeof value === 'number' && Number.isFinite(value)
 
@@ -30,6 +30,7 @@ export function validateLoan(config: LoanConfig) {
   if (!finite(config.annualRate) || config.annualRate < 0 || config.annualRate > MAX_PERCENT) errors.push(`Ставка должна быть от 0 до ${MAX_PERCENT}%`)
   if (!oneOf(config.rateChangeMode, rateChangeModes)) errors.push('Режим изменения ставки повреждён')
   if (typeof config.firstPaymentInterestOnly !== 'boolean') errors.push('Настройка первого платежа повреждена')
+  if (config.firstPaymentInterestOnlyMode !== undefined && !oneOf(config.firstPaymentInterestOnlyMode, firstInterestOnlyModes)) errors.push('Режим первого платежа повреждён')
   if (!oneOf(config.paymentType, paymentTypes)) errors.push('Тип платежа повреждён')
   if (!oneOf(config.frequency, frequencies)) errors.push('Частота платежей повреждена')
   if (!oneOf(config.currency, supportedCurrencies)) errors.push('Валюта повреждена')
@@ -37,6 +38,7 @@ export function validateLoan(config: LoanConfig) {
   if (!finite(config.termMonths) || !(config.termMonths > 0)) errors.push('Срок должен быть больше нуля')
   if (finite(config.termMonths) && !Number.isInteger(config.termMonths)) errors.push('Срок должен быть целым числом месяцев')
   if (finite(config.termMonths) && config.termMonths > MAX_TERM_MONTHS) errors.push(`Срок не должен превышать ${MAX_TERM_MONTHS} месяцев`)
+  if (config.firstPaymentInterestOnly && config.firstPaymentInterestOnlyMode === 'withinTerm' && finite(config.termMonths) && totalPaymentPeriods(config) < 2) errors.push('Для первого платежа только процентами внутри договорного срока нужно не менее двух платёжных периодов')
   if (!finite(config.paymentDay) || config.paymentDay < 1 || config.paymentDay > 31) errors.push('День платежа должен быть от 1 до 31')
   if (finite(config.paymentDay) && !Number.isInteger(config.paymentDay)) errors.push('День платежа должен быть целым числом')
   if (!finite(config.closeThreshold) || config.closeThreshold < 0 || config.closeThreshold > MAX_MONEY_AMOUNT) errors.push(`Порог закрытия должен быть от 0 до ${MAX_MONEY_AMOUNT}`)

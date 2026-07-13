@@ -1,4 +1,4 @@
-import { balanceMoments, dayCountBases, frequencies, graceTypes, interestMethods, paymentTypes, periodStarts, rateChangeModes, repaymentAmountModes, repaymentOperationSources, repaymentSources, repaymentStrategies, roundingModes, sameDayOrders, supportedCurrencies } from '../portableSchemas'
+import { balanceMoments, dayCountBases, firstInterestOnlyModes, frequencies, graceTypes, interestMethods, paymentTypes, periodStarts, rateChangeModes, repaymentAmountModes, repaymentOperationSources, repaymentSources, repaymentStrategies, roundingModes, sameDayOrders, supportedCurrencies } from '../portableSchemas'
 
 export { supportedCurrencies } from '../portableSchemas'
 export type PaymentType = typeof paymentTypes[number]
@@ -8,6 +8,7 @@ export type EarlySource = typeof repaymentSources[number]
 export type DayCountBasis = typeof dayCountBases[number]
 export type RoundingMode = typeof roundingModes[number]
 export type RateChangeMode = typeof rateChangeModes[number]
+export type FirstInterestOnlyMode = typeof firstInterestOnlyModes[number]
 export type EarlyRepaymentAmountMode = typeof repaymentAmountModes[number]
 export type LoanCurrency = typeof supportedCurrencies[number]
 export type ScheduleEventType =
@@ -61,6 +62,7 @@ export interface LoanConfig {
   issueDate: string
   firstPaymentDate: string
   firstPaymentInterestOnly: boolean
+  firstPaymentInterestOnlyMode?: FirstInterestOnlyMode
   termMonths: number
   paymentDay: number
   paymentType: PaymentType

@@ -21,7 +21,7 @@ import { sortRepaymentRulesByApplicationOrder, validateRepaymentRuleStructure, t
 import type { LoanData, LoanImportData, LoanPersistedState, LoanProfile, QuarantinedLoanRaw, ThemeName } from './storeTypes'
 import { createId } from './utils/createId'
 import { isISODate, isISOYearMonth } from './utils/dateValidation'
-import { balanceMoments, dayCountBases, fontSizes, frequencies, graceTypes, interestMethods, isOneOf, migrateLegacyDayCountBasis, paymentTypes, periodStarts, rateChangeModes, repaymentRuleTypes, repaymentSources, repaymentStrategies, roundingModes, sameDayOrders, scenarioIds, supportedCurrencies, termUnits, themeNames } from './portableSchemas'
+import { balanceMoments, dayCountBases, firstInterestOnlyModes, fontSizes, frequencies, graceTypes, interestMethods, isOneOf, migrateLegacyDayCountBasis, paymentTypes, periodStarts, rateChangeModes, repaymentRuleTypes, repaymentSources, repaymentStrategies, roundingModes, sameDayOrders, scenarioIds, supportedCurrencies, termUnits, themeNames } from './portableSchemas'
 import { defaultAccentColor, normalizeAccentColor } from './accentColor'
 
 export const MAX_LOANS = 100
@@ -153,6 +153,7 @@ const normalizeConfig = (config: Partial<LoanConfig> | undefined): LoanConfig =>
     issueDate,
     firstPaymentDate,
     firstPaymentInterestOnly: typeof source.firstPaymentInterestOnly === 'boolean' ? source.firstPaymentInterestOnly : true,
+    firstPaymentInterestOnlyMode: oneOf(source.firstPaymentInterestOnlyMode, firstInterestOnlyModes, 'addToTerm'),
     termMonths: Math.round(finiteNumber(source.termMonths, defaultConfig.termMonths, 1, MAX_TERM_MONTHS)),
     paymentDay: Math.round(finiteNumber(source.paymentDay, defaultConfig.paymentDay, 1, 31)),
     paymentType: oneOf(source.paymentType, paymentTypes, defaultConfig.paymentType),

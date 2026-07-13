@@ -389,7 +389,7 @@ describe('loan engine', () => {
   })
 
   it('считает первый процентный аннуитетный платёж дополнительным stub-периодом', () => {
-    const stubConfig: LoanConfig = { ...config, principal: 120_000, annualRate: 12, termMonths: 12, issueDate: '2024-01-01', firstPaymentDate: '2024-02-01', paymentDay: 1, firstPaymentInterestOnly: true }
+    const stubConfig: LoanConfig = { ...config, principal: 120_000, annualRate: 12, termMonths: 12, issueDate: '2024-01-01', firstPaymentDate: '2024-02-01', paymentDay: 1, firstPaymentInterestOnly: true, firstPaymentInterestOnlyMode: 'addToTerm' }
     const schedule = generateBaseSchedule(stubConfig)
     const amortizingRows = schedule.filter(row => row.principalPaid > 0)
     const finalRow = schedule.at(-1)!
@@ -399,6 +399,28 @@ describe('loan engine', () => {
     expect(amortizingRows).toHaveLength(12)
     expect(finalRow.principalPaid).toBeLessThanOrEqual(Math.max(...amortizingRows.slice(0, -1).map(row => row.payment)))
     expect(finalRow.closingBalance).toBe(0)
+  })
+
+  it('включает первый interest-only платёж в договорный срок без balloon', () => {
+    const withinTerm: LoanConfig = { ...config, principal: 120_000, annualRate: 12, termMonths: 12, issueDate: '2024-01-01', firstPaymentDate: '2024-02-01', paymentDay: 1, firstPaymentInterestOnly: true, firstPaymentInterestOnlyMode: 'withinTerm' }
+    const schedule = generateBaseSchedule(withinTerm)
+    const first = schedule.find(row => row.date === withinTerm.firstPaymentDate)!
+    const amortizingRows = schedule.filter(row => row.principalPaid > 0)
+    const finalRow = schedule.at(-1)!
+
+    expect(scheduledPaymentDates(withinTerm)).toHaveLength(12)
+    expect(extendedPaymentPeriods(withinTerm, [])).toBe(0)
+    expect(first.eventTypes).toContain('firstInterestOnly')
+    expect(first.principalPaid).toBe(0)
+    expect(amortizingRows).toHaveLength(11)
+    expect(finalRow.date).toBe('2025-01-01')
+    expect(finalRow.eventTypes).not.toContain('materialBalloon')
+    expect(finalRow.closingBalance).toBe(0)
+  })
+
+  it('отклоняет interest-only внутри срока из одного платёжного периода', () => {
+    const invalid = { ...config, termMonths: 1, firstPaymentInterestOnly: true, firstPaymentInterestOnlyMode: 'withinTerm' as const }
+    expect(validateScenario(invalid, [], []).join(' ')).toContain('не менее двух платёжных периодов')
   })
 
   it('не создаёт скрытый balloon для daily accrual после процентного stub-периода', () => {
@@ -1135,6 +1157,7 @@ describe('edge cases', () => {
     const brokenConfig = {
       ...config,
       firstPaymentInterestOnly: 'yes',
+      firstPaymentInterestOnlyMode: 'outsideContract',
       paymentType: 'broken',
       frequency: 'weekly',
       rounding: 'ceil',
@@ -1167,6 +1190,7 @@ describe('edge cases', () => {
     const errors = validateScenario(brokenConfig, [brokenRepayment], [brokenGrace])
     expect(errors).toEqual(expect.arrayContaining([
       'Настройка первого платежа повреждена',
+      'Режим первого платежа повреждён',
       'Тип платежа повреждён',
       'Частота платежей повреждена',
       'Округление повреждено',

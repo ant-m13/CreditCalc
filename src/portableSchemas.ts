@@ -3,6 +3,7 @@ export const paymentTypes = ['annuity', 'differentiated'] as const
 export const frequencies = ['monthly', 'biweekly', 'quarterly'] as const
 export const roundingModes = ['kopecks', 'rubles', 'bank'] as const
 export const interestMethods = ['annuity', 'daily'] as const
+export const firstInterestOnlyModes = ['addToTerm', 'withinTerm'] as const
 export const dayCountBases = ['366', '360', 'actual365', 'actualActual'] as const
 export const periodStarts = ['inclusive', 'exclusive'] as const
 export const balanceMoments = ['startOfDay', 'endOfDay'] as const

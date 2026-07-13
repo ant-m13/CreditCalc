@@ -16,6 +16,14 @@ describe('PrintReport', () => {
     expect(screen.getByText('Номинальная ставка / период; база года не применяется')).toBeTruthy()
   })
 
+  it('показывает договорный режим первого interest-only платежа', () => {
+    const withinTerm = { ...defaultConfig, firstPaymentInterestOnly: true, firstPaymentInterestOnlyMode: 'withinTerm' as const }
+    const result = buildLoanCalculation({ config: withinTerm, repayments: [], repaymentRules: [], gracePeriods: [], selectedScenario: 'combined' })
+    render(<PrintReport config={withinTerm} displayDecimals={2} repayments={[]} repaymentRules={[]} gracePeriods={[]} comparison={result.comparison!} selected={result.selected!}/>)
+
+    expect(screen.getByText(/только проценты, включён в договорный срок/)).toBeTruthy()
+  })
+
   it('отличает выключенные операции и правила от применённых', () => {
     const result = buildLoanCalculation({ config: defaultConfig, repayments: [], repaymentRules: [], gracePeriods: [], selectedScenario: 'combined' })
     render(<PrintReport

@@ -65,7 +65,7 @@ export const preparePaymentCalendar = (config: LoanConfig, gracePeriods: GracePe
       throw new Error(`Календарь платежей не помещается в допустимое количество строк (${MAX_SCHEDULE_ROWS})`)
     }
     dates.push(cursor)
-    const isInterestOnlyStub = isFirstPaymentDate && config.firstPaymentInterestOnly
+    const isInterestOnlyStub = isFirstPaymentDate && config.firstPaymentInterestOnly && config.firstPaymentInterestOnlyMode !== 'withinTerm'
     if (!isInterestOnlyStub && !isExtendingGraceDate(cursor)) remainingContractualPayments -= 1
     isFirstPaymentDate = false
     cursor = nextPaymentDate(cursor, config)

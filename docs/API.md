@@ -86,6 +86,7 @@ JSON-файл создаётся кнопкой экспорта в прилож
 | `issueDate` | дата `YYYY-MM-DD` |
 | `firstPaymentDate` | дата `YYYY-MM-DD`, строго после `issueDate` |
 | `firstPaymentInterestOnly` | boolean |
+| `firstPaymentInterestOnlyMode` | `addToTerm` или `withinTerm`; для legacy-файлов по умолчанию `addToTerm` |
 | `termMonths` | integer, от 1 до 1200 |
 | `paymentDay` | integer, от 1 до 31 |
 | `paymentType` | `annuity` или `differentiated` |

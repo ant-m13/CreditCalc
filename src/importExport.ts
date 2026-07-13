@@ -5,7 +5,7 @@ import type { RepaymentRule } from './repaymentRules'
 import { assertLoanCandidateValid } from './loanCandidate'
 import { MAX_EARLY_REPAYMENTS, MAX_GRACE_PERIODS, MAX_ID_LENGTH, MAX_MONEY_AMOUNT, MAX_PERCENT, MAX_RATE_CHANGES, MAX_REPAYMENT_RULES, MAX_RULE_SKIP_MONTHS, MAX_TERM_MONTHS, MAX_TEXT_FIELD_LENGTH } from './loanEngine/limits'
 import { isISODate, isISOYearMonth } from './utils/dateValidation'
-import { balanceMoments, dayCountBases, fontSizes, frequencies, graceTypes, interestMethods, isOneOf as oneOf, migrateLegacyDayCountBasis, paymentTypes, periodStarts, rateChangeModes, repaymentOperationSources, repaymentRuleTypes, repaymentSources, repaymentStrategies, roundingModes, sameDayOrders, scenarioIds, supportedCurrencies, termUnits, themeNames } from './portableSchemas'
+import { balanceMoments, dayCountBases, firstInterestOnlyModes, fontSizes, frequencies, graceTypes, interestMethods, isOneOf as oneOf, migrateLegacyDayCountBasis, paymentTypes, periodStarts, rateChangeModes, repaymentOperationSources, repaymentRuleTypes, repaymentSources, repaymentStrategies, roundingModes, sameDayOrders, scenarioIds, supportedCurrencies, termUnits, themeNames } from './portableSchemas'
 import { normalizeAccentColor } from './accentColor'
 
 export interface LoanBackupData {
@@ -132,6 +132,7 @@ export function parseLoanBackupObject(raw: unknown): ValidatedLoanData {
     issueDate: valueOrDefault(source.issueDate, defaultConfig.issueDate) as string,
     firstPaymentDate: valueOrDefault(source.firstPaymentDate, defaultConfig.firstPaymentDate) as string,
     firstPaymentInterestOnly: explicitBooleanOrDefault(source.firstPaymentInterestOnly, defaultConfig.firstPaymentInterestOnly, 'Настройка первого платежа'),
+    firstPaymentInterestOnlyMode: explicitOneOfOrDefault(source.firstPaymentInterestOnlyMode, firstInterestOnlyModes, 'addToTerm', 'Режим первого платежа'),
     termMonths: valueOrDefault(source.termMonths, defaultConfig.termMonths) as number,
     paymentDay: valueOrDefault(source.paymentDay, defaultConfig.paymentDay) as number,
     paymentType: explicitOneOfOrDefault(source.paymentType, paymentTypes, defaultConfig.paymentType, 'Тип платежа'),

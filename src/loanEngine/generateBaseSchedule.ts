@@ -91,13 +91,15 @@ export function generateBaseSchedule(config: LoanConfig, options: Options = {}):
     config
   )
   const configuredPeriods = totalPaymentPeriods(config)
+  const interestOnlyWithinTerm = config.firstPaymentInterestOnly && config.firstPaymentInterestOnlyMode === 'withinTerm'
+  const amortizingPeriods = configuredPeriods - (interestOnlyWithinTerm ? 1 : 0)
   const maxPeriods = configuredPeriods + extendedPaymentPeriods(config, gracePeriods, paymentCalendar)
   const rateTimeline = createRateTimeline(config)
   let currentRemainingPeriods = maxPeriods
   let balance = money(config.principal, config.rounding)
-  let principalPerPeriod = money(new Decimal(balance).div(Math.max(1, configuredPeriods)), config.rounding)
+  let principalPerPeriod = money(new Decimal(balance).div(Math.max(1, amortizingPeriods)), config.rounding)
   let currentAnnualRate = config.annualRate
-  let payment = config.paymentType === 'annuity' ? calculateAnnuityPayment(balance, currentAnnualRate, configuredPeriods, periodsPerYear(config.frequency), config.rounding) : principalPerPeriod
+  let payment = config.paymentType === 'annuity' ? calculateAnnuityPayment(balance, currentAnnualRate, amortizingPeriods, periodsPerYear(config.frequency), config.rounding) : principalPerPeriod
   let paymentTracksReducedTerm = false
   let paymentDate = config.firstPaymentDate
   let previousPaymentDate = config.issueDate
