@@ -29,6 +29,8 @@ import {
 } from './storeNormalization'
 import { PERSISTED_LOAN_STORAGE_KEY } from './storageKeys'
 import type { LoanData, LoanImportData, LoanProfile, QuarantinedLoanRaw } from './storeTypes'
+import type { GoalPlanOperations } from './goalPlanner'
+import { createId } from './utils/createId'
 
 export { defaultConfig } from './loanDefaults'
 export { MAX_LOANS, loanToBackupData, normalizePersistedState } from './storeNormalization'
@@ -45,6 +47,15 @@ export type StorageStatusKind = 'saved' | 'nearQuota' | 'failed' | 'conflict' | 
 type StorageConflictKind = 'newer' | 'deleted' | 'race'
 interface PersistedMetadata { revision: number; updatedAt: string; epoch: string; writerId: string }
 export interface StorageConflictDetail extends PersistedMetadata { kind: StorageConflictKind }
+
+export interface ApplyGoalPlanRequest {
+  expectedLoanId: string
+  expectedConfig: LoanConfig
+  expectedRepayments: EarlyRepayment[]
+  expectedRepaymentRules: RepaymentRule[]
+  expectedGracePeriods: GracePeriod[]
+  operations: GoalPlanOperations
+}
 
 let lastKnownPersistedRevision = 0
 let lastKnownPersistedWriterId = ''
@@ -251,6 +262,7 @@ interface LoanState extends LoanData {
   addRepaymentRule: (rule: RepaymentRule) => void
   updateRepaymentRule: (rule: RepaymentRule) => void
   removeRepaymentRule: (id: string) => void
+  applyGoalPlan: (request: ApplyGoalPlanRequest) => void
   addGrace: (grace: GracePeriod) => void
   removeGrace: (id: string) => void
   selectScenario: (id: string) => void
@@ -355,6 +367,40 @@ export const useLoanStore = create<LoanState>()(persist((set) => ({
     return syncActive(s, { repaymentRules })
   }),
   removeRepaymentRule: (id) => set(s => syncActive(s, { repaymentRules: s.repaymentRules.filter(rule => rule.id !== id) })),
+  applyGoalPlan: (request) => set(s => {
+    if (
+      s.activeLoanId !== request.expectedLoanId ||
+      s.config !== request.expectedConfig ||
+      s.repayments !== request.expectedRepayments ||
+      s.repaymentRules !== request.expectedRepaymentRules ||
+      s.gracePeriods !== request.expectedGracePeriods
+    ) {
+      throw new Error('Кредит изменился после расчёта плана. Пересчитайте цель перед добавлением')
+    }
+    if (s.repayments.length + request.operations.repayments.length > MAX_EARLY_REPAYMENTS) {
+      throw new Error(`Можно добавить не более ${MAX_EARLY_REPAYMENTS} разовых платежей`)
+    }
+    if (s.repaymentRules.length + request.operations.repaymentRules.length > MAX_REPAYMENT_RULES) {
+      throw new Error(`Можно добавить не более ${MAX_REPAYMENT_RULES} правил досрочных платежей`)
+    }
+
+    let repayments = [...s.repayments]
+    for (const repayment of request.operations.repayments) {
+      const next = withRepaymentSequence(repayments, { ...repayment, id: createId('goal-early'), operationSource: 'manual' })
+      repayments = [...repayments, next]
+    }
+    repayments = sortRepayments(repayments)
+
+    let repaymentRules = [...s.repaymentRules]
+    for (const rule of request.operations.repaymentRules) {
+      const next = withRuleSequence(repaymentRules, { ...rule, id: createId('goal-rule'), ruleSequence: undefined })
+      assertRepaymentRuleStructurallyValid(next)
+      repaymentRules = [...repaymentRules, next]
+    }
+    repaymentRules = sortRules(repaymentRules)
+    assertRepaymentPlanValid(s.config, repayments, repaymentRules, s.gracePeriods)
+    return syncActive(s, { repayments, repaymentRules, selectedScenario: 'combined' })
+  }),
   addGrace: (grace) => set(s => {
     if (s.gracePeriods.length >= MAX_GRACE_PERIODS) throw new Error(`Можно добавить не более ${MAX_GRACE_PERIODS} льготных периодов`)
     const gracePeriods = [...s.gracePeriods, grace]
