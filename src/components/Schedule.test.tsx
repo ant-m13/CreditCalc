@@ -3,6 +3,9 @@ import { useState } from 'react'
 import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import type { PaymentScheduleItem } from '../loanEngine'
+import { calculateDebtAtDate, generateBaseSchedule } from '../loanEngine'
+import { defaultConfig } from '../loanDefaults'
+import { createMoneyFormatter } from '../formatters'
 import { getScheduleScrollBehavior, Schedule } from './Schedule'
 
 const scheduleRow = (patch: Partial<PaymentScheduleItem> = {}): PaymentScheduleItem => ({
@@ -41,7 +44,7 @@ function ScheduleProbe() {
     scheduleRow(),
     scheduleRow({ number: 2, date: '2026-08-15', openingBalance: 91000, closingBalance: 81800 })
   ]
-  return <Schedule schedule={schedule} baseSchedule={schedule} repayments={[]} currency="RUB" displayDecimals={2} rows={rows} setRows={setRows}/>
+  return <Schedule schedule={schedule} baseSchedule={schedule} repayments={[]} config={defaultConfig} gracePeriods={[]} currency="RUB" displayDecimals={2} rows={rows} setRows={setRows}/>
 }
 
 describe('Schedule', () => {
@@ -66,7 +69,7 @@ describe('Schedule', () => {
     const large = Array.from({ length: 250 }, (_, index) => scheduleRow({ number: index + 1 }))
     function LargeProbe() {
       const [rows, setRows] = useState(0)
-      return <Schedule schedule={large} baseSchedule={large} repayments={[]} currency="RUB" displayDecimals={2} rows={rows} setRows={setRows}/>
+      return <Schedule schedule={large} baseSchedule={large} repayments={[]} config={defaultConfig} gracePeriods={[]} currency="RUB" displayDecimals={2} rows={rows} setRows={setRows}/>
     }
     const { container } = render(<LargeProbe/>)
 
@@ -85,12 +88,31 @@ describe('Schedule', () => {
     }))
     function SavedRowsProbe() {
       const [rows, setRows] = useState(0)
-      return <Schedule schedule={selected} baseSchedule={base} repayments={[]} currency="RUB" displayDecimals={2} rows={rows} setRows={setRows}/>
+      return <Schedule schedule={selected} baseSchedule={base} repayments={[]} config={defaultConfig} gracePeriods={[]} currency="RUB" displayDecimals={2} rows={rows} setRows={setRows}/>
     }
     const { container } = render(<SavedRowsProbe/>)
 
     expect(container.querySelectorAll('.saved-schedule tbody tr')).toHaveLength(100)
     fireEvent.click(screen.getByRole('button', { name: 'Следующие исчезнувшие платежи' }))
     expect(container.querySelector('.saved-schedule tbody tr td')?.textContent).toBe('101')
+  })
+
+  it('показывает ту же задолженность с межплатёжными процентами, что и Overview', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2024-01-15T12:00:00Z'))
+    const config = { ...defaultConfig, principal: 120_000, annualRate: 12, issueDate: '2024-01-01', firstPaymentDate: '2024-02-01', paymentDay: 1, termMonths: 12 }
+    const schedule = generateBaseSchedule(config)
+    const expected = calculateDebtAtDate(config, schedule, [], '2024-01-15')
+    const { money } = createMoneyFormatter('RUB', 2)
+    function DebtProbe() {
+      const [rows, setRows] = useState(0)
+      return <Schedule schedule={schedule} baseSchedule={schedule} repayments={[]} config={config} gracePeriods={[]} currency="RUB" displayDecimals={2} rows={rows} setRows={setRows}/>
+    }
+    const { container } = render(<DebtProbe/>)
+
+    const debtBlock = container.querySelector('.mobile-schedule-bar > div')!
+    expect(debtBlock.querySelector('b')?.textContent).toBe(money(expected.total))
+    expect(expected.interest).toBeGreaterThan(0)
+    vi.useRealTimers()
   })
 })
