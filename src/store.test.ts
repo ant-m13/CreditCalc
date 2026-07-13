@@ -434,6 +434,52 @@ describe('лимиты store до мутации', () => {
     expect(useLoanStore.getState().loans).toHaveLength(MAX_LOANS)
   })
 
+  it('создаёт независимую копию существующего кредита и переключается на неё', () => {
+    const source = loanProfile({
+      id: 'loan-source',
+      name: 'Исходный кредит',
+      config: { ...defaultConfig, principal: 7_500_000, rateChanges: [{ id: 'rate-1', date: '2030-02-01', annualRate: 8 }] },
+      repayments: [repayment(1)],
+      repaymentRules: [rule(1)],
+      gracePeriods: [{ id: 'grace-1', startDate: '2026-08-01', endDate: '2026-08-31', type: 'interestOnly', extendTerm: true, accrueInterest: true, capitalizeInterest: false }],
+      selectedScenario: 'reducePayment',
+      theme: 'ocean'
+    })
+    setStoreLoan(source)
+
+    useLoanStore.getState().createLoan('Новый сценарий', source.id)
+
+    const state = useLoanStore.getState()
+    const copied = state.loans.find(loan => loan.id === state.activeLoanId)!
+    expect(state.loans).toHaveLength(2)
+    expect(copied).toMatchObject({
+      name: 'Новый сценарий',
+      config: source.config,
+      repayments: source.repayments,
+      repaymentRules: source.repaymentRules,
+      gracePeriods: source.gracePeriods,
+      selectedScenario: source.selectedScenario,
+      theme: source.theme
+    })
+    expect(copied.id).not.toBe(source.id)
+    expect(copied.config).not.toBe(source.config)
+    expect(copied.config.rateChanges).not.toBe(source.config.rateChanges)
+    expect(copied.repayments).not.toBe(source.repayments)
+    expect(copied.repaymentRules).not.toBe(source.repaymentRules)
+    expect(copied.gracePeriods).not.toBe(source.gracePeriods)
+
+    useLoanStore.getState().updateConfig({ principal: 6_000_000 })
+    expect(useLoanStore.getState().loans.find(loan => loan.id === source.id)?.config.principal).toBe(7_500_000)
+    expect(useLoanStore.getState().config.principal).toBe(6_000_000)
+  })
+
+  it('не создаёт копию из отсутствующего кредита', () => {
+    setStoreLoan(loanProfile())
+
+    expect(() => useLoanStore.getState().createLoan('Копия', 'missing-loan')).toThrow('не найден')
+    expect(useLoanStore.getState().loans).toHaveLength(1)
+  })
+
   it('не добавляет 5001-й разовый платёж', () => {
     const repayments = Array.from({ length: MAX_EARLY_REPAYMENTS }, (_, index) => repayment(index))
     setStoreLoan(loanProfile({ repayments }))
