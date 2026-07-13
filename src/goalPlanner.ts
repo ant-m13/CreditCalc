@@ -16,8 +16,11 @@ import type { LoanCalculationSource } from './loanCalculation'
 import { expandRepaymentRules, type RepaymentRule } from './repaymentRules'
 import { isISODate } from './utils/dateValidation'
 
+export const GOAL_TERM_REDUCTION_MONTHS = [6, 12, 24, 36, 60, 120] as const
+export type GoalTermReductionMonths = typeof GOAL_TERM_REDUCTION_MONTHS[number]
+
 export type GoalPlannerGoal =
-  | { type: 'monthsEarlier'; months: 6 | 12 | 24 }
+  | { type: 'monthsEarlier'; months: GoalTermReductionMonths }
   | { type: 'targetDate'; targetDate: string }
   | { type: 'monthlyBudget'; amount: number }
   | { type: 'maxOverpayment'; amount: number }
@@ -189,6 +192,10 @@ const validateInput = (input: GoalPlannerInput) => {
   if (input.planStartDate < input.config.issueDate) throw new Error('План не может начинаться раньше даты выдачи кредита')
   if (input.oneTimeDate < input.config.issueDate) throw new Error('Разовый взнос не может быть раньше даты выдачи кредита')
   validateMoney(input.availableNow, 'Доступный разовый взнос')
+  if (input.goal.type === 'monthsEarlier'
+    && !(GOAL_TERM_REDUCTION_MONTHS as readonly number[]).includes(input.goal.months)) {
+    throw new Error('Срок сокращения должен соответствовать доступному варианту цели')
+  }
   if (input.goal.type === 'targetDate' && !isISODate(input.goal.targetDate)) throw new Error('Целевая дата должна быть корректной')
   if (input.goal.type === 'monthlyBudget') validateMoney(input.goal.amount, 'Ежемесячный бюджет')
   if (input.goal.type === 'maxOverpayment') validateMoney(input.goal.amount, 'Целевая переплата', MAX_FINANCIAL_RESULT)

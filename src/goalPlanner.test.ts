@@ -102,6 +102,11 @@ describe('goal planner', { timeout: 30_000 }, () => {
     expect(result).toMatchObject({ status: 'alreadyAchieved', variants: [] })
   })
 
+  it('отклоняет неподдерживаемый срок сокращения из повреждённого снимка', () => {
+    const goal = { type: 'monthsEarlier', months: 48 } as unknown as GoalPlannerInput['goal']
+    expect(() => buildGoalPlans(input({ goal }))).toThrow('доступному варианту цели')
+  })
+
   it('ограничивает общий регулярный перевод заданным бюджетом', () => {
     const plannerInput = input({ goal: { type: 'monthlyBudget', amount: 18_000 } })
     const result = buildGoalPlans(plannerInput)
