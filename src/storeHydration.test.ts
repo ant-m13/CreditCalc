@@ -55,4 +55,20 @@ describe('safe persisted storage hydration', () => {
     const normalized = normalizePersistedState({ repayments: guarded }) as { repayments: unknown[] }
     expect(normalized.repayments).toHaveLength(MAX_EARLY_REPAYMENTS)
   })
+
+  it('удаляет persisted-кредит и не записывает изменения в режиме только в памяти', async () => {
+    const { useLoanStore } = await import('./store')
+    useLoanStore.getState().updateConfig({ principal: 7_000_000 })
+    expect(localStorage.getItem(PERSISTED_LOAN_STORAGE_KEY)).not.toBeNull()
+
+    useLoanStore.getState().setPersistentStorageEnabled(false)
+    expect(useLoanStore.getState().persistentStorageEnabled).toBe(false)
+    expect(localStorage.getItem(PERSISTED_LOAN_STORAGE_KEY)).toBeNull()
+
+    useLoanStore.getState().updateConfig({ principal: 8_000_000 })
+    expect(localStorage.getItem(PERSISTED_LOAN_STORAGE_KEY)).toBeNull()
+
+    useLoanStore.getState().setPersistentStorageEnabled(true)
+    expect(JSON.parse(localStorage.getItem(PERSISTED_LOAN_STORAGE_KEY)!)).toMatchObject({ state: { config: { principal: 8_000_000 } } })
+  })
 })

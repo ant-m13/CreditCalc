@@ -39,6 +39,8 @@ interface SettingsProps {
   setCustomAccentColor: (color: string) => void
   setUseCustomAccentColor: (enabled: boolean) => void
   resetCustomAccentColor: () => void
+  persistentStorageEnabled: boolean
+  setPersistentStorageEnabled: (enabled: boolean) => void
 }
 
 function SettingHelp({ text }: SettingHelpProps) {
@@ -89,7 +91,8 @@ export function Settings({
   config, update, updateInterest, termUnit, setTermUnit,
   displayDecimals, setDisplayDecimals, appFontSize, setAppFontSize,
   theme, setTheme, customAccentColor, useCustomAccentColor,
-  setCustomAccentColor, setUseCustomAccentColor, resetCustomAccentColor
+  setCustomAccentColor, setUseCustomAccentColor, resetCustomAccentColor,
+  persistentStorageEnabled, setPersistentStorageEnabled
 }: SettingsProps) {
   const [newRateDate, setNewRateDate] = useState('')
   const [newRateAnnualRate, setNewRateAnnualRate] = useState(config.annualRate)
@@ -261,6 +264,10 @@ export function Settings({
         <div className="setting-item"><label className="toggle-row">
           <div><b className="setting-title">Использовать свой акцент<SettingHelp text="Включает или отключает пользовательский акцентный цвет. Если выключено, используется цвет выбранной темы."/></b><span>Меняет кнопки, выделения и ключевые элементы</span></div>
           <input type="checkbox" checked={useCustomAccentColor} onChange={e => setUseCustomAccentColor(e.target.checked)}/>
+        </label></div>
+        <div className="setting-item"><label className="toggle-row">
+          <div><b className="setting-title">Постоянное сохранение<SettingHelp text="Если выключить, сохранённые кредиты удаляются из localStorage, а дальнейшие изменения остаются только в текущей вкладке. Перед закрытием скачайте JSON."/></b><span>{persistentStorageEnabled ? 'Кредиты хранятся в localStorage' : 'Данные только в памяти этой вкладки'}</span></div>
+          <input type="checkbox" checked={persistentStorageEnabled} onChange={e => setPersistentStorageEnabled(e.target.checked)}/>
         </label></div>
         <div className="setting-item"><Field label="Точность денежных сумм" help="Меняет только отображение сумм в интерфейсе. Расчетное ядро продолжает считать по выбранному правилу округления."><select value={displayDecimals} onChange={e => setDisplayDecimals(Number(e.target.value) as 0 | 2)}><option value="2">До копеек — 0,00 ₽</option><option value="0">До рублей — 0 ₽</option></select></Field></div>
         <div className="setting-item"><Field label="Масштаб текста" help="Увеличивает текст приложения и графика для удобства чтения. На расчеты не влияет."><select value={appFontSize} onChange={e => setAppFontSize(e.target.value as TextScale)}><option value="normal">Обычный</option><option value="large">Крупнее</option><option value="xlarge">Максимальный</option></select></Field></div>

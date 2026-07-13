@@ -22,6 +22,8 @@ The production project URL is `https://ant-m13.github.io/CreditCalc/`. Browser s
 
 For calculations that require stronger browser isolation, deploy CreditCalc on a dedicated custom domain/origin that does not host unrelated applications. Keep all content and third-party scripts served from that origin within the same security review boundary. A custom path on the existing `ant-m13.github.io` host is not a separate origin.
 
+The first-run dialog warns about this shared origin before the user enters loan data. Choosing “Работать без сохранения” removes the persisted loan state and keeps subsequent financial changes only in memory for the current tab; the same session-only mode can be changed under interface settings. Export JSON before closing the tab if those changes are needed later. This mode reduces persistent exposure but cannot isolate the live page from compromised same-origin content, browser extensions or the host environment.
+
 ## Browser Hardening
 
 The static build ships a restrictive CSP meta tag: scripts, stylesheet files, images, workers and connections are limited to the application origin, and development-only `ws:` / localhost endpoints are not allowed in production HTML. Inline scripts stay blocked; inline style attributes are allowed because React, custom accent colors and Recharts apply styles at runtime.
