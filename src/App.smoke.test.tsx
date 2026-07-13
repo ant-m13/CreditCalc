@@ -377,10 +377,10 @@ describe('App smoke tests', () => {
     const user = userEvent.setup()
     render(<App />)
 
-    act(() => window.dispatchEvent(new CustomEvent(STORAGE_CONFLICT_EVENT, { detail: { revision: 12, updatedAt: '2026-07-10T10:00:00.000Z' } })))
+    act(() => window.dispatchEvent(new CustomEvent(STORAGE_CONFLICT_EVENT, { detail: { revision: 12, updatedAt: '2026-07-10T10:00:00.000Z', epoch: 'remote-epoch', writerId: 'remote-writer', kind: 'newer' } })))
 
     expect(screen.getByRole('alert').textContent).toContain('Автоматическое объединение финансовых данных отключено')
-    expect(screen.getByRole('button', { name: 'Загрузить новую версию' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Загрузить внешнее состояние' })).toBeTruthy()
     await user.click(screen.getByRole('button', { name: 'Перезаписать из этой вкладки' }))
     expect(screen.queryByText(/Автоматическое объединение/)).toBeNull()
   })
