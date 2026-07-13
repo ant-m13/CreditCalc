@@ -24,10 +24,11 @@ describe('PrintReport', () => {
     expect(screen.queryByText('Применяется')).toBeNull()
   })
 
-  it('выводит final balloon в печатной сводке', () => {
-    const balloonConfig = { ...defaultConfig, principal: 120_000, annualRate: 12, issueDate: '2024-01-01', firstPaymentDate: '2024-02-01', firstPaymentInterestOnly: false, paymentDay: 1, termMonths: 12, closeThreshold: 0, interest: { ...defaultConfig.interest, method: 'annuity' as const } }
-    const result = buildLoanCalculation({ config: balloonConfig, repayments: [], repaymentRules: [], gracePeriods: [], selectedScenario: 'combined' })
-    render(<PrintReport config={balloonConfig} displayDecimals={2} repayments={[]} repaymentRules={[]} gracePeriods={[]} comparison={result.comparison!} selected={result.selected!}/>)
+  it('выводит только существенный final balloon в печатной сводке', () => {
+    const balloonConfig = { ...defaultConfig, principal: 120_000, annualRate: 0, issueDate: '2024-01-01', firstPaymentDate: '2024-02-01', firstPaymentInterestOnly: false, paymentDay: 1, termMonths: 12, closeThreshold: 0 }
+    const gracePeriods = [{ id: 'g-no-extend', startDate: '2024-03-01', endDate: '2024-05-31', type: 'full' as const, extendTerm: false, accrueInterest: false, capitalizeInterest: false }]
+    const result = buildLoanCalculation({ config: balloonConfig, repayments: [], repaymentRules: [], gracePeriods, selectedScenario: 'combined' })
+    render(<PrintReport config={balloonConfig} displayDecimals={2} repayments={[]} repaymentRules={[]} gracePeriods={gracePeriods} comparison={result.comparison!} selected={result.selected!}/>)
 
     expect(screen.getByRole('heading', { name: 'Финальный платёж' })).toBeTruthy()
     expect(screen.getByText(/Закрывает остаток долга и процентов/)).toBeTruthy()

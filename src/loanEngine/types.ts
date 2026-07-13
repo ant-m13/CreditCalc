@@ -25,7 +25,8 @@ export type ScheduleEventType =
   | 'deferredInterestPayment'
   | 'rateChange'
   | 'autoClose'
-  | 'finalBalloon'
+  | 'finalReconciliation'
+  | 'materialBalloon'
 
 export interface InterestAuditSegment {
   from: string

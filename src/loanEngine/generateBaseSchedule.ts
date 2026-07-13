@@ -479,6 +479,9 @@ export function generateBaseSchedule(config: LoanConfig, options: Options = {}):
     }
 
     if ((regularIndex >= maxPeriods || currentRemainingPeriods <= 1) && (balance.gt(0) || interestDue.gt(0) || deferredInterest.gt(0))) {
+      const finalAdjustment = balance.add(interestDue).add(deferredInterest)
+      const materialityThreshold = Decimal.max(1, Decimal.max(payment, regularPayment).mul(0.05))
+      const finalEventType = finalAdjustment.gt(materialityThreshold) ? 'materialBalloon' : 'finalReconciliation'
       const finalInterest = interestDue.add(deferredInterest)
       if (finalInterest.gt(0)) {
         paidInterestRegular = paidInterestRegular.add(finalInterest)
@@ -491,7 +494,14 @@ export function generateBaseSchedule(config: LoanConfig, options: Options = {}):
         regularPayment = regularPayment.add(balance)
         balance = clampDebtBalance(0)
       }
-      appendScheduleEvent(eventLabels, eventTypes, regularIndex >= maxPeriods ? 'Финальный платёж по договорной дате' : 'Финальный платёж по актуальному сроку', 'finalBalloon')
+      appendScheduleEvent(
+        eventLabels,
+        eventTypes,
+        finalEventType === 'materialBalloon'
+          ? (regularIndex >= maxPeriods ? 'Существенный финальный платёж по договорной дате' : 'Существенный финальный платёж по актуальному сроку')
+          : 'Финальная сверка округления',
+        finalEventType
+      )
     }
 
     if (interestDue.gt(0)) deferredInterest = deferredInterest.add(interestDue)
@@ -519,7 +529,7 @@ export function generateBaseSchedule(config: LoanConfig, options: Options = {}):
     const interestPaid = paidInterestRegular.add(earlyInterest)
     const cashFlowTotal = regularPayment.add(earlyTotal).add(feePaid)
     const isGracePayment = eventTypes.some(type => type === 'graceFull' || type === 'graceInterestOnly' || type === 'graceSpecialPayment')
-    const isRegularPayment = regularPayment.gt(0) && !isGracePayment && !eventTypes.some(type => type === 'firstInterestOnly' || type === 'deferredInterestPayment' || type === 'finalBalloon')
+    const isRegularPayment = regularPayment.gt(0) && !isGracePayment && !eventTypes.some(type => type === 'firstInterestOnly' || type === 'deferredInterestPayment' || type === 'materialBalloon')
     const rowDays = auditDays(auditInterestSegments, days)
     pushScheduleRow({
       number: ++rowNumber, date: paymentDate, days: rowDays, openingBalance: num(opening, config.rounding), payment: num(regularPayment, config.rounding),

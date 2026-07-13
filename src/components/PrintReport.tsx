@@ -32,7 +32,7 @@ export function PrintReport({ config, displayDecimals, repayments, repaymentRule
   const showDeferred = selected.schedule.some(row => Math.abs(row.deferredInterestOpening ?? 0) > 0.004 || Math.abs(row.deferredInterestClosing ?? 0) > 0.004)
   const paymentLabel = config.frequency === 'biweekly' ? 'Платёж раз в 2 недели' : config.frequency === 'quarterly' ? 'Квартальный платёж' : 'Ежемесячный платёж'
   const rateHistory = config.rateChanges.map(change => `${shortDate(change.date)} — ${change.annualRate}%`).join('; ')
-  const finalBalloon = selected.schedule.find(row => row.eventTypes.includes('finalBalloon'))
+  const finalBalloon = selected.schedule.find(row => row.eventTypes.includes('materialBalloon'))
   return <article className="print-report">
     <div className="print-title"><div><span>Кредитный калькулятор</span><h1>Расчёт кредита</h1><p>Сформировано {generated} · сценарий «{selected.name}» · версия {APP_VERSION} · commit {shortCommitSha(COMMIT_SHA)}</p></div><Landmark/></div>
     <section className="print-summary"><div><span>Сумма кредита</span><b>{money(config.principal)}</b></div><div><span>{paymentLabel}</span><b>{money(selected.monthlyPayment)}</b></div><div><span>Дата закрытия</span><b>{shortDate(selected.closingDate)}</b></div><div><span>Переплата</span><b>{money(selected.overpayment)}</b></div></section>
