@@ -16,13 +16,13 @@ describe('SectionErrorBoundary', () => {
     vi.restoreAllMocks()
   })
 
-  it('локализует ошибку раздела и сбрасывается при смене resetKey', () => {
-    const { rerender } = render(<SectionErrorBoundary resetKey="overview"><BrokenSection/></SectionErrorBoundary>)
+  it('локализует ошибку раздела и сбрасывается при смене раздела или кредита в resetKey', () => {
+    const { rerender } = render(<SectionErrorBoundary resetKey="overview:loan-1"><BrokenSection/></SectionErrorBoundary>)
 
     expect(screen.getByText('Не удалось отобразить раздел')).toBeTruthy()
     expect(screen.getByText('Раздел сломался')).toBeTruthy()
 
-    rerender(<SectionErrorBoundary resetKey="settings"><div>Раздел восстановлен</div></SectionErrorBoundary>)
+    rerender(<SectionErrorBoundary resetKey="overview:loan-2"><div>Раздел восстановлен</div></SectionErrorBoundary>)
 
     expect(screen.getByText('Раздел восстановлен')).toBeTruthy()
   })
