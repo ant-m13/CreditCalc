@@ -271,16 +271,27 @@ const searchMinimum = (
   predicate: (schedule: PaymentScheduleItem[]) => boolean
 ): SearchResult | null => {
   const cache = new Map<number, EvaluatedPlan>()
+  const failed = new Set<number>()
   const evaluate = (cents: number) => {
     const normalized = Math.max(0, cents)
     const cached = cache.get(normalized)
     if (cached) return cached
-    const evaluated = evaluateOperations(context, operationsAt(fromCents(normalized)))
-    cache.set(normalized, evaluated)
-    return evaluated
+    if (failed.has(normalized)) return null
+    try {
+      const evaluated = evaluateOperations(context, operationsAt(fromCents(normalized)))
+      cache.set(normalized, evaluated)
+      return evaluated
+    } catch {
+      failed.add(normalized)
+      return null
+    }
   }
-  const satisfies = (cents: number) => predicate(evaluate(cents).schedule)
-  if (satisfies(0)) return { amount: 0, evaluated: evaluate(0), boundaryVerified: true }
+  const satisfies = (cents: number) => {
+    const evaluated = evaluate(cents)
+    return evaluated ? predicate(evaluated.schedule) : false
+  }
+  const zero = evaluate(0)
+  if (zero && predicate(zero.schedule)) return { amount: 0, evaluated: zero, boundaryVerified: true }
 
   const maxCents = toCents(context.maxSearchAmount)
   let low = 0
@@ -297,6 +308,7 @@ const searchMinimum = (
     else low = middle
   }
   const evaluated = evaluate(high)
+  if (!evaluated) return null
   const boundaryVerified = predicate(evaluated.schedule) && (high === 0 || !satisfies(high - 1))
   if (!boundaryVerified) throw new Error('Не удалось подтвердить минимальную сумму с точностью до копейки')
   return { amount: fromCents(high), evaluated, boundaryVerified }
@@ -314,9 +326,6 @@ const overpaymentFor = (schedule: PaymentScheduleItem[], principal: number) =>
 
 const maxRegularTransfer = (schedule: PaymentScheduleItem[], startDate: string) =>
   Math.max(0, ...schedule.filter(row => row.isRegularPayment && row.date >= startDate).map(row => row.cashFlowTotal))
-
-const minimumRegularPayment = (context: PlannerContext) =>
-  Math.max(0, ...context.current.schedule.filter(row => row.isRegularPayment && row.date >= context.input.planStartDate).map(row => row.payment))
 
 const infeasibleVariant = (kind: GoalPlanVariantKind, reason: string): GoalPlanVariant => ({
   kind,
@@ -364,13 +373,12 @@ const searchVariant = (
 const planTargetGoal = (context: PlannerContext, predicate: (schedule: PaymentScheduleItem[]) => boolean, targetDate?: string) => {
   const monthlyStartTooLate = Boolean(targetDate && context.input.planStartDate > targetDate)
   const oneTimeTooLate = Boolean(targetDate && context.input.oneTimeDate > targetDate)
-  const minimumTotal = minimumRegularPayment(context)
   const monthlyExtra = monthlyStartTooLate
     ? infeasibleVariant('monthlyExtra', 'Дата начала ежемесячных платежей позже целевой даты')
     : searchVariant(context, 'monthlyExtra', amount => ({ repayments: [], repaymentRules: amount > 0 ? [makeRule(context, 'monthlyFixed', amount, 'reduceTerm')] : [] }), predicate, 'monthlyExtra')
   const monthlyTotalPayment = monthlyStartTooLate
     ? infeasibleVariant('monthlyTotalPayment', 'Дата начала общего платежа позже целевой даты')
-    : searchVariant(context, 'monthlyTotalPayment', amount => ({ repayments: [], repaymentRules: amount >= minimumTotal ? [makeRule(context, 'monthlyTotalPayment', amount, 'reduceTerm')] : [] }), predicate, 'totalMonthlyPayment')
+    : searchVariant(context, 'monthlyTotalPayment', amount => ({ repayments: [], repaymentRules: amount > 0 ? [makeRule(context, 'monthlyTotalPayment', amount, 'reduceTerm')] : [] }), predicate, 'totalMonthlyPayment')
   const oneTime = oneTimeTooLate
     ? infeasibleVariant('oneTime', 'Дата разового взноса позже целевой даты')
     : searchVariant(context, 'oneTime', amount => ({ repayments: amount > 0 ? [makeOneTime(context, amount, 'reduceTerm')] : [], repaymentRules: [] }), predicate, 'oneTimePayment')
