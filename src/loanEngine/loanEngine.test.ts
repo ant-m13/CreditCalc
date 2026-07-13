@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { calculateAnnuityPayment, calculateDebtAtDate, calculateInterest, compareScenarios, createRateTimeline, extendedPaymentPeriods, generateBaseSchedule, nextPaymentDate, scheduledPaymentDates, sortRepaymentsByApplicationOrder, validateScenario } from '.'
-import { MAX_MONEY_AMOUNT, MAX_RATE_CHANGES } from './limits'
+import { MAX_FINANCIAL_RESULT, MAX_MONEY_AMOUNT, MAX_RATE_CHANGES } from './limits'
+import { assertFiniteFinancialNumber } from './financialSafety'
 import type { EarlyRepayment, GracePeriod, LoanConfig } from './types'
 
 const config: LoanConfig = {
@@ -14,7 +15,8 @@ const early = (patch: Partial<EarlyRepayment> = {}): EarlyRepayment => ({ id: 'e
 describe('loan engine', () => {
   it('отклоняет нефинитные и чрезмерные денежные значения до построения графика', () => {
     expect(validateScenario({ ...config, principal: Number.MAX_VALUE }, [], []).join(' ')).toContain(String(MAX_MONEY_AMOUNT))
-    expect(validateScenario(config, [early({ amount: Number.POSITIVE_INFINITY })], []).join(' ')).toContain(String(MAX_MONEY_AMOUNT))
+    expect(validateScenario(config, [early({ amount: MAX_MONEY_AMOUNT + 1 })], []).join(' ')).toContain(String(MAX_MONEY_AMOUNT))
+    expect(validateScenario(config, [early({ amount: Number.POSITIVE_INFINITY })], []).join(' ')).toContain('сумма')
     expect(() => generateBaseSchedule({ ...config, principal: Number.MAX_VALUE })).toThrow(String(MAX_MONEY_AMOUNT))
   })
 
@@ -23,6 +25,11 @@ describe('loan engine', () => {
     const serialized = JSON.stringify(schedule)
     expect(serialized).not.toMatch(/(?:NaN|Infinity)/)
     expect(schedule.every(row => [row.payment, row.interest, row.principal, row.cashFlowTotal, row.closingBalance].every(Number.isFinite))).toBe(true)
+  })
+  it('ограничивает агрегаты безопасным диапазоном целых копеек', () => {
+    expect(Number.isSafeInteger(MAX_FINANCIAL_RESULT * 100)).toBe(true)
+    expect(MAX_FINANCIAL_RESULT * 100).toBeLessThanOrEqual(Number.MAX_SAFE_INTEGER)
+    expect(() => assertFiniteFinancialNumber(MAX_FINANCIAL_RESULT + 0.01, 'Итог')).toThrow('допустимый финансовый диапазон')
   })
   it('рассчитывает аннуитетный платёж', () => expect(calculateAnnuityPayment(1_000_000, 12, 12).toNumber()).toBeCloseTo(88848.79, 2))
   it('строит базовый график с выдачей и закрывает долг', () => { const s=generateBaseSchedule(config); expect(s[0]).toMatchObject({number:1,date:'2024-01-01',payment:0,interest:0,principal:0,closingBalance:3000000}); expect(s.length).toBeLessThanOrEqual(121); expect(s.at(-1)?.closingBalance).toBe(0) })
