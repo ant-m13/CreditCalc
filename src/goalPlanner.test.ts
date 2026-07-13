@@ -70,6 +70,26 @@ describe('goal planner', { timeout: 30_000 }, () => {
     expect(result.variants.some(item => item.status === 'achieved' && item.summary!.overpayment <= result.targetOverpayment!)).toBe(true)
   })
 
+  it('не пропускает узкое достижимое окно переплаты при высокой комиссии', () => {
+    const plannerInput = input({
+      config: { ...input().config, earlyRepaymentFeePercent: 20 },
+      goal: { type: 'maxOverpayment', amount: 234_473.37 }
+    })
+    const result = buildGoalPlans(plannerInput)
+    const oneTime = result.variants.find(item => item.kind === 'oneTime')!
+
+    expect(result.status).toBe('planned')
+    expect(oneTime.status).toBe('achieved')
+    expect(oneTime.boundaryVerified).toBe(true)
+    expect(oneTime.summary!.overpayment).toBeLessThanOrEqual(234_473.37)
+
+    const previousOperations = {
+      repayments: oneTime.operations.repayments.map(repayment => ({ ...repayment, amount: repayment.amount - 0.01 })),
+      repaymentRules: oneTime.operations.repaymentRules
+    }
+    expect(buildGoalPlanPreview(plannerInput, previousOperations).planned.overpayment).toBeGreaterThan(234_473.37)
+  })
+
   it('строит новый график из выбранного плана', () => {
     const plannerInput = input()
     const result = buildGoalPlans(plannerInput)
