@@ -1,0 +1,142 @@
+import {
+  buildGoalPlanPreview,
+  buildGoalPlans,
+  type GoalPlannerInput,
+  type GoalPlannerResult,
+  type GoalPlanOperations,
+  type GoalPlanPreview
+} from './goalPlanner'
+
+export interface GoalPlannerSnapshot extends GoalPlannerInput {
+  revision: string
+  loanId?: string
+}
+
+export type GoalPlannerEnvelope = {
+  revision: string
+  snapshot: GoalPlannerSnapshot
+  result: GoalPlannerResult
+}
+
+export type GoalPlanPreviewEnvelope = {
+  revision: string
+  snapshot: GoalPlannerSnapshot
+  result: GoalPlanPreview
+}
+
+type PlanRequest = {
+  requestId: number
+  kind: 'plan'
+  snapshot: GoalPlannerSnapshot
+}
+
+type PreviewRequest = {
+  requestId: number
+  kind: 'preview'
+  snapshot: GoalPlannerSnapshot
+  operations: GoalPlanOperations
+}
+
+export type GoalPlannerWorkerRequest = PlanRequest | PreviewRequest
+type GoalPlannerWorkerRequestWithoutId = Omit<PlanRequest, 'requestId'> | Omit<PreviewRequest, 'requestId'>
+
+export type GoalPlannerWorkerResponse =
+  | { requestId: number; kind: 'plan'; revision: string; result: GoalPlannerResult }
+  | { requestId: number; kind: 'preview'; revision: string; result: GoalPlanPreview }
+  | { requestId: number; kind: 'error'; revision: string; error: string }
+
+export const canUseGoalPlannerWorker = () => typeof Worker !== 'undefined'
+
+export class GoalPlannerRunner {
+  private worker: Worker | null = null
+  private requestId = 0
+
+  private cancelWorker() {
+    if (!this.worker) return
+    this.worker.onmessage = null
+    this.worker.onerror = null
+    this.worker.terminate()
+    this.worker = null
+  }
+
+  private run<T>(
+    request: GoalPlannerWorkerRequestWithoutId,
+    expectedKind: 'plan' | 'preview',
+    onResult: (result: T) => void,
+    onError: (message: string) => void
+  ) {
+    this.cancelWorker()
+    if (!canUseGoalPlannerWorker()) {
+      onError('Планировщик недоступен: браузер не поддерживает Web Worker')
+      return
+    }
+
+    const requestId = ++this.requestId
+    let worker: Worker
+    try {
+      worker = new Worker(new URL('./goalPlanner.worker.ts', import.meta.url), { type: 'module' })
+      this.worker = worker
+    } catch {
+      onError('Не удалось запустить Worker планировщика')
+      return
+    }
+
+    worker.onmessage = (event: MessageEvent<GoalPlannerWorkerResponse>) => {
+      const response = event.data
+      if (response.requestId !== requestId || response.revision !== request.snapshot.revision) return
+      worker.terminate()
+      if (this.worker === worker) this.worker = null
+      if (response.kind === 'error') {
+        onError(response.error)
+        return
+      }
+      if (response.kind !== expectedKind) {
+        onError('Worker планировщика вернул неожиданный ответ')
+        return
+      }
+      onResult(response.result as T)
+    }
+    worker.onerror = () => {
+      worker.terminate()
+      if (this.worker === worker) this.worker = null
+      onError('Worker планировщика завершился с ошибкой')
+    }
+
+    try {
+      worker.postMessage({ ...request, requestId } as GoalPlannerWorkerRequest)
+    } catch {
+      worker.terminate()
+      if (this.worker === worker) this.worker = null
+      onError('Не удалось передать данные в Worker планировщика')
+    }
+  }
+
+  calculate(snapshot: GoalPlannerSnapshot, onResult: (envelope: GoalPlannerEnvelope) => void, onError: (message: string) => void) {
+    this.run<GoalPlannerResult>(
+      { kind: 'plan', snapshot },
+      'plan',
+      result => onResult({ revision: snapshot.revision, snapshot, result }),
+      onError
+    )
+  }
+
+  preview(snapshot: GoalPlannerSnapshot, operations: GoalPlanOperations, onResult: (envelope: GoalPlanPreviewEnvelope) => void, onError: (message: string) => void) {
+    this.run<GoalPlanPreview>(
+      { kind: 'preview', snapshot, operations },
+      'preview',
+      result => onResult({ revision: snapshot.revision, snapshot, result }),
+      onError
+    )
+  }
+
+  cancel() {
+    this.cancelWorker()
+  }
+
+  dispose() {
+    this.cancelWorker()
+  }
+}
+
+export const calculateGoalPlansSynchronously = (snapshot: GoalPlannerSnapshot) => buildGoalPlans(snapshot)
+export const previewGoalPlanSynchronously = (snapshot: GoalPlannerSnapshot, operations: GoalPlanOperations) => buildGoalPlanPreview(snapshot, operations)
