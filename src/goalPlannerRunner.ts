@@ -47,6 +47,14 @@ export type GoalPlannerWorkerResponse =
 
 export const canUseGoalPlannerWorker = () => typeof Worker !== 'undefined'
 
+const isWorkerResponseEnvelope = (value: unknown): value is GoalPlannerWorkerResponse => {
+  if (!value || typeof value !== 'object') return false
+  const response = value as Record<string, unknown>
+  if (!Number.isSafeInteger(response.requestId) || typeof response.revision !== 'string') return false
+  if (response.kind === 'error') return typeof response.error === 'string'
+  return (response.kind === 'plan' || response.kind === 'preview') && Object.hasOwn(response, 'result')
+}
+
 export class GoalPlannerRunner {
   private worker: Worker | null = null
   private requestId = 0
@@ -81,33 +89,49 @@ export class GoalPlannerRunner {
       return
     }
 
-    worker.onmessage = (event: MessageEvent<GoalPlannerWorkerResponse>) => {
-      const response = event.data
-      if (response.requestId !== requestId || response.revision !== request.snapshot.revision) return
+    let settled = false
+    const settle = () => {
+      if (settled) return false
+      settled = true
+      worker.onmessage = null
+      worker.onerror = null
       worker.terminate()
       if (this.worker === worker) this.worker = null
+      return true
+    }
+    const fail = (message: string) => {
+      if (settle()) onError(message)
+    }
+
+    worker.onmessage = (event: MessageEvent<unknown>) => {
+      const response = event.data
+      if (!isWorkerResponseEnvelope(response)) {
+        fail('Worker планировщика вернул повреждённый ответ')
+        return
+      }
+      if (response.requestId !== requestId || response.revision !== request.snapshot.revision) {
+        fail('Worker планировщика вернул ответ для другого запроса')
+        return
+      }
       if (response.kind === 'error') {
-        onError(response.error)
+        fail(response.error || 'Worker планировщика не смог выполнить расчёт')
         return
       }
       if (response.kind !== expectedKind) {
-        onError('Worker планировщика вернул неожиданный ответ')
+        fail('Worker планировщика вернул неожиданный ответ')
         return
       }
-      onResult(response.result as T)
+      if (settle()) onResult(response.result as T)
     }
-    worker.onerror = () => {
-      worker.terminate()
-      if (this.worker === worker) this.worker = null
-      onError('Worker планировщика завершился с ошибкой')
+    worker.onerror = event => {
+      event.preventDefault()
+      fail('Worker планировщика завершился с ошибкой')
     }
 
     try {
       worker.postMessage({ ...request, requestId } as GoalPlannerWorkerRequest)
     } catch {
-      worker.terminate()
-      if (this.worker === worker) this.worker = null
-      onError('Не удалось передать данные в Worker планировщика')
+      fail('Не удалось передать данные в Worker планировщика')
     }
   }
 
