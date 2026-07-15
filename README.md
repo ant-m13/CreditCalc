@@ -182,11 +182,11 @@ pnpm test:pwa
 pnpm test:e2e
 pnpm audit --prod
 git add package.json CHANGELOG.md README.md docs src .github
-git commit -m "chore(release): prepare 1.7.4"
-git push origin release/1.7.4
+git commit -m "chore(release): prepare 1.7.5"
+git push origin release/1.7.5
 ```
 
-После merge release-ветки в `main` workflow сам создаст тег, релиз и запустит публикацию GitHub Pages из release-тега. Ручной запуск `release-dist.yml` или `deploy-pages.yml` тоже возможен, но нужно указать существующий тег, например `v1.7.4`.
+После merge release-ветки в `main` workflow сам создаст тег, релиз и запустит публикацию GitHub Pages из release-тега. Ручной запуск `release-dist.yml` или `deploy-pages.yml` тоже возможен, но нужно указать существующий тег, например `v1.7.5`.
 
 Архив релиза содержит готовую папку `dist` и подходит для размещения на любом статическом хостинге.
 
