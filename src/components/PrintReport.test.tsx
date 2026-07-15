@@ -3,13 +3,14 @@ import { cleanup, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
 import { buildLoanCalculation } from '../loanCalculation'
 import { defaultConfig } from '../loanDefaults'
+import { shortTestConfig } from '../testFixtures'
 import { PrintReport } from './PrintReport'
 
 afterEach(() => cleanup())
 
 describe('PrintReport', () => {
   it('не показывает day-count как действующую настройку для периодического метода', () => {
-    const periodicConfig = { ...defaultConfig, interest: { ...defaultConfig.interest, method: 'annuity' as const } }
+    const periodicConfig = { ...shortTestConfig, interest: { ...shortTestConfig.interest, method: 'annuity' as const } }
     const result = buildLoanCalculation({ config: periodicConfig, repayments: [], repaymentRules: [], gracePeriods: [], selectedScenario: 'combined' })
     render(<PrintReport config={periodicConfig} displayDecimals={2} repayments={[]} repaymentRules={[]} gracePeriods={[]} comparison={result.comparison!} selected={result.selected!}/>)
 
@@ -17,7 +18,7 @@ describe('PrintReport', () => {
   })
 
   it('показывает договорный режим первого interest-only платежа', () => {
-    const withinTerm = { ...defaultConfig, firstPaymentInterestOnly: true, firstPaymentInterestOnlyMode: 'withinTerm' as const }
+    const withinTerm = { ...shortTestConfig, firstPaymentInterestOnly: true, firstPaymentInterestOnlyMode: 'withinTerm' as const }
     const result = buildLoanCalculation({ config: withinTerm, repayments: [], repaymentRules: [], gracePeriods: [], selectedScenario: 'combined' })
     render(<PrintReport config={withinTerm} displayDecimals={2} repayments={[]} repaymentRules={[]} gracePeriods={[]} comparison={result.comparison!} selected={result.selected!}/>)
 
@@ -25,12 +26,12 @@ describe('PrintReport', () => {
   })
 
   it('отличает выключенные операции и правила от применённых', () => {
-    const result = buildLoanCalculation({ config: defaultConfig, repayments: [], repaymentRules: [], gracePeriods: [], selectedScenario: 'combined' })
+    const result = buildLoanCalculation({ config: shortTestConfig, repayments: [], repaymentRules: [], gracePeriods: [], selectedScenario: 'combined' })
     render(<PrintReport
-      config={defaultConfig}
+      config={shortTestConfig}
       displayDecimals={2}
-      repayments={[{ id: 'disabled', date: defaultConfig.firstPaymentDate, amount: 10_000, enabled: false, amountMode: 'extra', strategy: 'reduceTerm', source: 'own', sameDayOrder: 'regularFirst', interestFirst: true }]}
-      repaymentRules={[{ id: 'disabled-rule', name: 'Пауза', enabled: false, type: 'monthlyFixed', startDate: defaultConfig.firstPaymentDate, endDate: defaultConfig.firstPaymentDate, amount: 20_000, strategy: 'reduceTerm', source: 'own', sameDayOrder: 'regularFirst', interestFirst: true, skipMonths: [] }]}
+      repayments={[{ id: 'disabled', date: shortTestConfig.firstPaymentDate, amount: 10_000, enabled: false, amountMode: 'extra', strategy: 'reduceTerm', source: 'own', sameDayOrder: 'regularFirst', interestFirst: true }]}
+      repaymentRules={[{ id: 'disabled-rule', name: 'Пауза', enabled: false, type: 'monthlyFixed', startDate: shortTestConfig.firstPaymentDate, endDate: shortTestConfig.firstPaymentDate, amount: 20_000, strategy: 'reduceTerm', source: 'own', sameDayOrder: 'regularFirst', interestFirst: true, skipMonths: [] }]}
       gracePeriods={[]}
       comparison={result.comparison!}
       selected={result.selected!}
