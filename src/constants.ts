@@ -18,6 +18,7 @@ export const ISO_DATE_LENGTH = 10
 export const ISO_YEAR_LENGTH = 4
 export const ISO_YEAR_MONTH_LENGTH = 7
 export const CURRENCY_DECIMAL_PLACES = 2
+export const JSON_INDENT_SPACES = 2
 
 // Порог ниже половины копейки скрывает шум вычислений, но не скрывает сумму в одну копейку.
 export const MONEY_DISPLAY_EPSILON = 0.004

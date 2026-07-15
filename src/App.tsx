@@ -1,7 +1,7 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import { flushSync } from 'react-dom'
 import { ArrowDownToLine, CalendarDays, History, Landmark, Menu, Moon, PanelLeftClose, PanelLeftOpen, Plus, Printer, ReceiptText, Settings2, ShieldCheck, Sun, Target, TrendingDown, X } from 'lucide-react'
-import { ISO_DATE_LENGTH } from './constants'
+import { ISO_DATE_LENGTH, JSON_INDENT_SPACES } from './constants'
 import { isRegularPaymentDate, validateScenario, type EarlyRepayment } from './loanEngine'
 import { useLoanStore } from './store'
 import { FontControls } from './components/FontControls'
@@ -276,7 +276,7 @@ function App() {
   }, [download, guardCalculatedExport])
   const downloadQuarantinedLoans = useCallback(() => {
     try {
-      const body = JSON.stringify(createQuarantineExport(store.quarantinedLoansRaw), null, 2)
+      const body = JSON.stringify(createQuarantineExport(store.quarantinedLoansRaw), null, JSON_INDENT_SPACES)
       downloadBlob(new Blob([body], { type: 'application/json' }), `credit-quarantine-${new Date().toISOString().slice(0, ISO_DATE_LENGTH)}.json`)
       setImportStatus({ kind: 'success', text: 'Ограниченная recovery-копия карантина скачана' })
     } catch (error) {

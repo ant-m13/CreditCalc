@@ -17,10 +17,12 @@ interface EarlyModalProps {
   isRegularPaymentDate: (date: string) => boolean
 }
 
+const DEFAULT_EARLY_REPAYMENT_AMOUNT = '100000'
+
 export function EarlyModal({ close, save, initial, initialError = '', defaultDate, currency, isRegularPaymentDate }: EarlyModalProps) {
   const { dialogRef, titleId } = useModalDialog(close)
   const [date, setDate] = useState(initial?.date ?? defaultDate)
-  const [amount, setAmount] = useState(initial ? String(initial.amount) : '100000')
+  const [amount, setAmount] = useState(initial ? String(initial.amount) : DEFAULT_EARLY_REPAYMENT_AMOUNT)
   const [enabled, setEnabled] = useState(initial?.enabled ?? true)
   const [strategy, setStrategy] = useState<EarlyRepayment['strategy']>(initial?.strategy === 'custom' ? 'reduceTerm' : initial?.strategy ?? 'reduceTerm')
   const [source, setSource] = useState<EarlyRepayment['source']>(initial?.source ?? 'own')

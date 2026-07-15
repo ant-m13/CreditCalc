@@ -34,6 +34,10 @@ interface GoalPlannerProps {
   applyGoalPlan: (request: ApplyGoalPlanRequest) => void
 }
 
+const DEFAULT_MONTHLY_BUDGET = '50000'
+const DEFAULT_MAX_OVERPAYMENT = '100000'
+const DEFAULT_AVAILABLE_NOW = '100000'
+
 const parseAmount = (value: string) => {
   const amount = Number(value.replace(/\s/g, '').replace(',', '.'))
   return Number.isFinite(amount) ? amount : 0
@@ -93,11 +97,11 @@ export function GoalPlanner({ loanId, sourceRevision, config, repayments, repaym
   const [goalType, setGoalType] = useState<GoalPlannerGoal['type']>('monthsEarlier')
   const [months, setMonths] = useState<GoalTermReductionMonths>(DEFAULT_GOAL_TERM_REDUCTION_MONTHS)
   const [targetDate, setTargetDate] = useState(config.firstPaymentDate)
-  const [monthlyBudget, setMonthlyBudget] = useState('50000')
-  const [maxOverpayment, setMaxOverpayment] = useState('100000')
+  const [monthlyBudget, setMonthlyBudget] = useState(DEFAULT_MONTHLY_BUDGET)
+  const [maxOverpayment, setMaxOverpayment] = useState(DEFAULT_MAX_OVERPAYMENT)
   const [planStartDate, setPlanStartDate] = useState(initialDates.planStartDate)
   const [oneTimeDate, setOneTimeDate] = useState(initialDates.oneTimeDate)
-  const [availableNow, setAvailableNow] = useState('100000')
+  const [availableNow, setAvailableNow] = useState(DEFAULT_AVAILABLE_NOW)
   const [envelope, setEnvelope] = useState<GoalPlannerEnvelope | null>(null)
   const [preview, setPreview] = useState<GoalPlanPreviewEnvelope | null>(null)
   const [loading, setLoading] = useState(false)
