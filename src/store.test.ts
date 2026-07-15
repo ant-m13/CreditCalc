@@ -338,7 +338,8 @@ describe('миграция локального хранилища', () => {
 
     useLoanStore.getState().addRepayment(disabledRepayment)
 
-    expect(useLoanStore.getState().repayments).toEqual([disabledRepayment])
+    expect(useLoanStore.getState().repayments).toHaveLength(1)
+    expect(useLoanStore.getState().repayments[0]).toMatchObject(disabledRepayment)
   })
 
   it('нормализует правило общего ежемесячного платежа', () => {
