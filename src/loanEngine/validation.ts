@@ -15,6 +15,7 @@ const horizonError = (label: string) => `${label} должна быть в пр�
 const MAX_FOUR_DIGIT_YEAR = 9999
 const FIRST_YEAR_AFTER_FOUR_DIGIT_CALENDAR = MAX_FOUR_DIGIT_YEAR + 1
 const MAX_FOUR_DIGIT_ISO_DATE = '9999-12-31'
+const MIN_INTEREST_ONLY_TERM_PERIODS = 2
 const exceedsFourDigitCalendar = (date: string) => !/^\d{4}-\d{2}-\d{2}$/.test(date) || date > MAX_FOUR_DIGIT_ISO_DATE
 const contractCanExceedFourDigitCalendar = (config: LoanConfig) => {
   if (!isISODate(config.firstPaymentDate) || !finite(config.termMonths)) return false
@@ -43,7 +44,7 @@ export function validateLoan(config: LoanConfig) {
   if (!finite(config.termMonths) || !(config.termMonths > 0)) errors.push('Срок должен быть больше нуля')
   if (finite(config.termMonths) && !Number.isInteger(config.termMonths)) errors.push('Срок должен быть целым числом месяцев')
   if (finite(config.termMonths) && config.termMonths > MAX_TERM_MONTHS) errors.push(`Срок не должен превышать ${MAX_TERM_MONTHS} месяцев`)
-  if (config.firstPaymentInterestOnly && config.firstPaymentInterestOnlyMode === 'withinTerm' && finite(config.termMonths) && totalPaymentPeriods(config) < 2) errors.push('Для первого платежа только процентами внутри договорного срока нужно не менее двух платёжных периодов')
+  if (config.firstPaymentInterestOnly && config.firstPaymentInterestOnlyMode === 'withinTerm' && finite(config.termMonths) && totalPaymentPeriods(config) < MIN_INTEREST_ONLY_TERM_PERIODS) errors.push('Для первого платежа только процентами внутри договорного срока нужно не менее двух платёжных периодов')
   if (!finite(config.paymentDay) || config.paymentDay < 1 || config.paymentDay > MAX_PAYMENT_DAY) errors.push(`День платежа должен быть от 1 до ${MAX_PAYMENT_DAY}`)
   if (finite(config.paymentDay) && !Number.isInteger(config.paymentDay)) errors.push('День платежа должен быть целым числом')
   if (!finite(config.closeThreshold) || config.closeThreshold < 0 || config.closeThreshold > MAX_MONEY_AMOUNT) errors.push(`Порог закрытия должен быть от 0 до ${MAX_MONEY_AMOUNT}`)
