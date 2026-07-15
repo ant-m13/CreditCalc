@@ -6,6 +6,7 @@ import { defaultConfig, MAX_LOANS, normalizePersistedState, useLoanStore, type L
 import type { EarlyRepayment } from './loanEngine'
 import { expandRepaymentRules, type RepaymentRule } from './repaymentRules'
 import type { GoalPlanOperations } from './goalPlanner'
+import { shortTestConfig } from './testFixtures'
 
 const repaymentBase = {
   strategy: 'reduceTerm',
@@ -17,7 +18,7 @@ const repaymentBase = {
 const loanProfile = (patch: Partial<LoanProfile> = {}): LoanProfile => ({
   id: 'loan-active',
   name: 'Рабочий',
-  config: defaultConfig,
+  config: shortTestConfig,
   repayments: [],
   repaymentRules: [],
   gracePeriods: [],
