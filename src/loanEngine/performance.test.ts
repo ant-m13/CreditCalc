@@ -4,6 +4,8 @@ import { nextPaymentDate } from './dates'
 import type { EarlyRepayment } from './types'
 import { validateScenario } from './validation'
 
+const MAX_VALIDATION_DURATION_MS = 3_000
+
 const longTermConfig = {
   ...defaultConfig,
   issueDate: '2025-01-01',
@@ -42,6 +44,6 @@ describe('performance regressions', () => {
 
     // Запас учитывает общие CI-среды. Основную защиту даёт структура поиска на Set,
     // а ограничение времени выявляет случайно добавленные вложенные обходы.
-    expect(performance.now() - startedAt).toBeLessThan(3000)
+    expect(performance.now() - startedAt).toBeLessThan(MAX_VALIDATION_DURATION_MS)
   })
 })

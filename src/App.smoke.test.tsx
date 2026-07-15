@@ -6,6 +6,10 @@ import App from './App'
 import { defaultConfig, STORAGE_CONFLICT_EVENT, useLoanStore, type LoanProfile } from './store'
 import { APP_VERSION } from './version'
 
+const ASYNC_QUERY_TIMEOUT_MS = 10_000
+const SMOKE_TEST_TIMEOUT_MS = 15_000
+const EXTENDED_SMOKE_TEST_TIMEOUT_MS = 20_000
+
 const sharedLinkMock = vi.hoisted(() => ({
   payload: 'test-shared-payload',
   data: null as unknown
@@ -134,7 +138,7 @@ describe('App smoke tests', () => {
     fireEvent.keyDown(document, { key: 'Escape' })
     await waitFor(() => expect(drawer.getAttribute('aria-hidden')).toBe('true'))
     await waitFor(() => expect(document.activeElement).toBe(open))
-  }, 15_000)
+  }, SMOKE_TEST_TIMEOUT_MS)
 
   it('открывает приложение и показывает обзор кредита', async () => {
     render(<App />)
@@ -143,7 +147,7 @@ describe('App smoke tests', () => {
     expect(screen.getAllByText('Кредитный калькулятор').length).toBeGreaterThan(0)
     expect(screen.getByRole('button', { name: 'Обзор' }).getAttribute('aria-current')).toBe('page')
     expect(screen.getByText('Данные сохранены')).toBeTruthy()
-  }, 15000)
+  }, SMOKE_TEST_TIMEOUT_MS)
 
   it('монтирует печатный отчёт только на время печати', async () => {
     const user = userEvent.setup()
@@ -151,7 +155,7 @@ describe('App smoke tests', () => {
     vi.stubGlobal('print', print)
     render(<App />)
 
-    expect(await screen.findByText('Сумма кредита', {}, { timeout: 10000 })).toBeTruthy()
+    expect(await screen.findByText('Сумма кредита', {}, { timeout: ASYNC_QUERY_TIMEOUT_MS })).toBeTruthy()
     expect(screen.queryByRole('heading', { name: 'Расчёт кредита' })).toBeNull()
 
     fireEvent(window, new Event('beforeprint'))
@@ -163,7 +167,7 @@ describe('App smoke tests', () => {
     await user.click(screen.getByRole('button', { name: /Печать/i }))
     expect(screen.getByRole('heading', { name: 'Расчёт кредита' })).toBeTruthy()
     expect(print).toHaveBeenCalledTimes(1)
-  }, 20000)
+  }, EXTENDED_SMOKE_TEST_TIMEOUT_MS)
 
   it('добавляет выключенный досрочный платёж и быстро включает его из календаря', async () => {
     const user = userEvent.setup()
@@ -174,7 +178,7 @@ describe('App smoke tests', () => {
     await user.click(screen.getByRole('button', { name: 'Добавить и пересчитать' }))
     await user.click(screen.getByRole('button', { name: /^Досрочные/ }))
 
-    expect(await screen.findByText('Временно отключено', {}, { timeout: 10000 })).toBeTruthy()
+    expect(await screen.findByText('Временно отключено', {}, { timeout: ASYNC_QUERY_TIMEOUT_MS })).toBeTruthy()
     expect(useLoanStore.getState().repayments[0]).toMatchObject({ amount: 100000, enabled: false })
 
     const enableButtons = await screen.findAllByRole('button', { name: /Включить платёж/i })
@@ -183,7 +187,7 @@ describe('App smoke tests', () => {
 
     expect(useLoanStore.getState().repayments[0]).toMatchObject({ amount: 100000, enabled: true })
     expect(screen.getAllByRole('button', { name: /Выключить платёж/i })).toHaveLength(2)
-  }, 15000)
+  }, SMOKE_TEST_TIMEOUT_MS)
 
   it('на первом запуске без ссылки показывает знакомство', async () => {
     localStorage.clear()
@@ -241,12 +245,12 @@ describe('App smoke tests', () => {
     render(<App />)
 
     await user.click(screen.getByRole('button', { name: /^Досрочные/ }))
-    await user.click((await screen.findAllByRole('button', { name: /Включить платёж/i }, { timeout: 10000 })).at(-1)!)
+    await user.click((await screen.findAllByRole('button', { name: /Включить платёж/i }, { timeout: ASYNC_QUERY_TIMEOUT_MS })).at(-1)!)
 
     expect(useLoanStore.getState().repayments[1].enabled).toBe(false)
     expect(await screen.findByRole('dialog', { name: 'Досрочный платёж' })).toBeTruthy()
     expect(screen.getAllByText(/только одну общую сумму/i).length).toBeGreaterThan(0)
-  }, 15000)
+  }, SMOKE_TEST_TIMEOUT_MS)
 
   it('открывает раздел импорта и экспорта', async () => {
     const user = userEvent.setup()
@@ -269,7 +273,7 @@ describe('App smoke tests', () => {
     render(<App />)
 
     await user.click(screen.getByRole('button', { name: 'Параметры' }))
-    const settingsSection = await screen.findByText('Изменение ставки', undefined, { timeout: 10_000 })
+    const settingsSection = await screen.findByText('Изменение ставки', undefined, { timeout: ASYNC_QUERY_TIMEOUT_MS })
     const rateDate = settingsSection.closest('section')?.querySelector('input[type="date"]') as HTMLInputElement | null
     if (!rateDate) throw new Error('Не найден input даты изменения ставки')
     await user.clear(rateDate)
@@ -281,7 +285,7 @@ describe('App smoke tests', () => {
     await waitFor(() => {
       const nextRateDate = screen.getByText('Изменение ставки').closest('section')?.querySelector('input[type="date"]') as HTMLInputElement | null
       expect(nextRateDate?.value).toBe('')
-    }, { timeout: 10_000 })
+    }, { timeout: ASYNC_QUERY_TIMEOUT_MS })
   })
 
   it('не применяет промежуточный год даты выдачи во время редактирования', async () => {

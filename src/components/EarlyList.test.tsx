@@ -5,6 +5,8 @@ import type { EarlyRepayment } from '../loanEngine'
 import type { RepaymentRule } from '../repaymentRules'
 import { EarlyList } from './EarlyList'
 
+const INTERACTION_TEST_TIMEOUT_MS = 15_000
+
 const repayment = (id: string, operationSource: 'manual' | 'rule'): EarlyRepayment => ({
   id,
   date: '2027-01-15',
@@ -29,7 +31,7 @@ describe('EarlyList', () => {
     for (let page = 0; page < 5; page += 1) fireEvent.click(screen.getByRole('button', { name: 'Следующая страница: календарь операций' }))
     expect(container.querySelectorAll('.generated-event')).toHaveLength(50)
     expect(linearLookup).not.toHaveBeenCalled()
-  }, 15_000)
+  }, INTERACTION_TEST_TIMEOUT_MS)
 
   it('показывает правила досрочных платежей страницами', () => {
     const rules: RepaymentRule[] = Array.from({ length: 120 }, (_, index) => ({

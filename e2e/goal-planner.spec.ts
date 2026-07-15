@@ -1,4 +1,6 @@
 import { expect, test } from '@playwright/test'
+
+const GOAL_PLANNER_RESULT_TIMEOUT_MS = 30_000
 import { readFileSync } from 'node:fs'
 
 const packageMetadata = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')) as { version: string }
@@ -19,14 +21,14 @@ test('подбирает, сравнивает, показывает и прим
   await expect(calculate).toBeEnabled()
   await calculate.click()
 
-  await expect(page.getByRole('heading', { name: 'Варианты достижения цели' })).toBeVisible({ timeout: 30_000 })
+  await expect(page.getByRole('heading', { name: 'Варианты достижения цели' })).toBeVisible({ timeout: GOAL_PLANNER_RESULT_TIMEOUT_MS })
   await expect(page.locator('.goal-variant')).toHaveCount(4)
   await page.getByRole('button', { name: 'Сравнить варианты' }).click()
   await expect(page.getByRole('table', { name: 'Сравнение рассчитанных вариантов достижения цели.' })).toBeVisible()
 
   await page.getByRole('button', { name: 'Посмотреть новый график' }).first().click()
   const preview = page.getByRole('dialog', { name: 'Новый график платежей' })
-  await expect(preview).toBeVisible({ timeout: 30_000 })
+  await expect(preview).toBeVisible({ timeout: GOAL_PLANNER_RESULT_TIMEOUT_MS })
   await expect(preview.getByText(/закрытие/i).first()).toBeVisible()
   await preview.getByRole('button', { name: 'Закрыть', exact: true }).click()
 

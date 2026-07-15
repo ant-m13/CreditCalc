@@ -9,6 +9,8 @@ interface PackageMetadata {
 }
 
 const productionCsp = "default-src 'self'; script-src 'self'; worker-src 'self'; style-src 'self'; style-src-elem 'self'; style-src-attr 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; base-uri 'self'; form-action 'none'; object-src 'none'"
+const MAX_PRECACHE_FILE_BYTES = 1_500_000
+const DEV_SERVER_PORT = 4317
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, '.', '')
@@ -27,7 +29,7 @@ export default defineConfig(({ mode }) => {
         injectManifest: {
           rollupFormat: 'iife',
           globPatterns: ['**/*.{js,css,html,png,svg,webmanifest,woff2}'],
-          maximumFileSizeToCacheInBytes: 1_500_000
+          maximumFileSizeToCacheInBytes: MAX_PRECACHE_FILE_BYTES
         },
         devOptions: { enabled: false }
       }),
@@ -47,6 +49,7 @@ export default defineConfig(({ mode }) => {
       coverage: {
         provider: 'v8',
         reporter: ['text', 'json-summary'],
+        // Минимальные проценты покрытия задают общий порог и более строгие пороги для расчётного ядра.
         thresholds: {
           lines: 80,
           functions: 75,
@@ -67,6 +70,6 @@ export default defineConfig(({ mode }) => {
         }
       }
     },
-    server: { port: 4317, strictPort: true }
+    server: { port: DEV_SERVER_PORT, strictPort: true }
   }
 })

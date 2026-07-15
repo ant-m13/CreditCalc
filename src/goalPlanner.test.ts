@@ -5,6 +5,9 @@ import { buildGoalPlanPreview, buildGoalPlans, type GoalPlannerInput } from './g
 import type { EarlyRepayment } from './loanEngine'
 import type { RepaymentRule } from './repaymentRules'
 
+const GOAL_PLANNER_TEST_TIMEOUT_MS = 30_000
+const RANDOMIZED_SEARCH_TEST_TIMEOUT_MS = 90_000
+
 const input = (patch: Partial<GoalPlannerInput> = {}): GoalPlannerInput => ({
   config: { ...defaultConfig, principal: 1_000_000, annualRate: 12, issueDate: '2026-01-01', firstPaymentDate: '2026-02-01', paymentDay: 1, termMonths: 60, firstPaymentInterestOnly: false, earlyRepaymentFeePercent: 1 },
   repayments: [],
@@ -19,6 +22,7 @@ const input = (patch: Partial<GoalPlannerInput> = {}): GoalPlannerInput => ({
 })
 
 const seededRandom = (seed: number) => () => {
+  // Фиксированные коэффициенты алгоритма Mulberry32 дают воспроизводимые случайные сценарии.
   seed |= 0
   seed = seed + 0x6D2B79F5 | 0
   let value = Math.imul(seed ^ seed >>> 15, 1 | seed)
@@ -42,7 +46,7 @@ const operationsWithVariantAmount = (
   }
 }
 
-describe('goal planner', { timeout: 30_000 }, () => {
+describe('goal planner', { timeout: GOAL_PLANNER_TEST_TIMEOUT_MS }, () => {
   it('подбирает четыре варианта закрытия и подтверждает копеечную границу', () => {
     const result = buildGoalPlans(input())
 
@@ -191,7 +195,7 @@ describe('goal planner', { timeout: 30_000 }, () => {
     expect(buildGoalPlanPreview(plannerInput, previousOperations).planned.overpayment).toBeGreaterThan(234_473.37)
   })
 
-  it('подтверждает глобальную границу на случайных финансовых сценариях', { timeout: 90_000 }, () => {
+  it('подтверждает глобальную границу на случайных финансовых сценариях', { timeout: RANDOMIZED_SEARCH_TEST_TIMEOUT_MS }, () => {
     const random = seededRandom(1_703_2026)
     const frequencies = ['monthly', 'quarterly', 'monthly'] as const
 
