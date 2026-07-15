@@ -42,6 +42,7 @@ export const STORAGE_CONFLICT_EVENT = 'credit-calculator-storage-conflict'
 export const STORAGE_SYNC_CHANNEL = 'credit-calculator-storage-sync'
 export const MAX_PERSISTED_STATE_BYTES = 4_000_000
 export const MAX_PERSISTED_INPUT_BYTES = 8 * 1024 * 1024
+export const PERSISTED_STATE_VERSION = 11
 
 export type StorageStatusKind = 'saved' | 'nearQuota' | 'failed' | 'conflict' | 'memoryOnly'
 type StorageConflictKind = 'newer' | 'deleted' | 'race'
@@ -64,9 +65,11 @@ let storageWriteBlockedReason: string | null = null
 let lastReadPersistedRaw: string | null = null
 let persistenceDisabledForSession = false
 
+const COMPACT_ID_RADIX = 36
+const RANDOM_FRACTION_PREFIX_LENGTH = 2
 const storageId = () => typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
   ? crypto.randomUUID()
-  : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`
+  : `${Date.now().toString(COMPACT_ID_RADIX)}-${Math.random().toString(COMPACT_ID_RADIX).slice(RANDOM_FRACTION_PREFIX_LENGTH)}`
 const TAB_WRITER_ID = storageId()
 let activeStorageEpoch = storageId()
 let storageSyncChannel: BroadcastChannel | null = null
@@ -108,7 +111,7 @@ const notifyStorageError = (error: unknown) => {
 }
 
 const storageRecoveryState = (raw: string, reason: string): StorageValue<LoanState> => ({
-  version: 11,
+  version: PERSISTED_STATE_VERSION,
   state: {
     storageRecoveryReport: [`Сохранённое состояние localStorage помещено в карантин: ${reason}. Автосохранение заблокировано до удаления повреждённых данных.`],
     storageRecoveryDismissed: false,
@@ -503,7 +506,7 @@ export const useLoanStore = create<LoanState>()(persist((set) => ({
 }), {
   name: PERSISTED_LOAN_STORAGE_KEY,
   storage: safePersistStorage,
-  version: 11,
+  version: PERSISTED_STATE_VERSION,
   migrate: (persisted) => normalizePersistedState(persisted) as LoanState,
   merge: (persisted, current) => {
     try {

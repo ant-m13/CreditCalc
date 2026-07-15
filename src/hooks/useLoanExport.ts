@@ -8,6 +8,7 @@ import { loanToBackupData, type LoanProfile } from '../store'
 import type { ImportStatus } from './useLoanImport'
 import { assertPortableJsonSize } from '../portabilityLimits'
 import { downloadBlob } from '../download'
+import { BACKUP_FORMAT_VERSION } from '../protocolVersions'
 
 interface UseLoanExportOptions {
   loans: LoanProfile[]
@@ -84,7 +85,7 @@ export function useLoanExport({ loans, activeLoanId, calculatedSchedule, calcula
     if (!loan) return
     try {
       const body = JSON.stringify({
-        version: 1,
+        version: BACKUP_FORMAT_VERSION,
         recoveryOnly: true,
         exportedAt: new Date().toISOString(),
         calculationErrors,

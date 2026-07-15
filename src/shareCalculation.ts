@@ -3,11 +3,12 @@ import { parseLoanBackupObject, type LoanBackupData } from './importExport'
 import type { RepaymentRule } from './repaymentRules'
 import { validatePortableShare } from './portableDataValidation'
 import { encodeSharedPayloadJson } from './sharedPayloadCodec'
+import { SHARED_CALCULATION_VERSION } from './protocolVersions'
 
 export { SHARE_PREFIX, MAX_ENCODED_PAYLOAD_LENGTH, MAX_JSON_PAYLOAD_LENGTH } from './sharedPayloadCodec'
 
 export interface SharedCalculationV1 {
-  version: 1
+  version: typeof SHARED_CALCULATION_VERSION
   name?: string
   config: LoanConfig
   repayments: EarlyRepayment[]
@@ -29,7 +30,7 @@ export type SnapshotSource = Pick<LoanBackupData, 'config' | 'repayments' | 'gra
 
 export function createLoanSnapshot(source: SnapshotSource): SharedCalculationV1 {
   return {
-    version: 1,
+    version: SHARED_CALCULATION_VERSION,
     name: source.name,
     config: source.config,
     repayments: source.repayments,
@@ -55,7 +56,7 @@ export function serializeLoanSnapshot(snapshot: SharedCalculationV1) {
 export function parseLoanSnapshot(value: unknown): LoanBackupData {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Ссылка повреждена. Проверьте ссылку или используйте JSON-файл')
   const version = (value as { version?: unknown }).version
-  if (version !== undefined && version !== 1) throw new Error('Версия ссылки не поддерживается')
+  if (version !== undefined && version !== SHARED_CALCULATION_VERSION) throw new Error('Версия ссылки не поддерживается')
   return parseLoanBackupObject(value)
 }
 

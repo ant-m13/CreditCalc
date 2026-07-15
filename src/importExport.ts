@@ -3,10 +3,11 @@ import { regularPaymentDateMatches, repaymentAmountModeContextForRegularDate, re
 import { defaultConfig } from './loanDefaults'
 import type { RepaymentRule } from './repaymentRules'
 import { assertLoanCandidateValid } from './loanCandidate'
-import { MAX_EARLY_REPAYMENTS, MAX_GRACE_PERIODS, MAX_ID_LENGTH, MAX_MONEY_AMOUNT, MAX_PERCENT, MAX_RATE_CHANGES, MAX_REPAYMENT_RULES, MAX_RULE_SKIP_MONTHS, MAX_TERM_MONTHS, MAX_TEXT_FIELD_LENGTH } from './loanEngine/limits'
+import { MAX_EARLY_REPAYMENTS, MAX_GRACE_PERIODS, MAX_ID_LENGTH, MAX_MONEY_AMOUNT, MAX_PAYMENT_DAY, MAX_PERCENT, MAX_RATE_CHANGES, MAX_REPAYMENT_RULES, MAX_RULE_SKIP_MONTHS, MAX_TERM_MONTHS, MAX_TEXT_FIELD_LENGTH } from './loanEngine/limits'
 import { isISODate, isISOYearMonth } from './utils/dateValidation'
 import { balanceMoments, dayCountBases, firstInterestOnlyModes, fontSizes, frequencies, graceTypes, interestMethods, isOneOf as oneOf, migrateLegacyDayCountBasis, paymentTypes, periodStarts, rateChangeModes, repaymentOperationSources, repaymentRuleTypes, repaymentSources, repaymentStrategies, roundingModes, sameDayOrders, scenarioIds, supportedCurrencies, termUnits, themeNames } from './portableSchemas'
 import { normalizeAccentColor } from './accentColor'
+import { BACKUP_FORMAT_VERSION } from './protocolVersions'
 
 export interface LoanBackupData {
   name?: string
@@ -37,7 +38,7 @@ const finite = (value: unknown, minimum = 0, maximum = MAX_MONEY_AMOUNT): value 
 const integer = (value: unknown, minimum = 0): value is number => finite(value, minimum) && Number.isInteger(value)
 const positive = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value) && value > 0
 const hexColor = (value: unknown): value is string => typeof value === 'string' && /^#[0-9a-fA-F]{6}$/.test(value)
-export const SUPPORTED_BACKUP_VERSIONS = [1] as const
+export const SUPPORTED_BACKUP_VERSIONS = [BACKUP_FORMAT_VERSION] as const
 const explicitOneOfOrDefault = <T extends string>(value: unknown, values: readonly T[], fallback: T, label: string): T => {
   if (value === undefined) return fallback
   if (oneOf(value, values)) return value
@@ -102,8 +103,8 @@ export function parseLoanBackup(text: string): ValidatedLoanData {
 
 export function parseLoanBackupObject(raw: unknown): ValidatedLoanData {
   if (!isObject(raw) || !isObject(raw.config)) throw new Error('В файле отсутствуют параметры кредита')
-  if (raw.version !== undefined && !SUPPORTED_BACKUP_VERSIONS.includes(raw.version as 1)) {
-    throw new Error(`Версия JSON-резервной копии ${String(raw.version)} не поддерживается. Поддерживается версия 1`)
+  if (raw.version !== undefined && !SUPPORTED_BACKUP_VERSIONS.includes(raw.version as typeof BACKUP_FORMAT_VERSION)) {
+    throw new Error(`Версия JSON-резервной копии ${String(raw.version)} не поддерживается. Поддерживается версия ${BACKUP_FORMAT_VERSION}`)
   }
 
   const source = raw.config
@@ -151,7 +152,7 @@ export function parseLoanBackupObject(raw: unknown): ValidatedLoanData {
       balanceMoment: explicitOneOfOrDefault(interest.balanceMoment, balanceMoments, defaultConfig.interest.balanceMoment, 'Момент остатка для процентов')
     }
   }
-  if (!positive(config.principal) || config.principal > MAX_MONEY_AMOUNT || !finite(config.annualRate, 0, MAX_PERCENT) || !integer(config.termMonths, 1) || config.termMonths > MAX_TERM_MONTHS || !integer(config.paymentDay, 1) || config.paymentDay > 31 || !finite(config.closeThreshold) || !finite(config.oneTimeFee) || !finite(config.monthlyFee) || !finite(config.earlyRepaymentFeePercent, 0, MAX_PERCENT)) throw new Error('Параметры кредита содержат недопустимые числа')
+  if (!positive(config.principal) || config.principal > MAX_MONEY_AMOUNT || !finite(config.annualRate, 0, MAX_PERCENT) || !integer(config.termMonths, 1) || config.termMonths > MAX_TERM_MONTHS || !integer(config.paymentDay, 1) || config.paymentDay > MAX_PAYMENT_DAY || !finite(config.closeThreshold) || !finite(config.oneTimeFee) || !finite(config.monthlyFee) || !finite(config.earlyRepaymentFeePercent, 0, MAX_PERCENT)) throw new Error('Параметры кредита содержат недопустимые числа')
   if (!isISODate(config.issueDate) || !isISODate(config.firstPaymentDate)) throw new Error('Проверьте даты выдачи и первого платежа')
   if (config.firstPaymentDate <= config.issueDate) throw new Error('Первый платёж должен быть после даты выдачи')
   const rateChangesRaw = source.rateChanges === undefined ? [] : source.rateChanges
