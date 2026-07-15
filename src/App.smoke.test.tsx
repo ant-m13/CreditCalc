@@ -356,7 +356,7 @@ describe('App smoke tests', () => {
 
     expect(useLoanStore.getState().config.frequency).toBe('monthly')
     expect(frequency.value).toBe('monthly')
-    expect((await screen.findByRole('alert')).textContent).toMatch(/общую сумму списания/i)
+    expect(await screen.findByText(/изменение отклонено:.*общую сумму списания/i)).toBeTruthy()
   })
 
   it('закрывает модалку и сбрасывает draft регулярного правила при переключении кредита', async () => {
