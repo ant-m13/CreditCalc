@@ -8,6 +8,7 @@ import { isISODate, isISOYearMonth } from './utils/dateValidation'
 import { balanceMoments, dayCountBases, firstInterestOnlyModes, fontSizes, frequencies, graceTypes, interestMethods, isOneOf as oneOf, migrateLegacyDayCountBasis, paymentTypes, periodStarts, rateChangeModes, repaymentOperationSources, repaymentRuleTypes, repaymentSources, repaymentStrategies, roundingModes, sameDayOrders, scenarioIds, supportedCurrencies, termUnits, themeNames } from './portableSchemas'
 import { normalizeAccentColor } from './accentColor'
 import { BACKUP_FORMAT_VERSION } from './protocolVersions'
+import { CURRENCY_DECIMAL_PLACES } from './constants'
 
 export interface LoanBackupData {
   name?: string
@@ -290,7 +291,7 @@ export function parseLoanBackupObject(raw: unknown): ValidatedLoanData {
   if (!oneOf(selectedCandidate, scenarioIds)) throw new Error('Файл содержит неизвестный сценарий')
   const selectedScenario = selectedCandidate
   const termUnit = oneOf(settings.termUnit, termUnits) ? settings.termUnit : 'months'
-  const displayDecimals = settings.displayDecimals === 0 ? 0 : 2
+  const displayDecimals = settings.displayDecimals === 0 ? 0 : CURRENCY_DECIMAL_PLACES
   const appFontSize = oneOf(settings.appFontSize, fontSizes) ? settings.appFontSize : 'normal'
   const scheduleFontSize = oneOf(settings.scheduleFontSize, fontSizes) ? settings.scheduleFontSize : 'large'
   const theme = oneOf(settings.theme, themeNames) ? settings.theme : 'emerald'

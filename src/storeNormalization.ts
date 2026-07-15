@@ -23,6 +23,7 @@ import { createId } from './utils/createId'
 import { isISODate, isISOYearMonth } from './utils/dateValidation'
 import { balanceMoments, dayCountBases, firstInterestOnlyModes, fontSizes, frequencies, graceTypes, interestMethods, isOneOf, migrateLegacyDayCountBasis, paymentTypes, periodStarts, rateChangeModes, repaymentRuleTypes, repaymentSources, repaymentStrategies, roundingModes, sameDayOrders, scenarioIds, supportedCurrencies, termUnits, themeNames } from './portableSchemas'
 import { defaultAccentColor, normalizeAccentColor } from './accentColor'
+import { CURRENCY_DECIMAL_PLACES } from './constants'
 
 export const MAX_LOANS = 100
 export { defaultAccentColor, normalizeAccentColor } from './accentColor'
@@ -113,7 +114,7 @@ export const defaultLoanData = (withSeedRepayment = false, today = new Date()): 
     gracePeriods: [],
     selectedScenario: 'combined',
     termUnit: 'months',
-    displayDecimals: 2,
+    displayDecimals: CURRENCY_DECIMAL_PLACES,
     appFontSize: 'normal',
     scheduleFontSize: 'large',
     theme: 'emerald',
@@ -288,7 +289,7 @@ export const normalizeLoanData = (data: Partial<LoanImportData | LoanData>): Loa
     gracePeriods: normalizeGracePeriods(data.gracePeriods),
     selectedScenario: oneOf(data.selectedScenario, scenarioIds, 'reduceTerm'),
     termUnit: oneOf(data.termUnit, termUnits, 'months'),
-    displayDecimals: data.displayDecimals === 0 ? 0 : 2,
+    displayDecimals: data.displayDecimals === 0 ? 0 : CURRENCY_DECIMAL_PLACES,
     appFontSize: oneOf(data.appFontSize, fontSizes, 'normal'),
     scheduleFontSize: oneOf(data.scheduleFontSize, fontSizes, 'large'),
     theme: normalizeTheme(data.theme),

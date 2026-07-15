@@ -1,5 +1,5 @@
 import { useCallback } from 'react'
-import { MONEY_DISPLAY_EPSILON } from '../constants'
+import { JSON_INDENT_SPACES, MONEY_DISPLAY_EPSILON } from '../constants'
 import type { ValidatedLoanData } from '../importExport'
 import type { PaymentScheduleItem } from '../loanEngine'
 import type { LoanCalculationSnapshot } from '../loanCalculationRunner'
@@ -90,7 +90,7 @@ export function useLoanExport({ loans, activeLoanId, calculatedSchedule, calcula
         exportedAt: new Date().toISOString(),
         calculationErrors,
         ...loanToBackupData(loan)
-      }, (_key, value) => typeof value === 'number' && !Number.isFinite(value) ? String(value) : value, 2)
+      }, (_key, value) => typeof value === 'number' && !Number.isFinite(value) ? String(value) : value, JSON_INDENT_SPACES)
       assertPortableJsonSize(body)
       const safeName = loan.name.toLowerCase().replace(/[^a-zа-яё0-9]+/gi, '-').replace(/^-|-$/g, '') || 'credit'
       downloadBlob(new Blob([body], { type: 'application/json' }), `credit-${safeName}.recovery.json`)
@@ -116,7 +116,7 @@ export function useLoanExport({ loans, activeLoanId, calculatedSchedule, calcula
         setImportStatus({ kind: 'error', text: error instanceof Error ? error.message : 'Не удалось проверить расчёт перед экспортом' })
         return
       }
-      body = JSON.stringify({ ...snapshot, exportedAt: new Date().toISOString() }, null, 2)
+      body = JSON.stringify({ ...snapshot, exportedAt: new Date().toISOString() }, null, JSON_INDENT_SPACES)
       try {
         assertPortableJsonSize(body)
       } catch (error) {

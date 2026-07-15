@@ -1,8 +1,8 @@
 import { format, parseISO } from 'date-fns'
 import { ru } from 'date-fns/locale'
-import { MONTHS_PER_YEAR } from './constants'
+import { CURRENCY_DECIMAL_PLACES, MONTHS_PER_YEAR } from './constants'
 
-export const formatMoney = (value: number, currency = 'RUB', decimals: 0 | 2 = 2, compact = false) => new Intl.NumberFormat('ru-RU', {
+export const formatMoney = (value: number, currency = 'RUB', decimals: 0 | 2 = CURRENCY_DECIMAL_PLACES, compact = false) => new Intl.NumberFormat('ru-RU', {
   style: 'currency',
   currency,
   minimumFractionDigits: compact ? 0 : decimals,
@@ -13,7 +13,7 @@ export const formatMoney = (value: number, currency = 'RUB', decimals: 0 | 2 = 2
 export const currencySymbol = (currency = 'RUB') =>
   new Intl.NumberFormat('ru-RU', { style: 'currency', currency }).formatToParts(0).find(part => part.type === 'currency')?.value ?? currency
 
-export const createMoneyFormatter = (currency = 'RUB', decimals: 0 | 2 = 2) => ({
+export const createMoneyFormatter = (currency = 'RUB', decimals: 0 | 2 = CURRENCY_DECIMAL_PLACES) => ({
   money: (value: number, compact = false) => formatMoney(value, currency, decimals, compact),
   currencySymbol: currencySymbol(currency)
 })
