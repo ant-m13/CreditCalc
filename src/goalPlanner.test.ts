@@ -83,7 +83,7 @@ describe('goal planner', { timeout: GOAL_PLANNER_TEST_TIMEOUT_MS }, () => {
       id: 'existing', date: '2026-03-15', amount: 400_000, amountMode: 'extra', strategy: 'reduceTerm', source: 'own', sameDayOrder: 'regularFirst', interestFirst: true
     }
     const withoutExisting = baselinePlans
-    const withExisting = buildGoalPlans(input({ repayments: [repayment] }))
+    const withExisting = buildGoalPlans(input({ repayments: [repayment] }), { variantKinds: ['monthlyExtra'] })
 
     expect(withExisting.current.closingDate < withoutExisting.current.closingDate).toBe(true)
     expect(withExisting.variants.find(item => item.kind === 'monthlyExtra')?.monthlyExtra).not.toBe(withoutExisting.variants.find(item => item.kind === 'monthlyExtra')?.monthlyExtra)
@@ -105,7 +105,7 @@ describe('goal planner', { timeout: GOAL_PLANNER_TEST_TIMEOUT_MS }, () => {
       skipMonths: []
     }
     const withoutExisting = baselinePlans
-    const withExisting = buildGoalPlans(input({ repaymentRules: [repaymentRule] }))
+    const withExisting = buildGoalPlans(input({ repaymentRules: [repaymentRule] }), { variantKinds: ['monthlyExtra'] })
 
     expect(withExisting.current.closingDate < withoutExisting.current.closingDate).toBe(true)
     expect(withExisting.current.totalInterest).toBeLessThan(withoutExisting.current.totalInterest)
@@ -125,9 +125,10 @@ describe('goal planner', { timeout: GOAL_PLANNER_TEST_TIMEOUT_MS }, () => {
 
   it('ограничивает общий регулярный перевод заданным бюджетом', () => {
     const plannerInput = input({ goal: { type: 'monthlyBudget', amount: 18_000 } })
-    const result = buildGoalPlans(plannerInput)
+    const result = buildGoalPlans(plannerInput, { variantKinds: ['oneTime'] })
     const oneTime = result.variants.find(item => item.kind === 'oneTime')!
 
+    expect(result.variants.map(item => item.kind)).toEqual(['oneTime'])
     expect(oneTime.status).toBe('achieved')
     expect(oneTime.oneTimePayment).toBeGreaterThan(0)
     const preview = buildGoalPlanPreview(plannerInput, oneTime.operations)
@@ -147,7 +148,7 @@ describe('goal planner', { timeout: GOAL_PLANNER_TEST_TIMEOUT_MS }, () => {
 
   it('не рекомендует комбинированный план с разовым взносом после закрытия кредита', () => {
     const plannerInput = input({ goal: { type: 'maxOverpayment', amount: 150_000 }, oneTimeDate: '2035-01-01', availableNow: 100_000 })
-    const result = buildGoalPlans(plannerInput)
+    const result = buildGoalPlans(plannerInput, { variantKinds: ['combined'] })
     const combined = result.variants.find(item => item.kind === 'combined')!
 
     expect(combined.status).toBe('infeasible')
@@ -192,7 +193,7 @@ describe('goal planner', { timeout: GOAL_PLANNER_TEST_TIMEOUT_MS }, () => {
       config: { ...input().config, earlyRepaymentFeePercent: 20 },
       goal: { type: 'maxOverpayment', amount: 234_473.37 }
     })
-    const result = buildGoalPlans(plannerInput)
+    const result = buildGoalPlans(plannerInput, { variantKinds: ['oneTime'] })
     const oneTime = result.variants.find(item => item.kind === 'oneTime')!
 
     expect(result.status).toBe('planned')
@@ -289,7 +290,7 @@ describe('goal planner', { timeout: GOAL_PLANNER_TEST_TIMEOUT_MS }, () => {
       goal: { type: 'targetDate', targetDate: '2026-08-01' },
       availableNow: 0
     })
-    const result = buildGoalPlans(plannerInput)
+    const result = buildGoalPlans(plannerInput, { variantKinds: ['oneTime'] })
     const oneTime = result.variants.find(item => item.kind === 'oneTime')!
 
     expect(oneTime.status).toBe('achieved')
@@ -363,7 +364,7 @@ describe('goal planner', { timeout: GOAL_PLANNER_TEST_TIMEOUT_MS }, () => {
     })
     const current = buildGoalPlanPreview(plannerInput, { repayments: [], repaymentRules: [] }).current
     const highestCurrentPayment = Math.max(...current.schedule.filter(row => row.isRegularPayment).map(row => row.payment))
-    const result = buildGoalPlans(plannerInput)
+    const result = buildGoalPlans(plannerInput, { variantKinds: ['monthlyTotalPayment'] })
     const total = result.variants.find(item => item.kind === 'monthlyTotalPayment')!
 
     expect(total.status).toBe('achieved')
