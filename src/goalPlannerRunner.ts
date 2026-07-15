@@ -57,9 +57,11 @@ const isWorkerResponseEnvelope = (value: unknown): value is GoalPlannerWorkerRes
 
 export class GoalPlannerRunner {
   private worker: Worker | null = null
+  private activeRequestId: number | null = null
   private requestId = 0
 
   private cancelWorker() {
+    this.activeRequestId = null
     if (!this.worker) return
     this.worker.onmessage = null
     this.worker.onerror = null
@@ -73,34 +75,41 @@ export class GoalPlannerRunner {
     onResult: (result: T) => void,
     onError: (message: string) => void
   ) {
-    this.cancelWorker()
+    // A busy Worker must be replaced so a newer request is not queued behind stale heavy work.
+    if (this.activeRequestId !== null) this.cancelWorker()
     if (!canUseGoalPlannerWorker()) {
       onError('Планировщик недоступен: браузер не поддерживает Web Worker')
       return
     }
 
     const requestId = ++this.requestId
-    let worker: Worker
-    try {
-      worker = new Worker(new URL('./goalPlanner.worker.ts', import.meta.url), { type: 'module' })
-      this.worker = worker
-    } catch {
-      onError('Не удалось запустить Worker планировщика')
-      return
+    let worker = this.worker
+    if (!worker) {
+      try {
+        worker = new Worker(new URL('./goalPlanner.worker.ts', import.meta.url), { type: 'module' })
+        this.worker = worker
+      } catch {
+        onError('Не удалось запустить Worker планировщика')
+        return
+      }
     }
+    this.activeRequestId = requestId
 
     let settled = false
-    const settle = () => {
-      if (settled) return false
+    const settle = (keepWorker: boolean) => {
+      if (settled || this.worker !== worker || this.activeRequestId !== requestId) return false
       settled = true
       worker.onmessage = null
       worker.onerror = null
-      worker.terminate()
-      if (this.worker === worker) this.worker = null
+      this.activeRequestId = null
+      if (!keepWorker) {
+        worker.terminate()
+        this.worker = null
+      }
       return true
     }
-    const fail = (message: string) => {
-      if (settle()) onError(message)
+    const fail = (message: string, keepWorker = false) => {
+      if (settle(keepWorker)) onError(message)
     }
 
     worker.onmessage = (event: MessageEvent<unknown>) => {
@@ -114,14 +123,14 @@ export class GoalPlannerRunner {
         return
       }
       if (response.kind === 'error') {
-        fail(response.error || 'Worker планировщика не смог выполнить расчёт')
+        fail(response.error || 'Worker планировщика не смог выполнить расчёт', true)
         return
       }
       if (response.kind !== expectedKind) {
         fail('Worker планировщика вернул неожиданный ответ')
         return
       }
-      if (settle()) onResult(response.result as T)
+      if (settle(true)) onResult(response.result as T)
     }
     worker.onerror = event => {
       event.preventDefault()
