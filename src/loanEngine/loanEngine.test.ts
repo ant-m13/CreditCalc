@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { calculateAnnuityPayment, calculateDebtAtDate, calculateInterest, compareScenarios, createRateTimeline, extendedPaymentPeriods, generateBaseSchedule, nextPaymentDate, scheduledPaymentDates, sortRepaymentsByApplicationOrder, validateScenario } from '.'
+import { calculateAnnuityPayment, calculateDebtAtDate, calculateInterest, compareScenarios, createRateTimeline, extendedPaymentPeriods, generateBaseSchedule, nextPaymentDate, preparePaymentCalendar, scheduledPaymentDates, sortRepaymentsByApplicationOrder, validateScenario } from '.'
 import { MAX_FINANCIAL_RESULT, MAX_MONEY_AMOUNT, MAX_RATE_CHANGES } from './limits'
 import { assertFiniteFinancialNumber } from './financialSafety'
 import type { EarlyRepayment, GracePeriod, LoanConfig } from './types'
@@ -11,6 +11,11 @@ const config: LoanConfig = {
   interest: { method: 'annuity', dayCountBasis: 'actualActual', includePaymentDate: false, periodStart: 'inclusive', balanceMoment: 'startOfDay' }
 }
 const early = (patch: Partial<EarlyRepayment> = {}): EarlyRepayment => ({ id: 'e1', date: '2024-08-15', amount: 300_000, amountMode: 'extra', strategy: 'reduceTerm', source: 'own', sameDayOrder: 'regularFirst', interestFirst: true, ...patch })
+type BaseScheduleOptions = NonNullable<Parameters<typeof generateBaseSchedule>[1]>
+const basePaymentCalendar = preparePaymentCalendar(config)
+const generateConfigSchedule = (options: BaseScheduleOptions = {}) => generateBaseSchedule(config, { ...options, paymentCalendar: basePaymentCalendar })
+const compareConfigScenarios = (repayments: EarlyRepayment[]) => compareScenarios(config, repayments, [], basePaymentCalendar)
+const baseSchedule = generateConfigSchedule()
 
 describe('loan engine', () => {
   it('отклоняет нефинитные и чрезмерные денежные значения до построения графика', () => {
@@ -32,27 +37,27 @@ describe('loan engine', () => {
     expect(() => assertFiniteFinancialNumber(MAX_FINANCIAL_RESULT + 0.01, 'Итог')).toThrow('допустимый финансовый диапазон')
   })
   it('рассчитывает аннуитетный платёж', () => expect(calculateAnnuityPayment(1_000_000, 12, 12).toNumber()).toBeCloseTo(88848.79, 2))
-  it('строит базовый график с выдачей и закрывает долг', () => { const s=generateBaseSchedule(config); expect(s[0]).toMatchObject({number:1,date:'2024-01-01',payment:0,interest:0,principal:0,closingBalance:3000000}); expect(s.length).toBeLessThanOrEqual(121); expect(s.at(-1)?.closingBalance).toBe(0) })
-  it('добавляет пояснение формулы для строк платежей', () => { const row=generateBaseSchedule(config).find(x=>x.payment>0)!; expect(row.audit).toMatchObject({periodStart:'2024-01-01',periodEnd:'2024-02-15',dayCountBasis:'actualActual',rounding:'kopecks'}); expect(row.audit!.interestBeforeRounding).toBeGreaterThan(0) })
-  it('сокращает срок при досрочном платеже', () => { const base=generateBaseSchedule(config); const s=generateBaseSchedule(config,{earlyRepayments:[early()]}); expect(s.length).toBeLessThan(base.length) })
-  it('уменьшает платёж при сохранении срока', () => { const s=generateBaseSchedule(config,{earlyRepayments:[early({strategy:'reducePayment'})]}); expect(s.find(x=>x.date==='2024-09-15')!.payment).toBeLessThan(s.find(x=>x.date==='2024-02-15')!.payment); expect(s.length).toBeGreaterThan(100) })
-  it('применяет досрочный платёж в дату регулярного', () => { const s=generateBaseSchedule(config,{earlyRepayments:[early()]}); expect(s.find(x=>x.date==='2024-08-15')?.earlyPayment).toBe(300000) })
-  it('применяет досрочный платёж между датами', () => { const s=generateBaseSchedule(config,{earlyRepayments:[early({date:'2024-08-02'})]}); expect(s.find(x=>x.date==='2024-08-02')?.event).toContain('срока') })
+  it('строит базовый график с выдачей и закрывает долг', () => { const s=baseSchedule; expect(s[0]).toMatchObject({number:1,date:'2024-01-01',payment:0,interest:0,principal:0,closingBalance:3000000}); expect(s.length).toBeLessThanOrEqual(121); expect(s.at(-1)?.closingBalance).toBe(0) })
+  it('добавляет пояснение формулы для строк платежей', () => { const row=baseSchedule.find(x=>x.payment>0)!; expect(row.audit).toMatchObject({periodStart:'2024-01-01',periodEnd:'2024-02-15',dayCountBasis:'actualActual',rounding:'kopecks'}); expect(row.audit!.interestBeforeRounding).toBeGreaterThan(0) })
+  it('сокращает срок при досрочном платеже', () => { const s=generateConfigSchedule({earlyRepayments:[early()]}); expect(s.length).toBeLessThan(baseSchedule.length) })
+  it('уменьшает платёж при сохранении срока', () => { const s=generateConfigSchedule({earlyRepayments:[early({strategy:'reducePayment'})]}); expect(s.find(x=>x.date==='2024-09-15')!.payment).toBeLessThan(s.find(x=>x.date==='2024-02-15')!.payment); expect(s.length).toBeGreaterThan(100) })
+  it('применяет досрочный платёж в дату регулярного', () => { const s=generateConfigSchedule({earlyRepayments:[early()]}); expect(s.find(x=>x.date==='2024-08-15')?.earlyPayment).toBe(300000) })
+  it('применяет досрочный платёж между датами', () => { const s=generateConfigSchedule({earlyRepayments:[early({date:'2024-08-02'})]}); expect(s.find(x=>x.date==='2024-08-02')?.event).toContain('срока') })
   it('выводит досрочный платёж отдельной строкой в фактическую дату', () => {
-    const s=generateBaseSchedule(config,{earlyRepayments:[early({date:'2024-08-02'})]})
+    const s=generateConfigSchedule({earlyRepayments:[early({date:'2024-08-02'})]})
     const row=s.find(x=>x.date==='2024-08-02')
     expect(row?.earlyPayment).toBe(300000)
     expect(row?.days).toBeGreaterThan(0)
     expect(s.find(x=>x.date==='2024-08-15')!.days).toBe(13)
   })
-  it('поддерживает несколько досрочных платежей', () => { const s=generateBaseSchedule(config,{earlyRepayments:[early(),early({id:'e2',date:'2025-02-15',amount:200000})]}); expect(s.reduce((a,x)=>a+x.earlyPayment,0)).toBe(500000) })
+  it('поддерживает несколько досрочных платежей', () => { const s=generateConfigSchedule({earlyRepayments:[early(),early({id:'e2',date:'2025-02-15',amount:200000})]}); expect(s.reduce((a,x)=>a+x.earlyPayment,0)).toBe(500000) })
   it('не меняет финансовый результат same-day операций при изменении технических ID', () => {
     const repaymentA = early({ id: 'a', date: '2024-08-15', amount: 100_000, strategy: 'reduceTerm', sameDaySequence: 0 })
     const repaymentB = early({ id: 'b', date: '2024-08-15', amount: 100_000, strategy: 'reducePayment', sameDaySequence: 1 })
     const renamedA = { ...repaymentA, id: 'z' }
     const renamedB = { ...repaymentB, id: 'm' }
-    const first = compareScenarios(config, sortRepaymentsByApplicationOrder([repaymentA, repaymentB])).scenarios.find(s => s.id === 'combined')!
-    const second = compareScenarios(config, sortRepaymentsByApplicationOrder([renamedA, renamedB])).scenarios.find(s => s.id === 'combined')!
+    const first = compareConfigScenarios(sortRepaymentsByApplicationOrder([repaymentA, repaymentB])).scenarios.find(s => s.id === 'combined')!
+    const second = compareConfigScenarios(sortRepaymentsByApplicationOrder([renamedA, renamedB])).scenarios.find(s => s.id === 'combined')!
     expect(second.monthlyPayment).toBe(first.monthlyPayment)
     expect(second.closingDate).toBe(first.closingDate)
     expect(second.totalInterest).toBe(first.totalInterest)
@@ -60,8 +65,8 @@ describe('loan engine', () => {
   it('сохраняет sequence same-day операций при перестановке JSON-массива', () => {
     const repaymentA = early({ id: 'late-id', date: '2024-08-15', amount: 100_000, strategy: 'reduceTerm', sameDaySequence: 0 })
     const repaymentB = early({ id: 'early-id', date: '2024-08-15', amount: 100_000, strategy: 'reducePayment', sameDaySequence: 1 })
-    const first = generateBaseSchedule(config, { earlyRepayments: sortRepaymentsByApplicationOrder([repaymentA, repaymentB]) })
-    const second = generateBaseSchedule(config, { earlyRepayments: sortRepaymentsByApplicationOrder([repaymentB, repaymentA]) })
+    const first = generateConfigSchedule({ earlyRepayments: sortRepaymentsByApplicationOrder([repaymentA, repaymentB]) })
+    const second = generateConfigSchedule({ earlyRepayments: sortRepaymentsByApplicationOrder([repaymentB, repaymentA]) })
     expect(second.map(row => [row.date, row.payment, row.earlyPayment, row.closingBalance])).toEqual(first.map(row => [row.date, row.payment, row.earlyPayment, row.closingBalance]))
   })
   it('учитывает льготный период', () => { const grace:GracePeriod={id:'g',startDate:'2024-03-01',endDate:'2024-04-30',type:'interestOnly',extendTerm:true,accrueInterest:true,capitalizeInterest:false}; const s=generateBaseSchedule(config,{gracePeriods:[grace]}); const row=s.find(x=>x.date==='2024-03-15')!; expect(row.principal).toBe(0); expect(row.event).toContain('проценты') })
