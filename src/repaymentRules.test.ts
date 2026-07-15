@@ -3,6 +3,7 @@ import { defaultConfig } from './loanDefaults'
 import { expandRepaymentRules, validateRepaymentRuleStructure, type RepaymentRule } from './repaymentRules'
 import { compareScenarios, sortRepaymentsByApplicationOrder, type EarlyRepayment, type GracePeriod } from './loanEngine'
 import { MAX_RULE_SKIP_MONTHS } from './loanEngine/limits'
+import { shortTestConfig } from './testFixtures'
 
 const rule = (patch: Partial<RepaymentRule>): RepaymentRule => ({
   id: 'rule-1',
@@ -87,8 +88,8 @@ describe('правила досрочных платежей', () => {
       { ...firstRules[0], id: 'a-renamed' },
       { ...firstRules[1], id: 'z-renamed' }
     ]
-    const first = compareScenarios(defaultConfig, expandRepaymentRules(defaultConfig, firstRules)).scenarios.find(scenario => scenario.id === 'combined')!
-    const second = compareScenarios(defaultConfig, expandRepaymentRules(defaultConfig, renamedRules)).scenarios.find(scenario => scenario.id === 'combined')!
+    const first = compareScenarios(shortTestConfig, expandRepaymentRules(shortTestConfig, firstRules)).scenarios.find(scenario => scenario.id === 'combined')!
+    const second = compareScenarios(shortTestConfig, expandRepaymentRules(shortTestConfig, renamedRules)).scenarios.find(scenario => scenario.id === 'combined')!
 
     expect(second.monthlyPayment).toBe(first.monthlyPayment)
     expect(second.closingDate).toBe(first.closingDate)
