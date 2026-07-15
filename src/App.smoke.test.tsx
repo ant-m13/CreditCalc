@@ -338,7 +338,7 @@ describe('App smoke tests', () => {
       repayments: [{
         id: 'total-with-fee',
         date: '2026-08-15',
-        amount: 500000,
+        amount: 1_000_000,
         amountMode: 'totalWithFee',
         strategy: 'reduceTerm',
         source: 'own',
