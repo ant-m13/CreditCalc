@@ -1,4 +1,5 @@
 import { addDays, addMonths, format, getDaysInMonth, parseISO } from 'date-fns'
+import { BIWEEKLY_PERIODS_PER_YEAR, DAYS_PER_BIWEEK, MONTHS_PER_QUARTER, MONTHS_PER_YEAR } from '../constants'
 import { MAX_SCHEDULE_ROWS } from './limits'
 import type { GracePeriod, LoanConfig } from './types'
 
@@ -11,13 +12,13 @@ export interface PreparedPaymentCalendar {
 
 export function nextPaymentDate(date: string, config: LoanConfig) {
   const parsed = parseISO(date)
-  if (config.frequency === 'biweekly') return iso(addDays(parsed, 14))
-  const offset = config.frequency === 'quarterly' ? 3 : 1
+  if (config.frequency === 'biweekly') return iso(addDays(parsed, DAYS_PER_BIWEEK))
+  const offset = config.frequency === 'quarterly' ? MONTHS_PER_QUARTER : 1
   const target = addMonths(parsed, offset)
   return iso(new Date(target.getFullYear(), target.getMonth(), Math.min(config.paymentDay, getDaysInMonth(target))))
 }
 
-export function isRegularPaymentDate(date: string, config: LoanConfig, maxSteps = 10000) {
+export function isRegularPaymentDate(date: string, config: LoanConfig, maxSteps = MAX_SCHEDULE_ROWS) {
   return regularPaymentDateMatches([date], config, maxSteps).has(date)
 }
 
@@ -36,9 +37,9 @@ export function regularPaymentDateMatches(dates: Iterable<string>, config: LoanC
 
 export const totalPaymentPeriods = (config: LoanConfig) =>
   config.frequency === 'biweekly'
-    ? Math.max(1, Math.round(config.termMonths * 26 / 12))
+    ? Math.max(1, Math.round(config.termMonths * BIWEEKLY_PERIODS_PER_YEAR / MONTHS_PER_YEAR))
     : config.frequency === 'quarterly'
-      ? Math.max(1, Math.round(config.termMonths / 3))
+      ? Math.max(1, Math.round(config.termMonths / MONTHS_PER_QUARTER))
       : config.termMonths
 
 const extendingIntervals = (gracePeriods: GracePeriod[]) =>

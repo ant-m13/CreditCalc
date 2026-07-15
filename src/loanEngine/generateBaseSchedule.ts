@@ -1,5 +1,6 @@
 import Decimal from 'decimal.js'
 import { addDays, parseISO } from 'date-fns'
+import { PERCENT_FACTOR } from '../constants'
 import { accrueInterestSegmentsRaw, periodsPerYear } from './accrual'
 import { calculateAnnuityPayment } from './calculateAnnuityPayment'
 import { periodDays } from './calculateInterest'
@@ -17,6 +18,11 @@ import { assertFiniteScheduleItem } from './financialSafety'
 interface Options { earlyRepayments?: EarlyRepayment[]; gracePeriods?: GracePeriod[]; forcedStrategy?: RepaymentStrategy; paymentCalendar?: PreparedPaymentCalendar; scenarioAlreadyValidated?: boolean }
 
 const clampDebtBalance = (value: Decimal.Value) => Decimal.max(0, new Decimal(value))
+// Запас покрывает длинные льготные интервалы сверх договорного количества платежей.
+const EXTRA_SCHEDULE_PERIODS = 240
+const MIN_SCHEDULE_ITERATIONS = 360
+// Финальная корректировка считается существенной, если превышает 5% обычного платежа.
+const MATERIAL_BALLOON_RATIO = 0.05
 
 const appendUnique = <T,>(items: T[], item: T) => {
   if (!items.includes(item)) items.push(item)
@@ -193,7 +199,7 @@ export function generateBaseSchedule(config: LoanConfig, options: Options = {}):
       }
     }
     const annualRateAtEvent = effectiveAnnualRate(early.date)
-    const fee = money(earlyAmount.mul(config.earlyRepaymentFeePercent).div(100), config.rounding)
+    const fee = money(earlyAmount.mul(config.earlyRepaymentFeePercent).div(PERCENT_FACTOR), config.rounding)
     let available = Decimal.max(0, earlyAmount.minus(fee))
     const paidInterest = early.interestFirst ? Decimal.min(interestDue, available) : new Decimal(0)
     const interestLeft = interestDue.minus(paidInterest)
@@ -279,7 +285,7 @@ export function generateBaseSchedule(config: LoanConfig, options: Options = {}):
     return applyEarly(early, interestDue, remainingPeriods, effectiveAmount, applyOptions.afterCurrentPayment ?? false)
   }
 
-  const iterationLimit = Math.min(MAX_SCHEDULE_ROWS - 1, Math.max(maxPeriods + 240, 360))
+  const iterationLimit = Math.min(MAX_SCHEDULE_ROWS - 1, Math.max(maxPeriods + EXTRA_SCHEDULE_PERIODS, MIN_SCHEDULE_ITERATIONS))
   for (let regularIndex = 1; regularIndex <= iterationLimit && (balance.gt(0) || deferredInterest.gt(0)); regularIndex++) {
     const periodCalendarDays = Math.max(1, periodDays(previousPaymentDate, paymentDate, false))
     const exactRateChanges = config.rateChangeMode === 'exactDate' ? rateTimeline.sortedChanges : []
@@ -483,7 +489,7 @@ export function generateBaseSchedule(config: LoanConfig, options: Options = {}):
 
     if ((regularIndex >= maxPeriods || currentRemainingPeriods <= 1) && (balance.gt(0) || interestDue.gt(0) || deferredInterest.gt(0))) {
       const finalAdjustment = balance.add(interestDue).add(deferredInterest)
-      const materialityThreshold = Decimal.max(1, Decimal.max(payment, regularPayment).mul(0.05))
+      const materialityThreshold = Decimal.max(1, Decimal.max(payment, regularPayment).mul(MATERIAL_BALLOON_RATIO))
       const finalEventType = finalAdjustment.gt(materialityThreshold) ? 'materialBalloon' : 'finalReconciliation'
       const finalInterest = interestDue.add(deferredInterest)
       if (finalInterest.gt(0)) {

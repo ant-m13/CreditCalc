@@ -1,5 +1,6 @@
 import Decimal from 'decimal.js'
 import { format, parseISO, subMonths } from 'date-fns'
+import { CENTS_PER_CURRENCY_UNIT, CURRENCY_DECIMAL_PLACES, MILLISECONDS_PER_DAY, PERCENT_FACTOR } from './constants'
 import {
   compareScenarios,
   generateBaseSchedule,
@@ -18,6 +19,13 @@ import { isISODate } from './utils/dateValidation'
 
 export const GOAL_TERM_REDUCTION_MONTHS = [6, 12, 24, 36, 60, 120] as const
 export type GoalTermReductionMonths = typeof GOAL_TERM_REDUCTION_MONTHS[number]
+
+const INITIAL_SEARCH_BAND_CENTS = CENTS_PER_CURRENCY_UNIT
+const MIN_SEARCH_AMOUNT = 100
+const LINEAR_SEARCH_RANGE_CENTS = 8
+const SEARCH_BAND_GROWTH_FACTOR = 4
+const STRUCTURE_REFINEMENT_DEPTH = 1
+const OBJECTIVE_REFINEMENT_DEPTH = 2
 
 export type GoalPlannerGoal =
   | { type: 'monthsEarlier'; months: GoalTermReductionMonths }
@@ -121,7 +129,7 @@ const variantTitles: Record<GoalPlanVariantKind, string> = {
   combined: 'Комбинированный план'
 }
 
-const money = (value: Decimal.Value) => new Decimal(value).toDecimalPlaces(2).toNumber()
+const money = (value: Decimal.Value) => new Decimal(value).toDecimalPlaces(CURRENCY_DECIMAL_PLACES).toNumber()
 const sumRows = (schedule: PaymentScheduleItem[], field: keyof PaymentScheduleItem) =>
   money(schedule.reduce((sum, row) => sum.plus(row[field] as number), new Decimal(0)))
 
@@ -163,7 +171,7 @@ const scheduleSummary = (
   const totalInterest = sumRows(schedule, 'interest')
   const closingDate = schedule.at(-1)?.date ?? ''
   const currentClosing = current?.closingDate ?? closingDate
-  const daysSaved = current ? Math.max(0, Math.round((parseISO(currentClosing).getTime() - parseISO(closingDate).getTime()) / 86_400_000)) : 0
+  const daysSaved = current ? Math.max(0, Math.round((parseISO(currentClosing).getTime() - parseISO(closingDate).getTime()) / MILLISECONDS_PER_DAY)) : 0
   return {
     closingDate,
     totalPaid,
@@ -218,9 +226,9 @@ const prepareContext = (input: GoalPlannerInput): PlannerContext => {
     ...input.repaymentRules.map(item => item.ruleSequence ?? 0)
   ]
   const nextSequence = Math.max(0, ...sequences) + 1
-  const principalShare = 1 - input.config.earlyRepaymentFeePercent / 100
+  const principalShare = 1 - input.config.earlyRepaymentFeePercent / PERCENT_FACTOR
   const feeAdjustedUpperBound = principalShare > 0 ? current.totalPaid / principalShare : current.totalPaid
-  const maxSearchAmount = Math.min(MAX_MONEY_AMOUNT, Math.max(100, input.config.principal, current.totalPaid, feeAdjustedUpperBound))
+  const maxSearchAmount = Math.min(MAX_MONEY_AMOUNT, Math.max(MIN_SEARCH_AMOUNT, input.config.principal, current.totalPaid, feeAdjustedUpperBound))
   return { input, calendar, existingRepayments, current, maxSearchAmount, nextSequence }
 }
 
@@ -282,8 +290,8 @@ const evaluateOperations = (context: PlannerContext, operations: GoalPlanOperati
   return { schedule, plannerRepaymentIds, appliedPlannerRepaymentIds }
 }
 
-const toCents = (value: number) => Math.max(0, Math.round(value * 100))
-const fromCents = (value: number) => value / 100
+const toCents = (value: number) => Math.max(0, Math.round(value * CENTS_PER_CURRENCY_UNIT))
+const fromCents = (value: number) => value / CENTS_PER_CURRENCY_UNIT
 
 const searchMinimum = (
   context: PlannerContext,
@@ -372,7 +380,7 @@ const searchMinimum = (
     }
     const findFirstMatch = (left: number, right: number, depth = 0): number | null => {
       if (left > right) return null
-      if (right - left <= 8) {
+      if (right - left <= LINEAR_SEARCH_RANGE_CENTS) {
         for (let cents = left; cents <= right; cents += 1) {
           if (sampleAt(cents).matches) return cents
         }
@@ -389,8 +397,8 @@ const searchMinimum = (
       const structureChanged = new Set(rangeSamples.map(sample => sample.structure)).size > 1
       const potentialBoundary = rangeSamples.some(sample => sample.matches)
       const objectiveChangedDirection = !monotonicSamples(rangeSamples)
-      const refineStructure = structureChanged && depth < 1
-      const refineObjective = objectiveChangedDirection && depth < 2
+      const refineStructure = structureChanged && depth < STRUCTURE_REFINEMENT_DEPTH
+      const refineObjective = objectiveChangedDirection && depth < OBJECTIVE_REFINEMENT_DEPTH
 
       // Каждый диапазон проверяется в пяти точках. Дальнейшее деление выполняется при смене
       // структуры графика, локальном изменении направления цели или найденной достижимой точке.
@@ -402,7 +410,7 @@ const searchMinimum = (
     }
 
     let bandStart = 1
-    let bandEnd = Math.min(100, maxCents)
+    let bandEnd = Math.min(INITIAL_SEARCH_BAND_CENTS, maxCents)
     while (bandStart <= maxCents) {
       const match = findFirstMatch(bandStart, bandEnd)
       if (match !== null) {
@@ -413,13 +421,13 @@ const searchMinimum = (
       }
       if (bandEnd >= maxCents) break
       bandStart = bandEnd + 1
-      bandEnd = Math.min(maxCents, Math.max(bandStart, bandEnd * 4))
+      bandEnd = Math.min(maxCents, Math.max(bandStart, bandEnd * SEARCH_BAND_GROWTH_FACTOR))
     }
     return null
   }
 
   let low = 0
-  let high = Math.min(100, maxCents)
+  let high = Math.min(INITIAL_SEARCH_BAND_CENTS, maxCents)
   while (high < maxCents && !satisfies(high)) {
     low = high
     high = Math.min(maxCents, high * 2)
