@@ -65,7 +65,7 @@ describe('GoalPlannerRunner', () => {
     runner.dispose()
   })
 
-  it('принимает только ответ активного запроса и завершает Worker', () => {
+  it('принимает только ответ активного запроса и переиспользует Worker', () => {
     const runner = new GoalPlannerRunner()
     const onResult = vi.fn()
     const onError = vi.fn()
@@ -79,9 +79,17 @@ describe('GoalPlannerRunner', () => {
 
     expect(onResult).toHaveBeenCalledWith(expect.objectContaining({ revision: 'current', snapshot: current }))
     expect(onError).not.toHaveBeenCalled()
-    expect(worker.terminate).toHaveBeenCalledOnce()
+    expect(worker.terminate).not.toHaveBeenCalled()
     expect(worker.onmessage).toBeNull()
     expect(worker.onerror).toBeNull()
+
+    runner.preview(current, { repayments: [], repaymentRules: [] }, vi.fn(), onError)
+
+    expect(FakeWorker.instances).toHaveLength(1)
+    expect(worker.messages).toHaveLength(2)
+    expect(worker.messages[1]).toEqual(expect.objectContaining({ kind: 'preview' }))
+    runner.dispose()
+    expect(worker.terminate).toHaveBeenCalledOnce()
   })
 
   it('не выполняет тяжёлый синхронный fallback без Worker', () => {
@@ -104,7 +112,7 @@ describe('GoalPlannerRunner', () => {
     runner.dispose()
   })
 
-  it('завершает Worker и возвращает расчётную ошибку', () => {
+  it('сохраняет Worker после расчётной ошибки для следующего запроса', () => {
     const runner = new GoalPlannerRunner()
     const onError = vi.fn()
     runner.calculate(snapshot('error'), vi.fn(), onError)
@@ -115,6 +123,8 @@ describe('GoalPlannerRunner', () => {
 
     expect(onError).toHaveBeenCalledOnce()
     expect(onError).toHaveBeenCalledWith('Некорректная цель')
+    expect(worker.terminate).not.toHaveBeenCalled()
+    runner.dispose()
     expect(worker.terminate).toHaveBeenCalledOnce()
   })
 
