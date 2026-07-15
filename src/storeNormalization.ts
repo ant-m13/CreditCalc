@@ -13,7 +13,7 @@ import {
   type LoanConfig,
   type RateChange
 } from './loanEngine'
-import { MAX_EARLY_REPAYMENTS, MAX_GRACE_PERIODS, MAX_RATE_CHANGES, MAX_REPAYMENT_RULES, MAX_RULE_SKIP_MONTHS, MAX_TERM_MONTHS, MAX_TEXT_FIELD_LENGTH } from './loanEngine/limits'
+import { MAX_EARLY_REPAYMENTS, MAX_GRACE_PERIODS, MAX_PAYMENT_DAY, MAX_PERCENT, MAX_RATE_CHANGES, MAX_REPAYMENT_RULES, MAX_RULE_SKIP_MONTHS, MAX_TERM_MONTHS, MAX_TEXT_FIELD_LENGTH } from './loanEngine/limits'
 import { createDefaultConfig, defaultConfig } from './loanDefaults'
 import { assertLoanCandidateValid } from './loanCandidate'
 import type { LoanBackupData, ValidatedLoanData } from './importExport'
@@ -27,7 +27,10 @@ import { defaultAccentColor, normalizeAccentColor } from './accentColor'
 export const MAX_LOANS = 100
 export { defaultAccentColor, normalizeAccentColor } from './accentColor'
 
-const boundedCandidates = <T>(value: T[], limit: number) => value.slice(0, limit * 2)
+const NORMALIZATION_CANDIDATE_MULTIPLIER = 2
+const SEED_REPAYMENT_PERIOD_OFFSET = 11
+const SEED_REPAYMENT_AMOUNT = 350_000
+const boundedCandidates = <T>(value: T[], limit: number) => value.slice(0, limit * NORMALIZATION_CANDIDATE_MULTIPLIER)
 
 const oneOf = <T extends string>(value: unknown, values: readonly T[], fallback: T): T =>
   isOneOf(value, values) ? value : fallback
@@ -56,8 +59,8 @@ const advancePaymentPeriods = (startDate: string, config: LoanConfig, periods: n
 
 const createSeedRepayments = (config: LoanConfig): EarlyRepayment[] => [{
   id: 'seed-1',
-  date: advancePaymentPeriods(config.firstPaymentDate, config, 11),
-  amount: 350000,
+  date: advancePaymentPeriods(config.firstPaymentDate, config, SEED_REPAYMENT_PERIOD_OFFSET),
+  amount: SEED_REPAYMENT_AMOUNT,
   amountMode: 'extra',
   strategy: 'reduceTerm',
   source: 'own',
@@ -126,7 +129,7 @@ const normalizeRateChanges = (value: unknown, issueDate: string): RateChange[] =
   const changes = limitedValue.flatMap((item): RateChange[] => {
     if (!isObject(item) || !isISODate(item.date)) return []
     if (isISODate(issueDate) && item.date <= issueDate) return []
-    const annualRate = typeof item.annualRate === 'number' && Number.isFinite(item.annualRate) && item.annualRate >= 0 && item.annualRate <= 100 ? item.annualRate : undefined
+    const annualRate = typeof item.annualRate === 'number' && Number.isFinite(item.annualRate) && item.annualRate >= 0 && item.annualRate <= MAX_PERCENT ? item.annualRate : undefined
     if (annualRate === undefined || seenDates.has(item.date)) return []
     seenDates.add(item.date)
     return [{
@@ -147,7 +150,7 @@ const normalizeConfig = (config: Partial<LoanConfig> | undefined): LoanConfig =>
     ...defaultConfig,
     ...source,
     principal: finiteNumber(source.principal, defaultConfig.principal, 1),
-    annualRate: finiteNumber(source.annualRate, defaultConfig.annualRate, 0, 100),
+    annualRate: finiteNumber(source.annualRate, defaultConfig.annualRate, 0, MAX_PERCENT),
     rateChanges: normalizeRateChanges(source.rateChanges, issueDate),
     rateChangeMode: oneOf(source.rateChangeMode, rateChangeModes, defaultConfig.rateChangeMode),
     issueDate,
@@ -155,7 +158,7 @@ const normalizeConfig = (config: Partial<LoanConfig> | undefined): LoanConfig =>
     firstPaymentInterestOnly: typeof source.firstPaymentInterestOnly === 'boolean' ? source.firstPaymentInterestOnly : true,
     firstPaymentInterestOnlyMode: oneOf(source.firstPaymentInterestOnlyMode, firstInterestOnlyModes, 'addToTerm'),
     termMonths: Math.round(finiteNumber(source.termMonths, defaultConfig.termMonths, 1, MAX_TERM_MONTHS)),
-    paymentDay: Math.round(finiteNumber(source.paymentDay, defaultConfig.paymentDay, 1, 31)),
+    paymentDay: Math.round(finiteNumber(source.paymentDay, defaultConfig.paymentDay, 1, MAX_PAYMENT_DAY)),
     paymentType: oneOf(source.paymentType, paymentTypes, defaultConfig.paymentType),
     frequency: oneOf(source.frequency, frequencies, defaultConfig.frequency),
     currency: oneOf(source.currency, supportedCurrencies, defaultConfig.currency),
@@ -163,7 +166,7 @@ const normalizeConfig = (config: Partial<LoanConfig> | undefined): LoanConfig =>
     closeThreshold: finiteNumber(source.closeThreshold, defaultConfig.closeThreshold, 0),
     oneTimeFee: finiteNumber(source.oneTimeFee, defaultConfig.oneTimeFee, 0),
     monthlyFee: finiteNumber(source.monthlyFee, defaultConfig.monthlyFee, 0),
-    earlyRepaymentFeePercent: finiteNumber(source.earlyRepaymentFeePercent, defaultConfig.earlyRepaymentFeePercent, 0, 100),
+    earlyRepaymentFeePercent: finiteNumber(source.earlyRepaymentFeePercent, defaultConfig.earlyRepaymentFeePercent, 0, MAX_PERCENT),
     interest: {
       ...defaultConfig.interest,
       ...interest,
