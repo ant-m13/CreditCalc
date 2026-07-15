@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { parseLoanBackup } from './importExport'
 import { MAX_ID_LENGTH, MAX_RATE_CHANGES, MAX_REPAYMENT_RULES, MAX_RULE_SKIP_MONTHS } from './loanEngine/limits'
-import { defaultConfig } from './store'
+import { shortTestConfig as defaultConfig } from './testFixtures'
 
 const repayment = { id: 'early-1', date: defaultConfig.firstPaymentDate, amount: 8704.99, amountMode: 'extra', strategy: 'reduceTerm', source: 'own', sameDayOrder: 'regularFirst', interestFirst: true }
 

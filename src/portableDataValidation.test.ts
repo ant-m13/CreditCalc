@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { defaultConfig } from './loanDefaults'
 import { VALIDATED_LOAN_DATA_MARKER } from './importExport'
 import { PortableDataValidationRunner, validatePortableJson, validatePortableShare } from './portableDataValidation'
+import { shortTestConfig as defaultConfig } from './testFixtures'
 
 class ControlledWorker {
   static instances: ControlledWorker[] = []
