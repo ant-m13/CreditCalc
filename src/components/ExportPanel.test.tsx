@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { defaultConfig } from '../loanDefaults'
 import { VALIDATED_LOAN_DATA_MARKER } from '../importExport'
-import { ExportPanel, ImportPreviewModal } from './ExportPanel'
+import { ExportPanel, IMPORT_WARNINGS_PAGE_SIZE, ImportPreviewModal } from './ExportPanel'
 
 const renderPanel = (calculatedExportsDisabled = false) => {
   const download = vi.fn()
@@ -57,7 +57,7 @@ describe('ExportPanel', () => {
 
   it('показывает длинный список предупреждений импорта страницами', async () => {
     const user = userEvent.setup()
-    const warnings = Array.from({ length: 45 }, (_, index) => `Предупреждение ${index + 1}`)
+    const warnings = Array.from({ length: IMPORT_WARNINGS_PAGE_SIZE + 1 }, (_, index) => `Предупреждение ${index + 1}`)
     render(<ImportPreviewModal pending={{
       title: 'Проверка импорта',
       description: 'Проверьте данные',
@@ -77,7 +77,7 @@ describe('ExportPanel', () => {
       }
     }} createNew={vi.fn()} replaceCurrent={vi.fn()} decline={vi.fn()}/>)
 
-    expect(screen.getAllByRole('status')).toHaveLength(20)
+    expect(screen.getAllByRole('status')).toHaveLength(IMPORT_WARNINGS_PAGE_SIZE)
     expect(screen.getByText('Предупреждение 1')).toBeTruthy()
     await user.click(screen.getByRole('button', { name: 'Следующие предупреждения' }))
     expect(screen.queryByText('Предупреждение 1')).toBeNull()
