@@ -2,6 +2,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { defaultConfig } from './loanDefaults'
 import { calculateLoanSynchronously, LoanCalculationRunner, type LoanCalculationSnapshot } from './loanCalculationRunner'
 
+const ciEnvironment = (globalThis as typeof globalThis & {
+  process?: { env?: { CI?: string } }
+}).process?.env?.CI
+const isCi = ciEnvironment === 'true' || ciEnvironment === '1'
+const itInCi = isCi ? it : it.skip
+
 class RuntimeFailingWorker {
   static instances: RuntimeFailingWorker[] = []
 
@@ -123,6 +129,23 @@ describe('LoanCalculationRunner', () => {
     expect(onResult).toHaveBeenCalledWith(expect.objectContaining({ revision: 'timeout' }))
     expect(worker.terminate).toHaveBeenCalledOnce()
     runner.dispose()
+  })
+
+  itInCi('falls back after the real watchdog timeout in CI', { timeout: 20_000 }, async () => {
+    vi.useRealTimers()
+    const runner = new LoanCalculationRunner()
+    const current = snapshot('real-timeout')
+
+    try {
+      const envelope = await new Promise<ReturnType<typeof calculateLoanSynchronously>>(resolve => {
+        runner.calculate(current, resolve)
+      })
+
+      expect(envelope.revision).toBe(current.revision)
+      expect(RuntimeFailingWorker.instances[0].terminate).toHaveBeenCalledOnce()
+    } finally {
+      runner.dispose()
+    }
   })
 
   it('switches to synchronous calculation after three Worker runtime errors', async () => {
