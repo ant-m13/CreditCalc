@@ -1,6 +1,7 @@
 import { supportedCurrencies, type EarlyRepayment, type GracePeriod, type LoanConfig } from './types'
 import { differenceInCalendarDays, parseISO } from 'date-fns'
-import { MAX_CALENDAR_DAYS, MAX_CALENDAR_YEARS, MAX_EARLY_REPAYMENTS, MAX_FINANCIAL_RESULT, MAX_GRACE_PERIODS, MAX_MONEY_AMOUNT, MAX_PERCENT, MAX_RATE_CHANGES, MAX_TERM_MONTHS } from './limits'
+import { DAYS_IN_LEAP_YEAR, DAYS_PER_BIWEEK, ISO_YEAR_LENGTH, MONTHS_PER_QUARTER, MONTHS_PER_YEAR } from '../constants'
+import { MAX_CALENDAR_DAYS, MAX_CALENDAR_YEARS, MAX_EARLY_REPAYMENTS, MAX_FINANCIAL_RESULT, MAX_GRACE_PERIODS, MAX_MONEY_AMOUNT, MAX_PAYMENT_DAY, MAX_PERCENT, MAX_RATE_CHANGES, MAX_TERM_MONTHS } from './limits'
 import { contractualFinalPaymentDate, preparePaymentCalendar, regularPaymentDateMatches, totalPaymentPeriods } from './dates'
 import { repaymentAmountModeContextForRegularDate, repaymentAmountModeValidationErrors } from './repaymentAmountMode'
 import { isISODate } from '../utils/dateValidation'
@@ -10,18 +11,22 @@ const finite = (value: unknown) => typeof value === 'number' && Number.isFinite(
 
 const daysFromIssue = (issueDate: string, date: string) => differenceInCalendarDays(parseISO(date), parseISO(issueDate))
 const exceedsCalendarHorizon = (issueDate: string, date: string) => daysFromIssue(issueDate, date) > MAX_CALENDAR_DAYS
-const exceedsFourDigitCalendar = (date: string) => !/^\d{4}-\d{2}-\d{2}$/.test(date) || date > '9999-12-31'
 const horizonError = (label: string) => `${label} должна быть в пределах ${MAX_CALENDAR_YEARS} лет от даты выдачи`
+const MAX_FOUR_DIGIT_YEAR = 9999
+const FIRST_YEAR_AFTER_FOUR_DIGIT_CALENDAR = MAX_FOUR_DIGIT_YEAR + 1
+const MAX_FOUR_DIGIT_ISO_DATE = '9999-12-31'
+const exceedsFourDigitCalendar = (date: string) => !/^\d{4}-\d{2}-\d{2}$/.test(date) || date > MAX_FOUR_DIGIT_ISO_DATE
 const contractCanExceedFourDigitCalendar = (config: LoanConfig) => {
   if (!isISODate(config.firstPaymentDate) || !finite(config.termMonths)) return false
   if (config.frequency === 'biweekly') {
-    const firstYear = Number(config.firstPaymentDate.slice(0, 4))
-    return firstYear >= 9996 && totalPaymentPeriods(config) * 14 > (10000 - firstYear) * 366
+    const firstYear = Number(config.firstPaymentDate.slice(0, ISO_YEAR_LENGTH))
+    return totalPaymentPeriods(config) * DAYS_PER_BIWEEK > (FIRST_YEAR_AFTER_FOUR_DIGIT_CALENDAR - firstYear) * DAYS_IN_LEAP_YEAR
   }
   const [year, month] = config.firstPaymentDate.split('-').map(Number)
-  const periodMonths = config.frequency === 'quarterly' ? 3 : 1
-  const finalMonthIndex = year * 12 + (month - 1) + (totalPaymentPeriods(config) - 1) * periodMonths
-  return finalMonthIndex > 9999 * 12 + 11
+  const periodMonths = config.frequency === 'quarterly' ? MONTHS_PER_QUARTER : 1
+  const finalMonthIndex = year * MONTHS_PER_YEAR + (month - 1) + (totalPaymentPeriods(config) - 1) * periodMonths
+  const lastFourDigitCalendarMonth = MAX_FOUR_DIGIT_YEAR * MONTHS_PER_YEAR + (MONTHS_PER_YEAR - 1)
+  return finalMonthIndex > lastFourDigitCalendarMonth
 }
 
 export function validateLoan(config: LoanConfig) {
@@ -39,7 +44,7 @@ export function validateLoan(config: LoanConfig) {
   if (finite(config.termMonths) && !Number.isInteger(config.termMonths)) errors.push('Срок должен быть целым числом месяцев')
   if (finite(config.termMonths) && config.termMonths > MAX_TERM_MONTHS) errors.push(`Срок не должен превышать ${MAX_TERM_MONTHS} месяцев`)
   if (config.firstPaymentInterestOnly && config.firstPaymentInterestOnlyMode === 'withinTerm' && finite(config.termMonths) && totalPaymentPeriods(config) < 2) errors.push('Для первого платежа только процентами внутри договорного срока нужно не менее двух платёжных периодов')
-  if (!finite(config.paymentDay) || config.paymentDay < 1 || config.paymentDay > 31) errors.push('День платежа должен быть от 1 до 31')
+  if (!finite(config.paymentDay) || config.paymentDay < 1 || config.paymentDay > MAX_PAYMENT_DAY) errors.push(`День платежа должен быть от 1 до ${MAX_PAYMENT_DAY}`)
   if (finite(config.paymentDay) && !Number.isInteger(config.paymentDay)) errors.push('День платежа должен быть целым числом')
   if (!finite(config.closeThreshold) || config.closeThreshold < 0 || config.closeThreshold > MAX_MONEY_AMOUNT) errors.push(`Порог закрытия должен быть от 0 до ${MAX_MONEY_AMOUNT}`)
   if (!finite(config.oneTimeFee) || !finite(config.monthlyFee) || !finite(config.earlyRepaymentFeePercent) || config.oneTimeFee < 0 || config.monthlyFee < 0 || config.earlyRepaymentFeePercent < 0 || config.oneTimeFee > MAX_MONEY_AMOUNT || config.monthlyFee > MAX_MONEY_AMOUNT) errors.push(`Комиссии должны быть от 0 до ${MAX_MONEY_AMOUNT}`)

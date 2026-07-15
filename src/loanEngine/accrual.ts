@@ -1,12 +1,13 @@
 import Decimal from 'decimal.js'
 import { addDays, parseISO } from 'date-fns'
+import { BIWEEKLY_PERIODS_PER_YEAR, ISO_YEAR_LENGTH, MONTHS_PER_YEAR, PERCENT_FACTOR, QUARTERLY_PERIODS_PER_YEAR } from '../constants'
 import { calculateInterest, periodDays } from './calculateInterest'
 import { iso } from './dates'
 import { sortRateChanges } from './rateChanges'
 import type { GracePeriod, LoanConfig, RateChange } from './types'
 
 export const periodsPerYear = (frequency: LoanConfig['frequency']) =>
-  frequency === 'biweekly' ? 26 : frequency === 'quarterly' ? 4 : 12
+  frequency === 'biweekly' ? BIWEEKLY_PERIODS_PER_YEAR : frequency === 'quarterly' ? QUARTERLY_PERIODS_PER_YEAR : MONTHS_PER_YEAR
 
 export function accrueInterestRaw(
   config: LoanConfig,
@@ -58,7 +59,7 @@ export function accrueInterestSegmentsRaw(
     const segmentDays = periodDays(segmentFrom, segmentTo, segmentIncludeTo, segmentExcludeStartDate)
     return currentBalance
       .mul(segmentAnnualRate)
-      .div(100)
+      .div(PERCENT_FACTOR)
       .div(periodsPerYear(config.frequency))
       .mul(segmentDays)
       .div(Math.max(1, periodCalendarDays))
@@ -93,8 +94,8 @@ export function accrueInterestSegmentsRaw(
     if (afterGrace > range.start && afterGrace < range.endExclusive) boundaries.add(afterGrace)
   })
   if (config.interest.method === 'daily' && config.interest.dayCountBasis === 'actualActual') {
-    for (let year = Number(range.start.slice(0, 4)) + 1; ; year += 1) {
-      const yearStart = `${String(year).padStart(4, '0')}-01-01`
+    for (let year = Number(range.start.slice(0, ISO_YEAR_LENGTH)) + 1; ; year += 1) {
+      const yearStart = `${String(year).padStart(ISO_YEAR_LENGTH, '0')}-01-01`
       if (yearStart >= range.endExclusive) break
       if (yearStart > range.start) boundaries.add(yearStart)
     }

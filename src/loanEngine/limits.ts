@@ -1,3 +1,5 @@
+import { DAYS_IN_LEAP_YEAR } from '../constants'
+
 export const MAX_TERM_MONTHS = 1200
 export const MAX_EARLY_REPAYMENTS = 5000
 export const MAX_REPAYMENT_RULES = 5000
@@ -7,9 +9,10 @@ export const MAX_GRACE_PERIODS = 100
 export const MAX_RATE_CHANGES = 1000
 export const MAX_SCHEDULE_ROWS = 10000
 export const MAX_CALENDAR_YEARS = 120
-export const MAX_CALENDAR_DAYS = MAX_CALENDAR_YEARS * 366
+export const MAX_CALENDAR_DAYS = MAX_CALENDAR_YEARS * DAYS_IN_LEAP_YEAR
 export const MAX_TEXT_FIELD_LENGTH = 500
 export const MAX_ID_LENGTH = 128
+export const MAX_PAYMENT_DAY = 31
 export const MAX_MONEY_AMOUNT = 1_000_000_000_000
 export const MAX_FINANCIAL_RESULT = 90_000_000_000_000
 export const MAX_PERCENT = 100

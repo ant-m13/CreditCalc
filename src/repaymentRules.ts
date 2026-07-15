@@ -1,4 +1,5 @@
 import { addMonths, addWeeks, addYears, format, parseISO } from 'date-fns'
+import { ISO_YEAR_MONTH_LENGTH, MONTHS_PER_BIMONTH, MONTHS_PER_HALF_YEAR, MONTHS_PER_QUARTER, PERCENT_FACTOR } from './constants'
 import { generateBaseSchedule, scheduledPaymentDates, sortRepaymentsByApplicationOrder, type EarlyRepayment, type GracePeriod, type LoanConfig, type PreparedPaymentCalendar } from './loanEngine'
 import { MAX_GENERATED_REPAYMENTS, MAX_MONEY_AMOUNT, MAX_PERCENT, MAX_RULE_SKIP_MONTHS, MAX_TEXT_FIELD_LENGTH } from './loanEngine/limits'
 import { num } from './loanEngine/rounding'
@@ -74,15 +75,15 @@ const firstRegularPayment = (config: LoanConfig) => {
 }
 
 const ruleAmount = (rule: RepaymentRule, regularPayment: () => number, config: LoanConfig) => {
-  if (rule.type === 'paymentPercent') return num(regularPayment() * Math.max(0, rule.percent ?? 0) / 100, config.rounding)
+  if (rule.type === 'paymentPercent') return num(regularPayment() * Math.max(0, rule.percent ?? 0) / PERCENT_FACTOR, config.rounding)
   return num(rule.amount ?? 0, config.rounding)
 }
 
 const nextRuleDate = (startDate: Date, type: RepaymentRuleType, guard: number) => {
   if (type === 'weeklyFixed') return addWeeks(startDate, guard)
-  if (type === 'bimonthlyFixed') return addMonths(startDate, guard * 2)
-  if (type === 'quarterlyFixed') return addMonths(startDate, guard * 3)
-  if (type === 'semiannualFixed') return addMonths(startDate, guard * 6)
+  if (type === 'bimonthlyFixed') return addMonths(startDate, guard * MONTHS_PER_BIMONTH)
+  if (type === 'quarterlyFixed') return addMonths(startDate, guard * MONTHS_PER_QUARTER)
+  if (type === 'semiannualFixed') return addMonths(startDate, guard * MONTHS_PER_HALF_YEAR)
   if (type === 'annualFixed' || type === 'annualBonus') return addYears(startDate, guard)
   return addMonths(startDate, guard)
 }
@@ -142,7 +143,7 @@ export function expandRepaymentRules(config: LoanConfig, rules: RepaymentRule[],
       paymentDates ??= scheduledPaymentDates(config, gracePeriods, paymentCalendar)
       for (const date of paymentDates) {
         if (date < rule.startDate || date > rule.endDate) continue
-        if (skipMonthSet.has(date.slice(0, 7))) continue
+        if (skipMonthSet.has(date.slice(0, ISO_YEAR_MONTH_LENGTH))) continue
         pushRuleRepayment(result, rule, date, amount, sequence)
       }
       continue
@@ -152,7 +153,7 @@ export function expandRepaymentRules(config: LoanConfig, rules: RepaymentRule[],
     let cursor = startDate
     while (format(cursor, 'yyyy-MM-dd') <= rule.endDate) {
       const date = format(cursor, 'yyyy-MM-dd')
-      const month = date.slice(0, 7)
+      const month = date.slice(0, ISO_YEAR_MONTH_LENGTH)
       if (!skipMonthSet.has(month)) {
         pushRuleRepayment(result, rule, date, amount, sequence)
       }
