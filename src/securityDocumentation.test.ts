@@ -1,5 +1,5 @@
 // @vitest-environment node
-// @ts-expect-error -- Vitest выполняет этот тест в Node.js; production tsconfig намеренно не включает @types/node.
+// @ts-expect-error -- Vitest выполняет этот тест в Node.js; основной tsconfig намеренно не включает @types/node.
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 

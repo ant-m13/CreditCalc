@@ -2,7 +2,7 @@ import { addMonths, format, getDaysInMonth } from 'date-fns'
 import type { LoanConfig } from './loanEngine'
 import { MAX_PAYMENT_DAY } from './loanEngine/limits'
 
-// Демонстрационные значения используются для первого кредита и как безопасные fallback при нормализации.
+// Демонстрационные значения используются для первого кредита и как безопасные резервные значения при нормализации.
 const immutableDefaultConfig: LoanConfig = {
   principal: 7_200_000, annualRate: 12.4, rateChanges: [], rateChangeMode: 'nextPeriod', issueDate: '2026-06-23', firstPaymentDate: '2026-07-15', firstPaymentInterestOnly: true, firstPaymentInterestOnlyMode: 'addToTerm', termMonths: 240,
   paymentDay: 15, paymentType: 'annuity', frequency: 'monthly', currency: 'RUB', rounding: 'kopecks', closeThreshold: 300,
