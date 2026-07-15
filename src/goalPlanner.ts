@@ -19,6 +19,7 @@ import { isISODate } from './utils/dateValidation'
 
 export const GOAL_TERM_REDUCTION_MONTHS = [6, 12, 24, 36, 60, 120] as const
 export type GoalTermReductionMonths = typeof GOAL_TERM_REDUCTION_MONTHS[number]
+export const DEFAULT_GOAL_TERM_REDUCTION_MONTHS: GoalTermReductionMonths = 12
 
 const INITIAL_SEARCH_BAND_CENTS = CENTS_PER_CURRENCY_UNIT
 const MIN_SEARCH_AMOUNT = 100

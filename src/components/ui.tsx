@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import type React from 'react'
 import { CircleHelp } from 'lucide-react'
 
+const MAX_INPUT_FRACTION_DIGITS = 12
+
 export function Field({ label, hint, help, children }: { label: React.ReactNode; hint?: string; help?: string; children: React.ReactNode }) {
   const helpText = help ?? hint
   const helpLabel = typeof label === 'string' ? `Что влияет: ${label}` : 'Что влияет'
@@ -20,7 +22,7 @@ export function NumberInput({ value, onCommit, ...props }: { value: number; onCo
   const decimals = (input: unknown) => {
     const text = String(input)
     const fraction = text.includes('.') ? text.split('.')[1] : ''
-    return Math.min(12, fraction.length)
+    return Math.min(MAX_INPUT_FRACTION_DIGITS, fraction.length)
   }
   const commit = (rawValue = draft) => {
     if (rawValue.trim() === '') { setDraft(String(value)); return }

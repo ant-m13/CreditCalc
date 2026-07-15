@@ -1,5 +1,6 @@
 import { format } from 'date-fns'
 import { Landmark } from 'lucide-react'
+import { MONEY_DISPLAY_EPSILON } from '../constants'
 import type { ComparisonResult, EarlyRepayment, GracePeriod, LoanConfig, PaymentScheduleItem, ScenarioResult } from '../loanEngine'
 import { createMoneyFormatter, fmtMonths, shortDate } from '../formatters'
 import { dayCountBasisLabel, firstInterestOnlyModeName, graceTypeName, rateChangeModeName, roundingName, ruleTypeName, scenarioName } from '../labels'
@@ -28,8 +29,8 @@ const ruleActivity = (rule: RepaymentRule) => rule.enabled === false || (rule.ty
 export function PrintReport({ config, displayDecimals, repayments, repaymentRules, gracePeriods, comparison, selected }: { config: LoanConfig; displayDecimals: 0 | 2; repayments: EarlyRepayment[]; repaymentRules: RepaymentRule[]; gracePeriods: GracePeriod[]; comparison: ComparisonResult; selected: ScenarioResult }) {
   const { money } = createMoneyFormatter(config.currency, displayDecimals)
   const generated = format(new Date(), 'dd.MM.yyyy HH:mm')
-  const showFees = selected.schedule.some(row => Math.abs(row.feePaid ?? row.fee) > 0.004)
-  const showDeferred = selected.schedule.some(row => Math.abs(row.deferredInterestOpening ?? 0) > 0.004 || Math.abs(row.deferredInterestClosing ?? 0) > 0.004)
+  const showFees = selected.schedule.some(row => Math.abs(row.feePaid ?? row.fee) > MONEY_DISPLAY_EPSILON)
+  const showDeferred = selected.schedule.some(row => Math.abs(row.deferredInterestOpening ?? 0) > MONEY_DISPLAY_EPSILON || Math.abs(row.deferredInterestClosing ?? 0) > MONEY_DISPLAY_EPSILON)
   const paymentLabel = config.frequency === 'biweekly' ? 'Платёж раз в 2 недели' : config.frequency === 'quarterly' ? 'Квартальный платёж' : 'Ежемесячный платёж'
   const rateHistory = config.rateChanges.map(change => `${shortDate(change.date)} — ${change.annualRate}%`).join('; ')
   const finalBalloon = selected.schedule.find(row => row.eventTypes.includes('materialBalloon'))

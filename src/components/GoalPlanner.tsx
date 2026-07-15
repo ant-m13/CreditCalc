@@ -12,6 +12,7 @@ import {
   type GoalPlanPreviewEnvelope
 } from '../goalPlannerRunner'
 import {
+  DEFAULT_GOAL_TERM_REDUCTION_MONTHS,
   GOAL_TERM_REDUCTION_MONTHS,
   type GoalPlannerGoal,
   type GoalPlanVariant,
@@ -90,7 +91,7 @@ function GoalPlanPreviewModal({ envelope, repayments, displayDecimals, close }: 
 export function GoalPlanner({ loanId, sourceRevision, config, repayments, repaymentRules, gracePeriods, selectedScenario, displayDecimals, disabled = false, applyGoalPlan }: GoalPlannerProps) {
   const initialDates = useMemo(() => defaultDates(config, gracePeriods), [config, gracePeriods])
   const [goalType, setGoalType] = useState<GoalPlannerGoal['type']>('monthsEarlier')
-  const [months, setMonths] = useState<GoalTermReductionMonths>(12)
+  const [months, setMonths] = useState<GoalTermReductionMonths>(DEFAULT_GOAL_TERM_REDUCTION_MONTHS)
   const [targetDate, setTargetDate] = useState(config.firstPaymentDate)
   const [monthlyBudget, setMonthlyBudget] = useState('50000')
   const [maxOverpayment, setMaxOverpayment] = useState('100000')

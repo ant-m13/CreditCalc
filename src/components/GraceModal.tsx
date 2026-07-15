@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { X } from 'lucide-react'
 import { nextPaymentDate, type GracePeriod, type LoanConfig } from '../loanEngine'
+import { MAX_TERM_MONTHS } from '../loanEngine/limits'
 import { createDefaultConfig } from '../loanDefaults'
 import { currencySymbol } from '../formatters'
 import { useModalDialog } from '../hooks/useModalDialog'
@@ -15,20 +16,22 @@ interface GraceModalProps {
   currency: string
 }
 
+const DEFAULT_GRACE_PAYMENT_PERIODS = 2
+
 export const createDefaultGraceRange = (config: LoanConfig, today = new Date()) => {
   const fallback = createDefaultConfig(today, config.paymentDay)
   const todayIso = fallback.issueDate
   const threshold = isISODate(config.issueDate) && config.issueDate > todayIso ? config.issueDate : todayIso
   let startDate = isISODate(config.firstPaymentDate) && config.firstPaymentDate > config.issueDate ? config.firstPaymentDate : fallback.firstPaymentDate
   let guard = 0
-  while (startDate < threshold && guard < 1200) {
+  while (startDate < threshold && guard < MAX_TERM_MONTHS) {
     const nextDate = nextPaymentDate(startDate, config)
     if (!isISODate(nextDate) || nextDate <= startDate) break
     startDate = nextDate
     guard += 1
   }
   let endDate = startDate
-  for (let index = 0; index < 2; index += 1) {
+  for (let index = 0; index < DEFAULT_GRACE_PAYMENT_PERIODS; index += 1) {
     const nextDate = nextPaymentDate(endDate, config)
     if (!isISODate(nextDate) || nextDate <= endDate) break
     endDate = nextDate

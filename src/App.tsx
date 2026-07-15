@@ -1,6 +1,7 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import { flushSync } from 'react-dom'
 import { ArrowDownToLine, CalendarDays, History, Landmark, Menu, Moon, PanelLeftClose, PanelLeftOpen, Plus, Printer, ReceiptText, Settings2, ShieldCheck, Sun, Target, TrendingDown, X } from 'lucide-react'
+import { ISO_DATE_LENGTH } from './constants'
 import { isRegularPaymentDate, validateScenario, type EarlyRepayment } from './loanEngine'
 import { useLoanStore } from './store'
 import { FontControls } from './components/FontControls'
@@ -35,6 +36,7 @@ const GoalPlanner = lazy(() => import('./components/GoalPlanner').then(module =>
 
 const STALE_EXPORT_MESSAGE = 'Дождитесь окончания пересчёта, чтобы экспортировать актуальный график'
 const drawerFocusableSelector = 'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])'
+const MOBILE_LAYOUT_MEDIA_QUERY = '(max-width: 950px)'
 
 function App() {
   const store = useLoanStore()
@@ -127,7 +129,7 @@ function App() {
   })
 
   useEffect(() => {
-    const media = window.matchMedia('(max-width: 950px)')
+    const media = window.matchMedia(MOBILE_LAYOUT_MEDIA_QUERY)
     const updateViewport = () => setMobileViewport(media.matches)
     updateViewport()
     media.addEventListener?.('change', updateViewport)
@@ -275,7 +277,7 @@ function App() {
   const downloadQuarantinedLoans = useCallback(() => {
     try {
       const body = JSON.stringify(createQuarantineExport(store.quarantinedLoansRaw), null, 2)
-      downloadBlob(new Blob([body], { type: 'application/json' }), `credit-quarantine-${new Date().toISOString().slice(0, 10)}.json`)
+      downloadBlob(new Blob([body], { type: 'application/json' }), `credit-quarantine-${new Date().toISOString().slice(0, ISO_DATE_LENGTH)}.json`)
       setImportStatus({ kind: 'success', text: 'Ограниченная recovery-копия карантина скачана' })
     } catch (error) {
       setImportStatus({ kind: 'error', text: error instanceof Error ? error.message : 'Не удалось скачать повреждённые данные' })
