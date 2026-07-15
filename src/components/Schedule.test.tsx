@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { PaymentScheduleItem } from '../loanEngine'
 import { calculateDebtAtDate, generateBaseSchedule } from '../loanEngine'
 import { defaultConfig } from '../loanDefaults'
+import { shortTestConfig } from '../testFixtures'
 import { createMoneyFormatter } from '../formatters'
 import { getScheduleScrollBehavior, Schedule } from './Schedule'
 
@@ -68,7 +69,7 @@ describe('Schedule', () => {
   })
 
   it('помечает базу года как неприменимую в формуле периодического метода', () => {
-    const periodicConfig = { ...defaultConfig, interest: { ...defaultConfig.interest, method: 'annuity' as const } }
+    const periodicConfig = { ...shortTestConfig, interest: { ...shortTestConfig.interest, method: 'annuity' as const } }
     const schedule = generateBaseSchedule(periodicConfig)
     function AuditProbe() {
       const [rows, setRows] = useState(0)
