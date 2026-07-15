@@ -86,6 +86,7 @@ describe('LoanCalculationRunner', () => {
     { label: 'malformed', response: null },
     { label: 'foreign revision', response: { requestId: 1, kind: 'result', revision: 'foreign', result: {} } },
     { label: 'foreign request', response: { requestId: 999, kind: 'result', revision: 'protocol', result: {} } },
+    { label: 'Worker error', response: { requestId: 1, kind: 'error', revision: 'protocol', error: 'Unknown kind' } },
     { label: 'invalid result', response: { requestId: 1, kind: 'result', revision: 'protocol', result: {} } }
   ])('falls back exactly once after a $label Worker response', async ({ response }) => {
     const runner = new LoanCalculationRunner()
