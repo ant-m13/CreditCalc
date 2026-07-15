@@ -1,10 +1,12 @@
-import { describe, expect, it } from 'vitest'
+import { beforeAll, describe, expect, it } from 'vitest'
 import { defaultConfig } from './loanDefaults'
 import { MAX_PORTABLE_JSON_BYTES } from './portabilityLimits'
 import { parseLoanBackup } from './importExport'
 import { buildShareUrl, createLoanSnapshot, decodeSharedCalculation, encodeSharedCalculation, looksLikeSharedCalculationUrl, normalizeSharedCalculationPayload, parseLoanSnapshot, readSharedCalculationFromLocation } from './shareCalculation'
 import type { EarlyRepayment, GracePeriod, LoanConfig } from './loanEngine'
 import type { RepaymentRule } from './repaymentRules'
+
+const PORTABLE_TEST_TERM_MONTHS = 48
 
 const config: LoanConfig = {
   ...defaultConfig,
@@ -13,7 +15,7 @@ const config: LoanConfig = {
   issueDate: '2025-11-26',
   firstPaymentDate: '2025-12-26',
   firstPaymentInterestOnly: true,
-  termMonths: 360,
+  termMonths: PORTABLE_TEST_TERM_MONTHS,
   paymentDay: 26,
   paymentType: 'annuity',
   frequency: 'monthly',
@@ -59,49 +61,48 @@ const snapshot = () => createLoanSnapshot({
   theme: 'violet'
 })
 
+let decodedSnapshot: Awaited<ReturnType<typeof decodeSharedCalculation>>
+
+beforeAll(async () => {
+  decodedSnapshot = await decodeSharedCalculation(await encodeSharedCalculation(snapshot()))
+})
+
 describe('ссылка на расчёт', () => {
   it('выполняет полный round-trip encode → decode → validate', async () => {
-    const decoded = await decodeSharedCalculation(await encodeSharedCalculation(snapshot()))
-    expect(decoded.config.principal).toBe(5_917_734)
-    expect(decoded.name).toBe('Семейный кредит')
-    expect(decoded.repayments).toHaveLength(3)
-    expect(decoded.repaymentRules).toHaveLength(3)
-    expect(decoded.gracePeriods).toHaveLength(4)
+    expect(decodedSnapshot.config.principal).toBe(5_917_734)
+    expect(decodedSnapshot.name).toBe('Семейный кредит')
+    expect(decodedSnapshot.repayments).toHaveLength(3)
+    expect(decodedSnapshot.repaymentRules).toHaveLength(3)
+    expect(decodedSnapshot.gracePeriods).toHaveLength(4)
   })
 
   it('восстанавливает все поля LoanConfig', async () => {
-    const decoded = await decodeSharedCalculation(await encodeSharedCalculation(snapshot()))
-    expect(decoded.config).toEqual(config)
+    expect(decodedSnapshot.config).toEqual(config)
   })
 
   it('восстанавливает несколько досрочных платежей со всеми вариантами полей', async () => {
-    const decoded = await decodeSharedCalculation(await encodeSharedCalculation(snapshot()))
-    expect(decoded.repayments).toEqual(repayments)
+    expect(decodedSnapshot.repayments).toEqual(repayments)
   })
 
   it('восстанавливает несколько льготных периодов всех типов', async () => {
-    const decoded = await decodeSharedCalculation(await encodeSharedCalculation(snapshot()))
-    expect(decoded.gracePeriods).toEqual(gracePeriods)
+    expect(decodedSnapshot.gracePeriods).toEqual(gracePeriods)
   })
 
   it('восстанавливает правила досрочных платежей', async () => {
-    const decoded = await decodeSharedCalculation(await encodeSharedCalculation(snapshot()))
-    expect(decoded.repaymentRules).toEqual(repaymentRules)
+    expect(decodedSnapshot.repaymentRules).toEqual(repaymentRules)
   })
 
   it('сохраняет selectedScenario и настройки интерфейса', async () => {
-    const decoded = await decodeSharedCalculation(await encodeSharedCalculation(snapshot()))
-    expect(decoded.selectedScenario).toBe('combined')
-    expect(decoded.termUnit).toBe('years')
-    expect(decoded.displayDecimals).toBe(0)
-    expect(decoded.appFontSize).toBe('xlarge')
-    expect(decoded.scheduleFontSize).toBe('large')
-    expect(decoded.theme).toBe('violet')
+    expect(decodedSnapshot.selectedScenario).toBe('combined')
+    expect(decodedSnapshot.termUnit).toBe('years')
+    expect(decodedSnapshot.displayDecimals).toBe(0)
+    expect(decodedSnapshot.appFontSize).toBe('xlarge')
+    expect(decodedSnapshot.scheduleFontSize).toBe('large')
+    expect(decodedSnapshot.theme).toBe('violet')
   })
 
   it('корректно работает с кириллицей, emoji и URL-символами', async () => {
-    const decoded = await decodeSharedCalculation(await encodeSharedCalculation(snapshot()))
-    expect(decoded.repayments[0].comment).toBe('Первый платёж 🏠 & #%+"')
+    expect(decodedSnapshot.repayments[0].comment).toBe('Первый платёж 🏠 & #%+"')
   })
 
   it('отклоняет повреждённый payload', async () => {
