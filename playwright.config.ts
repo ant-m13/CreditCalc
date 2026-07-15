@@ -1,15 +1,18 @@
 import { defineConfig, devices } from '@playwright/test'
 
-const port = 4318
+const E2E_SERVER_PORT = 4318
+const E2E_TEST_TIMEOUT_MS = 45_000
+const E2E_EXPECT_TIMEOUT_MS = 10_000
+const E2E_SERVER_START_TIMEOUT_MS = 60_000
 const configuredBasePath = (process.env.E2E_BASE_PATH ?? '').replace(/^\/+|\/+$/g, '')
 const basePath = configuredBasePath ? `/${configuredBasePath}/` : '/'
-const appUrl = `http://127.0.0.1:${port}${basePath}`
+const appUrl = `http://127.0.0.1:${E2E_SERVER_PORT}${basePath}`
 
 export default defineConfig({
   testDir: './e2e',
-  timeout: 45_000,
+  timeout: E2E_TEST_TIMEOUT_MS,
   expect: {
-    timeout: 10_000
+    timeout: E2E_EXPECT_TIMEOUT_MS
   },
   reporter: process.env.CI ? 'github' : 'list',
   use: {
@@ -20,7 +23,7 @@ export default defineConfig({
     command: 'node ./scripts/serve-dist.mjs',
     url: appUrl,
     reuseExistingServer: !process.env.CI,
-    timeout: 60_000
+    timeout: E2E_SERVER_START_TIMEOUT_MS
   },
   projects: [
     {

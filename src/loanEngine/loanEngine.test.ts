@@ -719,6 +719,9 @@ describe('loan engine', () => {
 })
 
 // ===== Производительность =====
+const MAX_ANNUITY_SCHEDULE_DURATION_MS = 1_000
+const MAX_DIFFERENTIATED_SCHEDULE_DURATION_MS = 800
+
 describe('performance', () => {
   it('генерирует 30-летний аннуитетный график с досрочными погашениями менее чем за 1 секунду', () => {
     const configWithEarly: LoanConfig = {
@@ -742,7 +745,7 @@ describe('performance', () => {
     const result = generateBaseSchedule(configWithEarly, { earlyRepayments });
     const duration = performance.now() - start;
 
-    expect(duration).toBeLessThan(1000);
+    expect(duration).toBeLessThan(MAX_ANNUITY_SCHEDULE_DURATION_MS);
     expect(result.length).toBeGreaterThanOrEqual(360);
     expect(result.at(-1)?.closingBalance).toBeCloseTo(0, 2);
     expect(result.reduce((sum, row) => sum + row.interest, 0)).toBeGreaterThan(0);
@@ -767,7 +770,7 @@ describe('performance', () => {
     const result = generateBaseSchedule(diffConfig, { earlyRepayments });
     const duration = performance.now() - start;
 
-    expect(duration).toBeLessThan(800);
+    expect(duration).toBeLessThan(MAX_DIFFERENTIATED_SCHEDULE_DURATION_MS);
     expect(result.length).toBeLessThanOrEqual(363);
     expect(result.length).toBeGreaterThan(0);
     expect(result.at(-1)?.closingBalance).toBeCloseTo(0, 2);

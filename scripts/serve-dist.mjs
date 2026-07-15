@@ -3,7 +3,10 @@ import { createServer } from 'node:http'
 import { extname, join, resolve, relative, isAbsolute } from 'node:path'
 
 const root = resolve(process.cwd(), process.env.DIST_DIR ?? 'dist')
-const port = Number(process.env.E2E_DIST_PORT ?? process.env.PORT ?? 4318)
+const DEFAULT_E2E_PORT = 4318
+const HTTP_NOT_FOUND = 404
+const HTTP_OK = 200
+const port = Number(process.env.E2E_DIST_PORT ?? process.env.PORT ?? DEFAULT_E2E_PORT)
 const host = process.env.E2E_DIST_HOST ?? '127.0.0.1'
 
 const contentTypes = new Map([
@@ -47,12 +50,12 @@ const resolveRequest = (requestUrl) => {
 const server = createServer((request, response) => {
   const filePath = resolveRequest(request.url)
   if (!isInsideRoot(filePath) || !existsSync(filePath)) {
-    response.writeHead(404)
+    response.writeHead(HTTP_NOT_FOUND)
     response.end('Not found')
     return
   }
 
-  response.writeHead(200, {
+  response.writeHead(HTTP_OK, {
     'Content-Type': contentTypes.get(extname(filePath)) ?? 'application/octet-stream',
     'Cache-Control': 'no-store'
   })

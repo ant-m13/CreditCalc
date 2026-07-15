@@ -2,6 +2,7 @@ import { expect, test, type Page } from '@playwright/test'
 import { readFileSync } from 'node:fs'
 
 const packageMetadata = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')) as { version: string }
+const GOAL_PLANNER_RESULT_TIMEOUT_MS = 30_000
 
 test.beforeEach(async ({ page }) => {
   await page.addInitScript((appVersion) => {
@@ -70,7 +71,7 @@ test('планировщик цели загружается и выполняе
     const calculate = page.getByRole('button', { name: 'Рассчитать план' })
     await expect(calculate).toBeEnabled()
     await calculate.click()
-    await expect(page.getByRole('heading', { name: 'Варианты достижения цели' })).toBeVisible({ timeout: 30_000 })
+    await expect(page.getByRole('heading', { name: 'Варианты достижения цели' })).toBeVisible({ timeout: GOAL_PLANNER_RESULT_TIMEOUT_MS })
   } finally {
     await context.setOffline(false)
   }

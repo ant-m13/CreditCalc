@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest'
 import { buildLoanCalculation } from './loanCalculation'
 import { defaultConfig } from './loanDefaults'
 
+const MAX_CALCULATION_DURATION_MS = 4_000
+
 describe('buildLoanCalculation', () => {
   it('строит четыре длинных сценария через путь для уже валидированных данных', () => {
     const startedAt = performance.now()
@@ -23,6 +25,6 @@ describe('buildLoanCalculation', () => {
     expect(result.errors).toEqual([])
     expect(result.comparison?.scenarios).toHaveLength(4)
     expect(result.selected?.schedule.length).toBeGreaterThan(700)
-    expect(performance.now() - startedAt).toBeLessThan(4000)
+    expect(performance.now() - startedAt).toBeLessThan(MAX_CALCULATION_DURATION_MS)
   })
 })

@@ -7,6 +7,7 @@ const ciEnvironment = (globalThis as typeof globalThis & {
 }).process?.env?.CI
 const isCi = ciEnvironment === 'true' || ciEnvironment === '1'
 const itInCi = isCi ? it : it.skip
+const REAL_WATCHDOG_TEST_TIMEOUT_MS = 20_000
 
 class RuntimeFailingWorker {
   static instances: RuntimeFailingWorker[] = []
@@ -131,7 +132,7 @@ describe('LoanCalculationRunner', () => {
     runner.dispose()
   })
 
-  itInCi('falls back after the real watchdog timeout in CI', { timeout: 20_000 }, async () => {
+  itInCi('falls back after the real watchdog timeout in CI', { timeout: REAL_WATCHDOG_TEST_TIMEOUT_MS }, async () => {
     vi.useRealTimers()
     const runner = new LoanCalculationRunner()
     const current = snapshot('real-timeout')
