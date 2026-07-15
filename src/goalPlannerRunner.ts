@@ -75,7 +75,7 @@ export class GoalPlannerRunner {
     onResult: (result: T) => void,
     onError: (message: string) => void
   ) {
-    // A busy Worker must be replaced so a newer request is not queued behind stale heavy work.
+    // Занятый Worker заменяется, чтобы новый запрос не ждал в очереди за устаревшим тяжёлым расчётом.
     if (this.activeRequestId !== null) this.cancelWorker()
     if (!canUseGoalPlannerWorker()) {
       onError('Планировщик недоступен: браузер не поддерживает Web Worker')

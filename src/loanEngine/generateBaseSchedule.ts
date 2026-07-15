@@ -70,10 +70,10 @@ const estimateRemainingPeriods = (
 }
 
 /**
- * Builds an event-based schedule. An early repayment between two regular due
- * dates is its own row, just as it is in a bank statement: interest is accrued
- * up to the event, the balance changes on that date, and the next interval is
- * calculated from the new balance.
+ * Строит график по событиям. Досрочный платёж между двумя регулярными датами
+ * получает отдельную строку, как в банковской выписке: проценты начисляются
+ * до события, остаток меняется в эту дату, а следующий интервал рассчитывается
+ * уже от нового остатка.
  */
 export function generateBaseSchedule(config: LoanConfig, options: Options = {}): PaymentScheduleItem[] {
   const allRepayments = sortRepaymentsByApplicationOrder(options.earlyRepayments ?? [])
@@ -318,8 +318,8 @@ export function generateBaseSchedule(config: LoanConfig, options: Options = {}):
     const auditDays = (segments: ReturnType<typeof accrueSegments>, fallback: number) =>
       segments.length > 0 ? segments.reduce((sum, segment) => sum + segment.days, 0) : fallback
 
-    // Events on arbitrary dates become independent rows. Events sharing one
-    // date are combined without accruing a fictitious extra day between them.
+    // События на произвольных датах получают отдельные строки. События одной даты
+    // объединяются без начисления процентов за несуществующий дополнительный день.
     while (repaymentIndex < repayments.length && repayments[repaymentIndex].date < paymentDate) {
       const eventDate = repayments[repaymentIndex].date
       const sameDate: EarlyRepayment[] = []

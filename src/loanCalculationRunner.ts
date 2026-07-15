@@ -23,9 +23,9 @@ export type LoanCalculationWorkerResponse =
   | { requestId: number; kind: 'result'; revision: string; result: LoanCalculationResult }
   | { requestId: number; kind: 'error'; revision: string; error: string }
 
-// After three consecutive Worker failures, stop recreating failing instances and use sync fallback.
+// После трёх последовательных сбоев Worker прекращаем создавать новые экземпляры и используем резервный синхронный расчёт.
 const MAX_WORKER_ERRORS = 3
-// Allow expensive schedules up to 15 seconds, then recover synchronously from an unresponsive Worker.
+// На тяжёлый график отводится до 15 секунд, после чего зависший Worker заменяется синхронным расчётом.
 const WORKER_WATCHDOG_MS = 15_000
 
 const isRecord = (value: unknown): value is Record<string, unknown> => Boolean(value) && typeof value === 'object'

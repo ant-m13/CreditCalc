@@ -1,5 +1,5 @@
 // @vitest-environment node
-// @ts-expect-error -- build tsconfig intentionally excludes @types/node; Vitest executes this file in Node.js.
+// @ts-expect-error -- сборочный tsconfig намеренно исключает @types/node; Vitest выполняет файл в Node.js.
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 

@@ -156,7 +156,7 @@ export const handleExternalStorageSignal = (detail: StorageConflictDetail) => {
 }
 
 const broadcastStorageSignal = (detail: StorageConflictDetail) => {
-  try { storageSyncChannel?.postMessage(detail) } catch { /* storage events remain the compatibility fallback */ }
+  try { storageSyncChannel?.postMessage(detail) } catch { /* События storage остаются резервным механизмом совместимости. */ }
 }
 
 const writePersistedItem = (name: string, value: StorageValue<LoanState>) => {
