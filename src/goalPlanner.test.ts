@@ -7,6 +7,12 @@ import type { RepaymentRule } from './repaymentRules'
 
 const GOAL_PLANNER_TEST_TIMEOUT_MS = 30_000
 const RANDOMIZED_SEARCH_TEST_TIMEOUT_MS = 90_000
+const ciEnvironment = (globalThis as typeof globalThis & {
+  process?: { env?: { CI?: string } }
+}).process?.env?.CI
+const isCi = ciEnvironment === 'true' || ciEnvironment === '1'
+// Длительная проверка случайных сценариев остаётся в CI, а локальный набор сохраняет быстрые детерминированные границы.
+const itInCi = isCi ? it : it.skip
 
 const input = (patch: Partial<GoalPlannerInput> = {}): GoalPlannerInput => ({
   config: { ...defaultConfig, principal: 1_000_000, annualRate: 12, issueDate: '2026-01-01', firstPaymentDate: '2026-02-01', paymentDay: 1, termMonths: 60, firstPaymentInterestOnly: false, earlyRepaymentFeePercent: 1 },
@@ -201,7 +207,7 @@ describe('goal planner', { timeout: GOAL_PLANNER_TEST_TIMEOUT_MS }, () => {
     expect(buildGoalPlanPreview(plannerInput, previousOperations).planned.overpayment).toBeGreaterThan(234_473.37)
   })
 
-  it('подтверждает глобальную границу на случайных финансовых сценариях', { timeout: RANDOMIZED_SEARCH_TEST_TIMEOUT_MS }, () => {
+  itInCi('подтверждает глобальную границу на случайных финансовых сценариях', { timeout: RANDOMIZED_SEARCH_TEST_TIMEOUT_MS }, () => {
     const random = seededRandom(1_703_2026)
     const frequencies = ['monthly', 'quarterly', 'monthly'] as const
 
