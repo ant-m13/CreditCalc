@@ -17,11 +17,11 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
-const settings = (loanId: string, config: LoanConfig, update = vi.fn()) => <Settings
+const settings = (loanId: string, config: LoanConfig, update = vi.fn(), updateInterest = vi.fn()) => <Settings
   key={loanId}
   config={config}
   update={update}
-  updateInterest={vi.fn()}
+  updateInterest={updateInterest}
   termUnit="months"
   setTermUnit={vi.fn()}
   displayDecimals={2}
@@ -181,9 +181,12 @@ describe('basic UI components', () => {
   })
 
   it('поясняет точную дату ставки без обещания следующего платёжного периода', () => {
-    render(settings('loan-a', { ...shortTestConfig, rateChangeMode: 'exactDate' }))
+    const updateInterest = vi.fn()
+    render(settings('loan-a', { ...shortTestConfig, rateChangeMode: 'exactDate' }, vi.fn(), updateInterest))
 
     expect(screen.getByText(/Дата, с которой новая ставка применяется внутри текущего процентного периода/)).toBeTruthy()
     expect(screen.getByText(/Годовая ставка, действующая точно с указанной даты/)).toBeTruthy()
+    fireEvent.change(screen.getByDisplayValue('По фактическим дням'), { target: { value: 'annuity' } })
+    expect(updateInterest).toHaveBeenCalledWith({ method: 'annuity' })
   })
 })
