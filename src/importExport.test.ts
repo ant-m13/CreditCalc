@@ -133,7 +133,7 @@ describe('импорт резервной копии', () => {
       { id: 'rule-quarter', name: 'Квартал', type: 'quarterlyFixed', startDate: '2026-08-15', endDate: '2026-12-15', amount: 20000, strategy: 'reduceTerm', source: 'own', sameDayOrder: 'regularFirst', interestFirst: true, skipMonths: [] },
       { id: 'rule-half-year', name: 'Полгода', type: 'semiannualFixed', startDate: '2026-08-15', endDate: '2027-08-15', amount: 20000, strategy: 'reduceTerm', source: 'own', sameDayOrder: 'regularFirst', interestFirst: true, skipMonths: [] },
       { id: 'rule-year', name: 'Год', type: 'annualFixed', startDate: '2026-08-15', endDate: '2028-08-15', amount: 20000, strategy: 'reduceTerm', source: 'own', sameDayOrder: 'regularFirst', interestFirst: true, skipMonths: [] },
-      { id: 'rule-total', name: 'Итого каждый месяц', type: 'monthlyTotalPayment', startDate: '2026-08-15', endDate: '2026-12-15', amount: 100000, strategy: 'reduceTerm', source: 'own', sameDayOrder: 'earlyFirst', interestFirst: true, skipMonths: [] }
+      { id: 'rule-total', name: 'Итого каждый месяц', type: 'monthlyTotalPayment', startDate: '2026-08-15', endDate: '2026-12-15', amount: 1_000_000, strategy: 'reduceTerm', source: 'own', sameDayOrder: 'earlyFirst', interestFirst: true, skipMonths: [] }
     ]
     const result = parseLoanBackup(JSON.stringify({ config: defaultConfig, repayments: [], repaymentRules: rules, gracePeriods: [], selectedScenario: 'combined' }))
     expect(result.repaymentRules.map(rule => rule.type)).toEqual(['weeklyFixed', 'bimonthlyFixed', 'quarterlyFixed', 'semiannualFixed', 'annualFixed', 'monthlyTotalPayment'])
@@ -201,8 +201,8 @@ describe('импорт резервной копии', () => {
   it('предупреждает о допустимых legacy-преобразованиях amountMode', () => {
     const withoutMode = { ...repayment } as Record<string, unknown>
     delete withoutMode.amountMode
-    withoutMode.amount = 100_000
-    const result = parseLoanBackup(JSON.stringify({ config: defaultConfig, repayments: [withoutMode, { ...repayment, id: 'legacy-total', date: '2026-08-15', amount: 100_000, sameDaySequence: 1, amountMode: 'total' }] }))
+    withoutMode.amount = 1_000_000
+    const result = parseLoanBackup(JSON.stringify({ config: defaultConfig, repayments: [withoutMode, { ...repayment, id: 'legacy-total', date: '2026-08-15', amount: 1_000_000, sameDaySequence: 1, amountMode: 'total' }] }))
     expect(result.importWarnings).toEqual([
       'Ошибка в досрочном платеже №1: отсутствующий legacy amountMode преобразован в totalWithFee',
       'Ошибка в досрочном платеже №2: legacy amountMode total преобразован в totalWithFee'
