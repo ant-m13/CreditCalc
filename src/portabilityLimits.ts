@@ -1,3 +1,4 @@
+// JSON ограничен 8 МиБ, а запас до 12 МиБ учитывает рост при Base64-кодировании ссылки.
 export const MAX_PORTABLE_JSON_BYTES = 8 * 1024 * 1024
 export const MAX_SHARE_ENCODED_PAYLOAD_LENGTH = 12 * 1024 * 1024
 

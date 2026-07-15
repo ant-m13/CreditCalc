@@ -30,7 +30,10 @@ const cacheFirstAsset = async (request: Request) => {
   return response
 }
 
-const fetchWithTimeout = async (request: Request, timeoutMs = 5_000) => {
+// Навигация быстро переходит к офлайн-странице, если сеть не отвечает.
+const NAVIGATION_FETCH_TIMEOUT_MS = 5_000
+
+const fetchWithTimeout = async (request: Request, timeoutMs = NAVIGATION_FETCH_TIMEOUT_MS) => {
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), timeoutMs)
   try {

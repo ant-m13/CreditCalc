@@ -7,6 +7,7 @@ export interface ServiceWorkerSnapshot {
 }
 
 const supported = typeof navigator !== 'undefined' && 'serviceWorker' in navigator
+const SERVICE_WORKER_UPDATE_INTERVAL_MS = 60 * 60 * 1_000
 let snapshot: ServiceWorkerSnapshot = { supported, registered: false, offlineReady: false, updateAvailable: false, error: '' }
 let registration: ServiceWorkerRegistration | null = null
 let reloadForUpdate = false
@@ -52,7 +53,7 @@ export const registerPwaServiceWorker = async (production = import.meta.env.PROD
       reloadForUpdate = false
       window.location.reload()
     })
-    window.setInterval(() => { void registration?.update() }, 60 * 60 * 1_000)
+    window.setInterval(() => { void registration?.update() }, SERVICE_WORKER_UPDATE_INTERVAL_MS)
   } catch (error) {
     publish({ error: error instanceof Error ? error.message : 'Не удалось включить офлайн-режим' })
   }

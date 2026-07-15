@@ -3,15 +3,20 @@ import { assertPortableJsonSize, MAX_PORTABLE_JSON_BYTES, MAX_SHARE_ENCODED_PAYL
 export const SHARE_PREFIX = 'v1.'
 export const MAX_ENCODED_PAYLOAD_LENGTH = MAX_SHARE_ENCODED_PAYLOAD_LENGTH
 export const MAX_JSON_PAYLOAD_LENGTH = MAX_PORTABLE_JSON_BYTES
+const BASE64_CHUNK_BYTES = 0x8000
+const BASE64_BLOCK_SIZE = 4
 
 const bytesToBase64Url = (bytes: Uint8Array) => {
   let binary = ''
-  for (let index = 0; index < bytes.length; index += 0x8000) binary += String.fromCharCode(...bytes.slice(index, index + 0x8000))
+  for (let index = 0; index < bytes.length; index += BASE64_CHUNK_BYTES) {
+    binary += String.fromCharCode(...bytes.slice(index, index + BASE64_CHUNK_BYTES))
+  }
   return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '')
 }
 
 const base64UrlToBytes = (value: string) => {
-  const base64 = value.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - value.length % 4) % 4)
+  const missingPadding = (BASE64_BLOCK_SIZE - value.length % BASE64_BLOCK_SIZE) % BASE64_BLOCK_SIZE
+  const base64 = value.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat(missingPadding)
   const binary = atob(base64)
   return Uint8Array.from(binary, char => char.charCodeAt(0))
 }
