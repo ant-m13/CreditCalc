@@ -53,7 +53,7 @@ describe('store normalization', () => {
         annualRate: 9.5,
         issueDate: '2026-01-10',
         firstPaymentDate: '2026-02-10',
-        termMonths: 120,
+        termMonths: 12,
         paymentDay: 10
       },
       repayments: [],
