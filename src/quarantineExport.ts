@@ -1,5 +1,6 @@
 import type { QuarantinedLoanRaw } from './storeTypes'
 
+// Ограничения не дают аварийному экспорту занять чрезмерный объём памяти или диска.
 export const QUARANTINE_EXPORT_LIMITS = {
   maxDepth: 8,
   maxObjectKeys: 50,
