@@ -25,6 +25,7 @@ export type LoanCalculationWorkerResponse =
 
 // After three consecutive Worker failures, stop recreating failing instances and use sync fallback.
 const MAX_WORKER_ERRORS = 3
+// Allow expensive schedules up to 15 seconds, then recover synchronously from an unresponsive Worker.
 const WORKER_WATCHDOG_MS = 15_000
 
 const isRecord = (value: unknown): value is Record<string, unknown> => Boolean(value) && typeof value === 'object'
