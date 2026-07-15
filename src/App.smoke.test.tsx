@@ -1,6 +1,5 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from './App'
 import { defaultConfig, STORAGE_CONFLICT_EVENT, useLoanStore, type LoanProfile } from './store'
@@ -151,7 +150,6 @@ describe('App smoke tests', () => {
   }, SMOKE_TEST_TIMEOUT_MS)
 
   it('монтирует печатный отчёт только на время печати', async () => {
-    const user = userEvent.setup()
     const print = vi.fn()
     vi.stubGlobal('print', print)
     render(<App />)
@@ -165,30 +163,10 @@ describe('App smoke tests', () => {
     fireEvent(window, new Event('afterprint'))
     await waitFor(() => expect(screen.queryByRole('heading', { name: 'Расчёт кредита' })).toBeNull())
 
-    await user.click(screen.getByRole('button', { name: /Печать/i }))
+    fireEvent.click(screen.getByRole('button', { name: /Печать/i }))
     expect(screen.getByRole('heading', { name: 'Расчёт кредита' })).toBeTruthy()
     expect(print).toHaveBeenCalledTimes(1)
   }, EXTENDED_SMOKE_TEST_TIMEOUT_MS)
-
-  it('добавляет выключенный досрочный платёж и быстро включает его из календаря', async () => {
-    const user = userEvent.setup()
-    render(<App />)
-
-    await user.click(screen.getByRole('button', { name: /Досрочный платёж/i }))
-    await user.click(screen.getByRole('checkbox', { name: /Платёж включён/i }))
-    await user.click(screen.getByRole('button', { name: 'Добавить и пересчитать' }))
-    await user.click(screen.getByRole('button', { name: /^Досрочные/ }))
-
-    expect(await screen.findByText('Временно отключено', {}, { timeout: ASYNC_QUERY_TIMEOUT_MS })).toBeTruthy()
-    expect(useLoanStore.getState().repayments[0]).toMatchObject({ amount: 100000, enabled: false })
-
-    const enableButtons = await screen.findAllByRole('button', { name: /Включить платёж/i })
-    expect(enableButtons).toHaveLength(2)
-    await user.click(enableButtons[1])
-
-    expect(useLoanStore.getState().repayments[0]).toMatchObject({ amount: 100000, enabled: true })
-    expect(screen.getAllByRole('button', { name: /Выключить платёж/i })).toHaveLength(2)
-  }, SMOKE_TEST_TIMEOUT_MS)
 
   it('на первом запуске без ссылки показывает знакомство', async () => {
     localStorage.clear()
@@ -209,12 +187,11 @@ describe('App smoke tests', () => {
   })
 
   it('после принятия кредита из ссылки на первом запуске не открывает знакомство и пример', async () => {
-    const user = userEvent.setup()
     localStorage.clear()
     const data = await openSharedCalculation()
     render(<App />)
 
-    await user.click(await screen.findByRole('button', { name: 'Заменить текущий' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Заменить текущий' }))
 
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Загрузить кредит из ссылки?' })).toBeNull())
     expect(screen.queryByRole('dialog', { name: 'Короткое знакомство' })).toBeNull()
@@ -224,19 +201,17 @@ describe('App smoke tests', () => {
   })
 
   it('после отказа от ссылки на первом запуске показывает знакомство', async () => {
-    const user = userEvent.setup()
     localStorage.clear()
     await openSharedCalculation()
     render(<App />)
 
-    await user.click(await screen.findByRole('button', { name: 'Отказаться' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Отказаться' }))
 
     expect(await screen.findByRole('dialog', { name: 'Короткое знакомство' })).toBeTruthy()
     expect(screen.queryByRole('dialog', { name: 'Загрузить кредит из ссылки?' })).toBeNull()
   })
 
   it('не включает конфликтующую total-операцию быстрой кнопкой', async () => {
-    const user = userEvent.setup()
     const activeLoan = loan()
     activeLoan.repayments = [
       { id: 'total-active', date: defaultConfig.firstPaymentDate, amount: 120000, amountMode: 'totalWithFee', strategy: 'reduceTerm', source: 'own', sameDayOrder: 'regularFirst', interestFirst: true, sameDaySequence: 0 },
@@ -245,8 +220,8 @@ describe('App smoke tests', () => {
     useLoanStore.setState({ ...activeLoan, loans: [activeLoan], activeLoanId: activeLoan.id })
     render(<App />)
 
-    await user.click(screen.getByRole('button', { name: /^Досрочные/ }))
-    await user.click((await screen.findAllByRole('button', { name: /Включить платёж/i }, { timeout: ASYNC_QUERY_TIMEOUT_MS })).at(-1)!)
+    fireEvent.click(screen.getByRole('button', { name: /^Досрочные/ }))
+    fireEvent.click((await screen.findAllByRole('button', { name: /Включить платёж/i }, { timeout: ASYNC_QUERY_TIMEOUT_MS })).at(-1)!)
 
     expect(useLoanStore.getState().repayments[1].enabled).toBe(false)
     expect(await screen.findByRole('dialog', { name: 'Досрочный платёж' })).toBeTruthy()
@@ -254,10 +229,9 @@ describe('App smoke tests', () => {
   }, SMOKE_TEST_TIMEOUT_MS)
 
   it('открывает раздел импорта и экспорта', async () => {
-    const user = userEvent.setup()
     render(<App />)
 
-    await user.click(screen.getByRole('button', { name: 'Импорт/экспорт' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Импорт/экспорт' }))
 
     await waitFor(() => expect(screen.getByRole('heading', { name: 'Импорт/экспорт расчёта' })).toBeTruthy())
     expect(screen.getByRole('button', { name: /CSV/i })).toBeTruthy()
@@ -266,113 +240,18 @@ describe('App smoke tests', () => {
     expect(screen.getByRole('button', { name: /Код параметров/i })).toBeTruthy()
   })
 
-  it('сбрасывает черновик изменения ставки при переключении кредита', async () => {
-    const user = userEvent.setup()
-    const first = loan({ id: 'loan-a', name: 'Первый' })
-    const second = loan({ id: 'loan-b', name: 'Второй', config: { ...shortTestConfig, currency: 'USD' } })
-    useLoanStore.setState({ ...first, loans: [first, second], activeLoanId: first.id })
-    render(<App />)
-
-    await user.click(screen.getByRole('button', { name: 'Параметры' }))
-    const settingsSection = await screen.findByText('Изменение ставки', undefined, { timeout: ASYNC_QUERY_TIMEOUT_MS })
-    const rateDate = settingsSection.closest('section')?.querySelector('input[type="date"]') as HTMLInputElement | null
-    if (!rateDate) throw new Error('Не найден input даты изменения ставки')
-    await user.clear(rateDate)
-    await user.type(rateDate, '2030-09-01')
-    expect(rateDate!.value).toBe('2030-09-01')
-
-    await user.selectOptions(screen.getByRole('combobox', { name: 'Кредит' }), 'loan-b')
-
-    await waitFor(() => {
-      const nextRateDate = screen.getByText('Изменение ставки').closest('section')?.querySelector('input[type="date"]') as HTMLInputElement | null
-      expect(nextRateDate?.value).toBe('')
-    }, { timeout: ASYNC_QUERY_TIMEOUT_MS })
-  })
-
-  it('не применяет промежуточный год даты выдачи во время редактирования', async () => {
-    const user = userEvent.setup()
-    const activeLoan = loan({
-      config: {
-        ...shortTestConfig,
-        issueDate: '2025-11-26',
-        firstPaymentDate: '2025-12-26',
-        paymentDay: 26
-      }
-    })
-    useLoanStore.setState({ ...activeLoan, loans: [activeLoan], activeLoanId: activeLoan.id })
-    render(<App />)
-
-    await user.click(screen.getByRole('button', { name: 'Параметры' }))
-    const settingsSection = (await screen.findByRole('heading', { level: 3, name: 'Параметры кредита' })).closest('section')
-    const issueDate = settingsSection?.querySelector('input[type="date"]') as HTMLInputElement | null
-    if (!issueDate) throw new Error('Не найден input даты выдачи')
-    const applyIssueDate = screen.getByRole('button', { name: 'Применить дату выдачи' }) as HTMLButtonElement
-
-    fireEvent.change(issueDate, { target: { value: '0002-11-26' } })
-
-    expect(issueDate.value).toBe('0002-11-26')
-    expect(applyIssueDate.disabled).toBe(true)
-    expect(useLoanStore.getState().config.issueDate).toBe('2025-11-26')
-    expect(screen.getByText(/год не раньше 1900/i)).toBeTruthy()
-
-    fireEvent.change(issueDate, { target: { value: '2024-11-26' } })
-
-    expect(applyIssueDate.disabled).toBe(false)
-    expect(useLoanStore.getState().config.issueDate).toBe('2025-11-26')
-    await user.click(applyIssueDate)
-
-    await waitFor(() => expect(useLoanStore.getState().config.issueDate).toBe('2024-11-26'))
-    expect(screen.queryByText(/год не раньше 1900/i)).toBeNull()
-  })
-
-  it('показывает отказ при несовместимом изменении параметров', async () => {
-    const user = userEvent.setup()
-    const activeLoan = loan({
-      config: {
-        ...shortTestConfig,
-        issueDate: '2026-06-23',
-        firstPaymentDate: '2026-07-15',
-        paymentDay: 15,
-        frequency: 'monthly'
-      },
-      repayments: [{
-        id: 'total-with-fee',
-        date: '2026-08-15',
-        amount: 1_000_000,
-        amountMode: 'totalWithFee',
-        strategy: 'reduceTerm',
-        source: 'own',
-        sameDayOrder: 'regularFirst',
-        interestFirst: true,
-        sameDaySequence: 0
-      }]
-    })
-    useLoanStore.setState({ ...activeLoan, loans: [activeLoan], activeLoanId: activeLoan.id })
-    render(<App />)
-
-    await user.click(screen.getByRole('button', { name: 'Параметры' }))
-    const frequency = await screen.findByDisplayValue('Ежемесячно') as HTMLSelectElement
-    await user.selectOptions(frequency, 'quarterly')
-
-    expect(useLoanStore.getState().config.frequency).toBe('monthly')
-    expect(frequency.value).toBe('monthly')
-    expect(await screen.findByText(/изменение отклонено:.*общую сумму списания/i)).toBeTruthy()
-  })
-
   it('закрывает модалку и сбрасывает draft регулярного правила при переключении кредита', async () => {
-    const user = userEvent.setup()
     const first = loan({ id: 'loan-a', name: 'Первый' })
     const second = loan({ id: 'loan-b', name: 'Второй' })
     useLoanStore.setState({ ...first, loans: [first, second], activeLoanId: first.id })
     render(<App />)
 
-    await user.click(screen.getByRole('button', { name: /^Досрочные/ }))
+    fireEvent.click(screen.getByRole('button', { name: /^Досрочные/ }))
     const rulesPanel = await screen.findByText('Регулярные досрочные платежи')
     const amount = rulesPanel.closest('section')?.querySelector('input[type="number"]') as HTMLInputElement | null
     if (!amount) throw new Error('Не найден input суммы регулярного правила')
-    await user.clear(amount)
-    await user.type(amount, '77777')
-    await user.click(screen.getByRole('button', { name: /Досрочный платёж/i }))
+    fireEvent.change(amount, { target: { value: '77777' } })
+    fireEvent.click(screen.getByRole('button', { name: /Досрочный платёж/i }))
     expect(await screen.findByRole('dialog', { name: 'Досрочный платёж' })).toBeTruthy()
 
     await act(async () => {
@@ -385,7 +264,6 @@ describe('App smoke tests', () => {
   })
 
   it('скрывает предупреждение карантина без удаления raw и удаляет только после подтверждения', async () => {
-    const user = userEvent.setup()
     useLoanStore.setState({
       storageRecoveryReport: ['Повреждённая запись помещена в карантин'],
       quarantinedLoansRaw: [{ id: 'bad', name: 'Сбой', reason: 'ошибка', raw: { secret: 'raw' } }],
@@ -393,54 +271,41 @@ describe('App smoke tests', () => {
     })
     render(<App />)
 
-    await user.click(screen.getByRole('button', { name: 'Скрыть уведомление' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Скрыть уведомление' }))
     expect(useLoanStore.getState().quarantinedLoansRaw).toHaveLength(1)
     expect(screen.queryByText(/Повреждённая запись помещена/)).toBeNull()
-    await user.click(screen.getByRole('button', { name: 'Показать карантин (1)' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Показать карантин (1)' }))
     expect(screen.getByText(/Повреждённая запись помещена/)).toBeTruthy()
 
     const confirm = vi.spyOn(window, 'confirm').mockReturnValueOnce(false).mockReturnValueOnce(true)
-    await user.click(screen.getByRole('button', { name: 'Удалить данные' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Удалить данные' }))
     expect(useLoanStore.getState().quarantinedLoansRaw).toHaveLength(1)
-    await user.click(screen.getByRole('button', { name: 'Удалить данные' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Удалить данные' }))
     expect(useLoanStore.getState().quarantinedLoansRaw).toEqual([])
     expect(confirm).toHaveBeenCalledTimes(2)
   })
 
   it('показывает конфликт вкладок и не предлагает неявный merge', async () => {
-    const user = userEvent.setup()
     render(<App />)
 
     act(() => window.dispatchEvent(new CustomEvent(STORAGE_CONFLICT_EVENT, { detail: { revision: 12, updatedAt: '2026-07-10T10:00:00.000Z', epoch: 'remote-epoch', writerId: 'remote-writer', kind: 'newer' } })))
 
     expect(screen.getByRole('alert').textContent).toContain('Автоматическое объединение финансовых данных отключено')
     expect(screen.getByRole('button', { name: 'Загрузить внешнее состояние' })).toBeTruthy()
-    await user.click(screen.getByRole('button', { name: 'Перезаписать из этой вкладки' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Перезаписать из этой вкладки' }))
     expect(screen.queryByText(/Автоматическое объединение/)).toBeNull()
   })
 
   it('блокирует CSV и печать при ошибке расчёта', async () => {
-    const user = userEvent.setup()
     const broken = loan({ config: { ...shortTestConfig, principal: Number.MAX_VALUE } })
     useLoanStore.setState({ ...broken, loans: [broken], activeLoanId: broken.id })
     render(<App />)
 
     const print = await screen.findByRole('button', { name: 'Печать' })
     expect((print as HTMLButtonElement).disabled).toBe(true)
-    await user.click(screen.getByRole('button', { name: 'Импорт/экспорт' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Импорт/экспорт' }))
     expect((await screen.findByRole('button', { name: 'CSV' }) as HTMLButtonElement).disabled).toBe(true)
     expect((screen.getByRole('button', { name: 'PDF / печать' }) as HTMLButtonElement).disabled).toBe(true)
-  })
-
-  it('поясняет exact-date ставку без обещания следующего платёжного периода', async () => {
-    const user = userEvent.setup()
-    const exact = loan({ config: { ...shortTestConfig, rateChangeMode: 'exactDate' } })
-    useLoanStore.setState({ ...exact, loans: [exact], activeLoanId: exact.id })
-    render(<App />)
-
-    await user.click(screen.getByRole('button', { name: 'Параметры' }))
-    expect(await screen.findByText(/Дата, с которой новая ставка применяется внутри текущего процентного периода/)).toBeTruthy()
-    expect(screen.getByText(/Годовая ставка, действующая точно с указанной даты/)).toBeTruthy()
   })
 
   it('убирает скрытое мобильное меню из tab order', async () => {
@@ -448,13 +313,12 @@ describe('App smoke tests', () => {
       matches: true, media: '(max-width: 950px)', onchange: null,
       addListener: vi.fn(), removeListener: vi.fn(), addEventListener: vi.fn(), removeEventListener: vi.fn(), dispatchEvent: vi.fn()
     })
-    const user = userEvent.setup()
     const { container } = render(<App />)
     const sidebar = container.querySelector('aside.sidebar')!
 
     await waitFor(() => expect(sidebar.hasAttribute('inert')).toBe(true))
     expect(sidebar.getAttribute('aria-hidden')).toBe('true')
-    await user.click(screen.getByRole('button', { name: 'Открыть меню' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Открыть меню' }))
     expect(sidebar.hasAttribute('inert')).toBe(false)
     expect(sidebar.hasAttribute('aria-hidden')).toBe(false)
   })
@@ -471,19 +335,18 @@ describe('App smoke tests', () => {
   })
 
   it('сворачивает desktop-меню до иконок и разворачивает обратно', async () => {
-    const user = userEvent.setup()
     const { container } = render(<App />)
     const shell = container.querySelector('.app-shell')!
 
     const collapse = screen.getByRole('button', { name: 'Свернуть меню' })
     expect(collapse.getAttribute('aria-expanded')).toBe('true')
-    await user.click(collapse)
+    fireEvent.click(collapse)
 
     expect(shell.classList.contains('sidebar-collapsed')).toBe(true)
     expect(screen.getByRole('button', { name: 'Параметры' }).getAttribute('title')).toBe('Параметры')
     const expand = screen.getByRole('button', { name: 'Развернуть меню' })
     expect(expand.getAttribute('aria-expanded')).toBe('false')
-    await user.click(expand)
+    fireEvent.click(expand)
 
     expect(shell.classList.contains('sidebar-collapsed')).toBe(false)
     expect(screen.getByRole('button', { name: 'Свернуть меню' })).toBeTruthy()

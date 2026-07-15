@@ -332,6 +332,15 @@ describe('миграция локального хранилища', () => {
     expect(expandRepaymentRules(defaultConfig, rules)).toEqual([])
   })
 
+  it('сохраняет явно отключённый разовый платёж при добавлении', () => {
+    setStoreLoan(loanProfile())
+    const disabledRepayment = { ...repayment(1), enabled: false }
+
+    useLoanStore.getState().addRepayment(disabledRepayment)
+
+    expect(useLoanStore.getState().repayments).toEqual([disabledRepayment])
+  })
+
   it('нормализует правило общего ежемесячного платежа', () => {
     const normalized = normalizePersistedState({
       repaymentRules: [{
