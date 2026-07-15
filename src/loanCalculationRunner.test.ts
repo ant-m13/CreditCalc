@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { calculateLoanSynchronously, LoanCalculationRunner, type LoanCalculationSnapshot } from './loanCalculationRunner'
 import { shortTestConfig } from './testFixtures'
+import type { LoanCalculationResult } from './loanCalculation'
 
 const ciEnvironment = (globalThis as typeof globalThis & {
   process?: { env?: { CI?: string } }
@@ -8,6 +9,14 @@ const ciEnvironment = (globalThis as typeof globalThis & {
 const isCi = ciEnvironment === 'true' || ciEnvironment === '1'
 const itInCi = isCi ? it : it.skip
 const REAL_WATCHDOG_TEST_TIMEOUT_MS = 20_000
+const VALID_WORKER_RESULT: LoanCalculationResult = {
+  generatedRepayments: [],
+  allRepayments: [],
+  errors: [],
+  comparison: null,
+  selected: null,
+  base: null
+}
 
 class RuntimeFailingWorker {
   static instances: RuntimeFailingWorker[] = []
@@ -78,7 +87,7 @@ describe('LoanCalculationRunner', () => {
       requestId: request.requestId,
       kind: 'result',
       revision: current.revision,
-      result: calculateLoanSynchronously(current).result
+      result: VALID_WORKER_RESULT
     } }))
 
     expect(onResult).toHaveBeenCalledOnce()
