@@ -1,7 +1,6 @@
 // @vitest-environment jsdom
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { MAX_EARLY_REPAYMENTS } from './loanEngine/limits'
-import { defaultConfig, normalizePersistedState, useLoanStore } from './store'
 import { PERSISTED_LOAN_STORAGE_KEY } from './storageKeys'
 
 beforeEach(() => {
@@ -9,7 +8,30 @@ beforeEach(() => {
 })
 
 describe('safe persisted storage hydration', () => {
-  it('не читает элементы массивов за пределами лимита до нормализации', () => {
+  it('карантинит исходную строку и блокирует перезапись повреждённого JSON', async () => {
+    const corrupted = '{"state":{"loans":['
+    localStorage.setItem(PERSISTED_LOAN_STORAGE_KEY, corrupted)
+    vi.resetModules()
+
+    const { useLoanStore } = await import('./store')
+    const recovered = useLoanStore.getState()
+
+    expect(recovered.storageRecoveryReport.join(' ')).toContain('Автосохранение заблокировано')
+    expect(recovered.quarantinedLoansRaw).toEqual([
+      expect.objectContaining({ id: 'persisted-storage', raw: corrupted })
+    ])
+
+    recovered.updateConfig({ principal: 7_777_777 })
+    expect(localStorage.getItem(PERSISTED_LOAN_STORAGE_KEY)).toBe(corrupted)
+
+    useLoanStore.getState().deleteQuarantinedLoans()
+    expect(JSON.parse(localStorage.getItem(PERSISTED_LOAN_STORAGE_KEY)!)).toMatchObject({
+      state: { config: { principal: 7_777_777 }, quarantinedLoansRaw: [] }
+    })
+  })
+
+  it('не читает элементы массивов за пределами лимита до нормализации', async () => {
+    const { defaultConfig, normalizePersistedState } = await import('./store')
     const valid = {
       id: 'early',
       date: defaultConfig.firstPaymentDate,
@@ -35,7 +57,9 @@ describe('safe persisted storage hydration', () => {
     expect(normalized.repayments).toHaveLength(MAX_EARLY_REPAYMENTS)
   })
 
-  it('удаляет persisted-кредит и не записывает изменения в режиме только в памяти', () => {
+  it('удаляет persisted-кредит и не записывает изменения в режиме только в памяти', async () => {
+    vi.resetModules()
+    const { useLoanStore } = await import('./store')
     useLoanStore.getState().updateConfig({ principal: 7_000_000 })
     expect(localStorage.getItem(PERSISTED_LOAN_STORAGE_KEY)).not.toBeNull()
 
