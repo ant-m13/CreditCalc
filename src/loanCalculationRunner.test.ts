@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { defaultConfig } from './loanDefaults'
 import { calculateLoanSynchronously, LoanCalculationRunner, type LoanCalculationSnapshot } from './loanCalculationRunner'
+import { shortTestConfig } from './testFixtures'
 
 const ciEnvironment = (globalThis as typeof globalThis & {
   process?: { env?: { CI?: string } }
@@ -28,7 +28,7 @@ class RuntimeFailingWorker {
 
 const snapshot = (revision: string): LoanCalculationSnapshot => ({
   revision,
-  config: defaultConfig,
+  config: shortTestConfig,
   repayments: [],
   repaymentRules: [],
   gracePeriods: [],

@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 import { act, cleanup, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { defaultConfig } from '../loanDefaults'
 import { buildLoanCalculation, type LoanCalculationResult } from '../loanCalculation'
+import { shortTestConfig } from '../testFixtures'
 import { createSnapshotRevisionTracker, useLoanCalculation, type LoanCalculationInput } from './useLoanCalculation'
 
 interface WorkerRequest {
@@ -51,7 +51,7 @@ class PostMessageThrowingWorker extends DeferredWorker {
 }
 
 const loanInput = (patch: Partial<LoanCalculationInput> = {}): LoanCalculationInput => ({
-  config: defaultConfig,
+  config: shortTestConfig,
   repayments: [],
   repaymentRules: [],
   gracePeriods: [],
@@ -91,7 +91,7 @@ describe('useLoanCalculation', () => {
     const firstInput = loanInput()
     const firstRevision = tracker(firstInput)
     const secondRevision = tracker(loanInput({
-      config: { ...defaultConfig, currency: 'USD' },
+      config: { ...shortTestConfig, currency: 'USD' },
       repayments: [],
       repaymentRules: [],
       gracePeriods: []
@@ -103,7 +103,7 @@ describe('useLoanCalculation', () => {
   })
 
   it('keeps worker result and snapshot consistent while a new revision is pending', async () => {
-    const initial = loanInput({ config: { ...defaultConfig, currency: 'RUB' } })
+    const initial = loanInput({ config: { ...shortTestConfig, currency: 'RUB' } })
     const { rerender } = render(<Probe {...initial}/>)
     const worker = DeferredWorker.instances[0]
 
@@ -112,7 +112,7 @@ describe('useLoanCalculation', () => {
     await waitFor(() => expect(current().isStale).toBe(false))
     expect(current().calculationSnapshot.config.currency).toBe('RUB')
 
-    rerender(<Probe {...loanInput({ config: { ...defaultConfig, currency: 'USD' } })}/>)
+    rerender(<Probe {...loanInput({ config: { ...shortTestConfig, currency: 'USD' } })}/>)
 
     await waitFor(() => expect(DeferredWorker.instances).toHaveLength(2))
     const latestWorker = DeferredWorker.instances[1]
@@ -130,7 +130,7 @@ describe('useLoanCalculation', () => {
   it('falls back to sync calculation when module worker construction fails', async () => {
     vi.stubGlobal('Worker', ConstructorThrowingWorker)
 
-    render(<Probe {...loanInput({ config: { ...defaultConfig, currency: 'USD' } })}/>)
+    render(<Probe {...loanInput({ config: { ...shortTestConfig, currency: 'USD' } })}/>)
 
     await waitFor(() => expect(current().isStale).toBe(false))
     expect(current().calculationSnapshot.config.currency).toBe('USD')
@@ -141,7 +141,7 @@ describe('useLoanCalculation', () => {
   it('falls back to sync calculation when worker postMessage fails', async () => {
     vi.stubGlobal('Worker', PostMessageThrowingWorker)
 
-    render(<Probe {...loanInput({ config: { ...defaultConfig, currency: 'EUR' } })}/>)
+    render(<Probe {...loanInput({ config: { ...shortTestConfig, currency: 'EUR' } })}/>)
 
     await waitFor(() => expect(current().isStale).toBe(false))
     expect(current().calculationSnapshot.config.currency).toBe('EUR')
@@ -150,7 +150,7 @@ describe('useLoanCalculation', () => {
   })
 
   it('terminates and resets the worker after runtime errors', async () => {
-    const { rerender } = render(<Probe {...loanInput({ config: { ...defaultConfig, currency: 'RUB' } })}/>)
+    const { rerender } = render(<Probe {...loanInput({ config: { ...shortTestConfig, currency: 'RUB' } })}/>)
     const failedWorker = DeferredWorker.instances[0]
 
     await waitFor(() => expect(failedWorker.messages).toHaveLength(1))
@@ -159,7 +159,7 @@ describe('useLoanCalculation', () => {
     expect(current().calculationSnapshot.config.currency).toBe('RUB')
     expect(failedWorker.terminate).toHaveBeenCalledTimes(1)
 
-    rerender(<Probe {...loanInput({ config: { ...defaultConfig, currency: 'USD' } })}/>)
+    rerender(<Probe {...loanInput({ config: { ...shortTestConfig, currency: 'USD' } })}/>)
 
     await waitFor(() => expect(DeferredWorker.instances).toHaveLength(2))
     await waitFor(() => expect(DeferredWorker.instances[1].messages).toHaveLength(1))
@@ -167,14 +167,14 @@ describe('useLoanCalculation', () => {
   })
 
   it('keeps stale state visible before scheduled sync fallback after worker runtime error', async () => {
-    const { rerender } = render(<Probe {...loanInput({ config: { ...defaultConfig, currency: 'RUB' } })}/>)
+    const { rerender } = render(<Probe {...loanInput({ config: { ...shortTestConfig, currency: 'RUB' } })}/>)
     const worker = DeferredWorker.instances[0]
 
     await waitFor(() => expect(worker.messages).toHaveLength(1))
     await act(async () => worker.resolve(0))
     await waitFor(() => expect(current().isStale).toBe(false))
 
-    rerender(<Probe {...loanInput({ config: { ...defaultConfig, currency: 'USD' } })}/>)
+    rerender(<Probe {...loanInput({ config: { ...shortTestConfig, currency: 'USD' } })}/>)
 
     await waitFor(() => expect(DeferredWorker.instances).toHaveLength(2))
     const latestWorker = DeferredWorker.instances[1]
@@ -193,19 +193,19 @@ describe('useLoanCalculation', () => {
   })
 
   it('uses sync calculation after repeated worker runtime errors', async () => {
-    const { rerender } = render(<Probe {...loanInput({ config: { ...defaultConfig, currency: 'RUB' } })}/>)
+    const { rerender } = render(<Probe {...loanInput({ config: { ...shortTestConfig, currency: 'RUB' } })}/>)
 
     await waitFor(() => expect(DeferredWorker.instances[0].messages).toHaveLength(1))
     await act(async () => DeferredWorker.instances[0].onerror?.(new Event('error')))
-    rerender(<Probe {...loanInput({ config: { ...defaultConfig, currency: 'USD' } })}/>)
+    rerender(<Probe {...loanInput({ config: { ...shortTestConfig, currency: 'USD' } })}/>)
 
     await waitFor(() => expect(DeferredWorker.instances[1].messages).toHaveLength(1))
     await act(async () => DeferredWorker.instances[1].onerror?.(new Event('error')))
-    rerender(<Probe {...loanInput({ config: { ...defaultConfig, currency: 'EUR' } })}/>)
+    rerender(<Probe {...loanInput({ config: { ...shortTestConfig, currency: 'EUR' } })}/>)
 
     await waitFor(() => expect(DeferredWorker.instances[2].messages).toHaveLength(1))
     await act(async () => DeferredWorker.instances[2].onerror?.(new Event('error')))
-    rerender(<Probe {...loanInput({ config: { ...defaultConfig, currency: 'CNY' } })}/>)
+    rerender(<Probe {...loanInput({ config: { ...shortTestConfig, currency: 'CNY' } })}/>)
 
     await waitFor(() => expect(current().isStale).toBe(false))
     expect(DeferredWorker.instances).toHaveLength(3)
@@ -215,18 +215,18 @@ describe('useLoanCalculation', () => {
 
   it('does not keep transient startup failures on the edge after a worker accepts work', async () => {
     vi.stubGlobal('Worker', ConstructorThrowingWorker)
-    const { rerender } = render(<Probe {...loanInput({ config: { ...defaultConfig, currency: 'RUB' } })}/>)
+    const { rerender } = render(<Probe {...loanInput({ config: { ...shortTestConfig, currency: 'RUB' } })}/>)
 
     await waitFor(() => expect(current().calculationSnapshot.config.currency).toBe('RUB'))
-    rerender(<Probe {...loanInput({ config: { ...defaultConfig, currency: 'USD' } })}/>)
+    rerender(<Probe {...loanInput({ config: { ...shortTestConfig, currency: 'USD' } })}/>)
     await waitFor(() => expect(current().calculationSnapshot.config.currency).toBe('USD'))
 
     vi.stubGlobal('Worker', DeferredWorker)
-    rerender(<Probe {...loanInput({ config: { ...defaultConfig, currency: 'EUR' } })}/>)
+    rerender(<Probe {...loanInput({ config: { ...shortTestConfig, currency: 'EUR' } })}/>)
 
     await waitFor(() => expect(DeferredWorker.instances[0].messages).toHaveLength(1))
     await act(async () => DeferredWorker.instances[0].onerror?.(new Event('error')))
-    rerender(<Probe {...loanInput({ config: { ...defaultConfig, currency: 'CNY' } })}/>)
+    rerender(<Probe {...loanInput({ config: { ...shortTestConfig, currency: 'CNY' } })}/>)
 
     await waitFor(() => expect(DeferredWorker.instances).toHaveLength(2))
     expect(DeferredWorker.instances[1].messages).toHaveLength(1)
