@@ -21,7 +21,7 @@ interface ScheduleProps {
   setRows: React.Dispatch<React.SetStateAction<number>>
 }
 
-const SCHEDULE_PAGE_SIZE = 100
+export const SCHEDULE_PAGE_SIZE = 100
 export const SAVED_ROWS_PAGE_SIZE = 100
 const MONEY_MATCH_TOLERANCE = 0.01
 const MAX_RATE_FRACTION_DIGITS = 4

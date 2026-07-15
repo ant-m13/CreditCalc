@@ -7,7 +7,7 @@ import { calculateDebtAtDate, generateBaseSchedule } from '../loanEngine'
 import { defaultConfig } from '../loanDefaults'
 import { shortTestConfig } from '../testFixtures'
 import { createMoneyFormatter } from '../formatters'
-import { getScheduleScrollBehavior, Schedule } from './Schedule'
+import { getScheduleScrollBehavior, SAVED_ROWS_PAGE_SIZE, SCHEDULE_PAGE_SIZE, Schedule } from './Schedule'
 
 afterEach(() => cleanup())
 
@@ -82,15 +82,15 @@ describe('Schedule', () => {
   })
 
   it('не монтирует весь большой график и переключает страницы', () => {
-    const large = Array.from({ length: 250 }, (_, index) => scheduleRow({ number: index + 1 }))
+    const large = Array.from({ length: SCHEDULE_PAGE_SIZE + 1 }, (_, index) => scheduleRow({ number: index + 1 }))
     function LargeProbe() {
       const [rows, setRows] = useState(0)
       return <Schedule schedule={large} baseSchedule={large} repayments={[]} config={defaultConfig} gracePeriods={[]} currency="RUB" displayDecimals={2} rows={rows} setRows={setRows}/>
     }
     const { container } = render(<LargeProbe/>)
 
-    expect(container.querySelectorAll('tr[id^="schedule-row-"]')).toHaveLength(100)
-    expect(container.querySelectorAll('article[id^="mobile-schedule-row-"]')).toHaveLength(100)
+    expect(container.querySelectorAll('tr[id^="schedule-row-"]')).toHaveLength(SCHEDULE_PAGE_SIZE)
+    expect(container.querySelectorAll('article[id^="mobile-schedule-row-"]')).toHaveLength(SCHEDULE_PAGE_SIZE)
     fireEvent.click(screen.getByRole('button', { name: /Далее/ }))
     expect(container.querySelector('#schedule-row-101')).toBeTruthy()
     expect(container.querySelector('#schedule-row-1')).toBeNull()
@@ -98,7 +98,7 @@ describe('Schedule', () => {
 
   it('ограничивает DOM исчезнувших строк исходного графика', () => {
     const selected = [scheduleRow({ number: 1, date: '2026-07-15', openingBalance: 1000, closingBalance: 0 })]
-    const base = Array.from({ length: 250 }, (_, index) => scheduleRow({
+    const base = Array.from({ length: SAVED_ROWS_PAGE_SIZE + 1 }, (_, index) => scheduleRow({
       number: index + 1,
       date: `${2027 + Math.floor(index / 12)}-${String(index % 12 + 1).padStart(2, '0')}-15`
     }))
@@ -108,7 +108,7 @@ describe('Schedule', () => {
     }
     const { container } = render(<SavedRowsProbe/>)
 
-    expect(container.querySelectorAll('.saved-schedule tbody tr')).toHaveLength(100)
+    expect(container.querySelectorAll('.saved-schedule tbody tr')).toHaveLength(SAVED_ROWS_PAGE_SIZE)
     fireEvent.click(screen.getByRole('button', { name: 'Следующие исчезнувшие платежи' }))
     expect(container.querySelector('.saved-schedule tbody tr td')?.textContent).toBe('101')
   })
