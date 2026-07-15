@@ -19,12 +19,9 @@ export type LoanCalculationWorkerRequest = {
   snapshot: LoanCalculationSource
 }
 
-export type LoanCalculationWorkerResponse = {
-  requestId: number
-  kind: 'result'
-  revision: string
-  result: LoanCalculationResult
-}
+export type LoanCalculationWorkerResponse =
+  | { requestId: number; kind: 'result'; revision: string; result: LoanCalculationResult }
+  | { requestId: number; kind: 'error'; revision: string; error: string }
 
 // After three consecutive Worker failures, stop recreating failing instances and use sync fallback.
 const MAX_WORKER_ERRORS = 3
@@ -46,9 +43,9 @@ const isLoanCalculationResult = (value: unknown): value is LoanCalculationResult
 const isWorkerResponseEnvelope = (value: unknown): value is LoanCalculationWorkerResponse => {
   if (!isRecord(value)) return false
   return Number.isSafeInteger(value.requestId)
-    && value.kind === 'result'
     && typeof value.revision === 'string'
-    && isLoanCalculationResult(value.result)
+    && ((value.kind === 'result' && isLoanCalculationResult(value.result))
+      || (value.kind === 'error' && typeof value.error === 'string'))
 }
 
 export const canUseLoanCalculationWorker = () => typeof Worker !== 'undefined'
@@ -167,6 +164,10 @@ export class LoanCalculationRunner {
       if (!isWorkerResponseEnvelope(response)
         || response.requestId !== requestId
         || response.revision !== snapshot.revision) {
+        fallback()
+        return
+      }
+      if (response.kind === 'error') {
         fallback()
         return
       }

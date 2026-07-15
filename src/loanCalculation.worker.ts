@@ -1,22 +1,41 @@
 import { buildLoanCalculation, type LoanCalculationSource } from './loanCalculation'
 import type { LoanCalculationWorkerRequest, LoanCalculationWorkerResponse } from './loanCalculationRunner'
 
-const isCalculationRequest = (value: unknown): value is LoanCalculationWorkerRequest => {
+type LoanCalculationWorkerRequestEnvelope = {
+  requestId: number
+  kind: string
+  revision: string
+  snapshot?: unknown
+}
+
+const isWorkerRequestEnvelope = (value: unknown): value is LoanCalculationWorkerRequestEnvelope => {
   if (!value || typeof value !== 'object') return false
   const request = value as Record<string, unknown>
   return Number.isSafeInteger(request.requestId)
-    && request.kind === 'calculate'
+    && typeof request.kind === 'string'
     && typeof request.revision === 'string'
-    && Boolean(request.snapshot)
-    && typeof request.snapshot === 'object'
 }
 
-self.onmessage = (event: MessageEvent<unknown>) => {
-  if (!isCalculationRequest(event.data)) return
-  const { requestId, revision, snapshot } = event.data
+const isCalculationRequest = (value: unknown): value is LoanCalculationWorkerRequest => {
+  if (!isWorkerRequestEnvelope(value)) return false
+  return value.kind === 'calculate'
+    && Boolean(value.snapshot)
+    && typeof value.snapshot === 'object'
+}
+
+export const handleLoanCalculationWorkerRequest = (value: unknown): LoanCalculationWorkerResponse | null => {
+  if (!isWorkerRequestEnvelope(value)) return null
+  const { requestId, revision } = value
+  if (value.kind !== 'calculate') {
+    return { requestId, kind: 'error', revision, error: `Неизвестный тип запроса Worker: ${value.kind}` }
+  }
+  if (!isCalculationRequest(value)) {
+    return { requestId, kind: 'error', revision, error: 'Некорректные данные запроса Worker' }
+  }
+
   let result: ReturnType<typeof buildLoanCalculation>
   try {
-    result = buildLoanCalculation(snapshot as LoanCalculationSource)
+    result = buildLoanCalculation(value.snapshot as LoanCalculationSource)
   } catch (error) {
     result = {
       generatedRepayments: [],
@@ -27,5 +46,12 @@ self.onmessage = (event: MessageEvent<unknown>) => {
       base: null
     }
   }
-  self.postMessage({ requestId, kind: 'result', revision, result } satisfies LoanCalculationWorkerResponse)
+  return { requestId, kind: 'result', revision, result }
+}
+
+if (typeof self !== 'undefined') {
+  self.onmessage = (event: MessageEvent<unknown>) => {
+    const response = handleLoanCalculationWorkerRequest(event.data)
+    if (response) self.postMessage(response)
+  }
 }
