@@ -3,6 +3,7 @@ import type React from 'react'
 import { format, parseISO } from 'date-fns'
 import { ru } from 'date-fns/locale'
 import { ChevronDown, CircleHelp } from 'lucide-react'
+import { ISO_YEAR_LENGTH, ISO_YEAR_MONTH_LENGTH, MONEY_DISPLAY_EPSILON } from '../constants'
 import { calculateDebtAtDate, type EarlyRepayment, type GracePeriod, type LoanConfig, type PaymentScheduleItem } from '../loanEngine'
 import { createMoneyFormatter, plural, shortDate } from '../formatters'
 import { dayCountBasisLabel, roundingName } from '../labels'
@@ -22,6 +23,9 @@ interface ScheduleProps {
 
 const SCHEDULE_PAGE_SIZE = 100
 export const SAVED_ROWS_PAGE_SIZE = 100
+const MONEY_MATCH_TOLERANCE = 0.01
+const MAX_RATE_FRACTION_DIGITS = 4
+const SCHEDULE_SCROLL_DELAY_MS = 80
 
 export const getScheduleScrollBehavior = (): ScrollBehavior =>
   typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
@@ -32,11 +36,11 @@ const rowTotal = (row: PaymentScheduleItem) => row.cashFlowTotal ?? row.payment 
 const rowFee = (row: PaymentScheduleItem) => row.feePaid ?? row.fee
 const rowDeferredInterest = (row: PaymentScheduleItem) => row.deferredInterestClosing ?? 0
 const rowTotalDebt = (row: PaymentScheduleItem) => row.closingBalance + rowDeferredInterest(row)
-const hasFee = (row: PaymentScheduleItem) => Math.abs(rowFee(row)) > 0.004
-const hasDeferredInterest = (row: PaymentScheduleItem) => Math.abs(row.deferredInterestOpening ?? 0) > 0.004 || Math.abs(rowDeferredInterest(row)) > 0.004
+const hasFee = (row: PaymentScheduleItem) => Math.abs(rowFee(row)) > MONEY_DISPLAY_EPSILON
+const hasDeferredInterest = (row: PaymentScheduleItem) => Math.abs(row.deferredInterestOpening ?? 0) > MONEY_DISPLAY_EPSILON || Math.abs(rowDeferredInterest(row)) > MONEY_DISPLAY_EPSILON
 const isIgnoredOnlyRow = (row: PaymentScheduleItem) => row.eventTypes.length > 0 && row.eventTypes.every(type => type === 'earlyIgnored')
 const isFinancialClosingRow = (row: PaymentScheduleItem) => row.closingBalance === 0 && rowDeferredInterest(row) === 0 && !isIgnoredOnlyRow(row)
-const monthKey = (date: string) => date.slice(0, 7)
+const monthKey = (date: string) => date.slice(0, ISO_YEAR_MONTH_LENGTH)
 const monthTitle = (date: string) => format(parseISO(`${monthKey(date)}-01`), 'LLLL yyyy', { locale: ru })
 
 const parseAmount = (value: string) => {
@@ -48,12 +52,12 @@ const parseAmount = (value: string) => {
 
 const matchesAmount = (row: PaymentScheduleItem, amount: number) => {
   const values = [row.principalPaid ?? row.principal, row.interestPaid ?? row.interest, row.feePaid ?? row.fee, rowTotal(row), row.closingBalance, rowDeferredInterest(row), rowTotalDebt(row)]
-  return values.some(value => Math.abs(value - amount) < 0.01)
+  return values.some(value => Math.abs(value - amount) < MONEY_MATCH_TOLERANCE)
 }
 const operationOrderName = (value: string) => value
   .replaceAll('earlyFirst', 'сначала досрочный платёж')
   .replaceAll('regularFirst', 'после регулярного платежа')
-const rateLabel = (value: number) => `${value.toLocaleString('ru-RU', { maximumFractionDigits: 4 })}%`
+const rateLabel = (value: number) => `${value.toLocaleString('ru-RU', { maximumFractionDigits: MAX_RATE_FRACTION_DIGITS })}%`
 
 function AuditFields({ audit, money }: { audit: NonNullable<PaymentScheduleItem['audit']>; money: (value: number, compact?: boolean) => string }) {
   return <dl><div><dt>Период начисления</dt><dd>{shortDate(audit.periodStart)} — {shortDate(audit.periodEnd)}</dd></div><div><dt>Дней</dt><dd>{audit.days}</dd></div><div><dt>База года</dt><dd>{audit.interestMethod === 'daily' ? dayCountBasisLabel(audit.dayCountBasis) : 'Не применяется при расчёте по периодам'}</dd></div><div><dt>Остаток для процентов</dt><dd>{money(audit.interestBalance)}</dd></div><div><dt>Проценты до округления</dt><dd>{money(audit.interestBeforeRounding)}</dd></div><div><dt>Округление</dt><dd>{roundingName(audit.rounding)}</dd></div><div><dt>Порядок операций</dt><dd>{operationOrderName(audit.operationOrder)}</dd></div>{audit.interestSegments.map((segment, index) => <div key={`${segment.from}-${segment.to}-${index}`}><dt>{segment.reason}</dt><dd>{shortDate(segment.from)} — {shortDate(segment.to)}, {segment.days} дн., ставка {rateLabel(segment.annualRate)}, {money(segment.rawInterest)}</dd></div>)}</dl>
@@ -103,7 +107,7 @@ export function Schedule({ schedule, baseSchedule, repayments, config, gracePeri
   const nextEarly = repayments.find(item => item.date >= today)
   const currentDebt = calculateDebtAtDate(config, schedule, gracePeriods, today)
   const currentBalance = today < config.issueDate ? config.principal : currentDebt.total
-  const years = useMemo(() => [...new Set(schedule.map(row => row.date.slice(0, 4)))], [schedule])
+  const years = useMemo(() => [...new Set(schedule.map(row => row.date.slice(0, ISO_YEAR_LENGTH)))], [schedule])
   const amount = parseAmount(amountSearch)
   const filteredSchedule = useMemo(() => schedule.filter(row => (yearFilter === 'all' || row.date.startsWith(yearFilter)) && (amount === null || matchesAmount(row, amount))), [schedule, yearFilter, amount])
   const pageOffset = Math.min(rows, Math.max(0, Math.floor(Math.max(0, filteredSchedule.length - 1) / SCHEDULE_PAGE_SIZE) * SCHEDULE_PAGE_SIZE))
@@ -181,13 +185,13 @@ export function Schedule({ schedule, baseSchedule, repayments, config, gracePeri
       const target = document.getElementById(`mobile-schedule-row-${pendingRow}`) ?? document.getElementById(`schedule-row-${pendingRow}`)
       target?.scrollIntoView({ behavior: getScheduleScrollBehavior(), block: 'center' })
       setPendingRow(null)
-    }, 80)
+    }, SCHEDULE_SCROLL_DELAY_MS)
     return () => window.clearTimeout(timer)
   }, [pendingRow, rows])
 
   return <section className="panel table-panel">
     <div className="panel-head schedule-head"><div><h3>График платежей</h3><p>{schedule.length} строк · показано {visibleRows.length} · закрытие {closingDate ? shortDate(closingDate) : '—'}</p></div><div className="schedule-tools"><input value={jump} onChange={event => { setJump(event.target.value); if (jumpError) setJumpError('') }} onKeyDown={event => { if (event.key === 'Enter') jumpTo() }} placeholder="Дата, месяц или год" aria-label="Дата или месяц для перехода по графику" aria-describedby={jumpError ? 'schedule-jump-error' : undefined}/><button className="ghost" onClick={jumpTo}>Перейти</button>{jumpError && <p id="schedule-jump-error" className="inline-error schedule-jump-error" role="status">{jumpError}</p>}</div></div>
-    <div className="mobile-schedule-bar"><div><span>Общая текущая задолженность</span><b>{money(currentBalance)}</b><small>Основной долг + начисленные и отложенные проценты</small></div><div className="mobile-quick-actions"><button className="ghost compact" onClick={() => quickJump(today.slice(0,4))}>Текущий год</button>{nextRow && <button className="ghost compact" onClick={() => quickJump(nextRow.date)}>Следующий платёж</button>}{nextEarly && <button className="ghost compact" onClick={() => quickJump(nextEarly.date)}>Досрочные</button>}<button className="ghost compact" onClick={() => setMobileTableMode(value => !value)}>{mobileTableMode ? 'Карточки' : 'Таблица'}</button></div></div>
+    <div className="mobile-schedule-bar"><div><span>Общая текущая задолженность</span><b>{money(currentBalance)}</b><small>Основной долг + начисленные и отложенные проценты</small></div><div className="mobile-quick-actions"><button className="ghost compact" onClick={() => quickJump(today.slice(0, ISO_YEAR_LENGTH))}>Текущий год</button>{nextRow && <button className="ghost compact" onClick={() => quickJump(nextRow.date)}>Следующий платёж</button>}{nextEarly && <button className="ghost compact" onClick={() => quickJump(nextEarly.date)}>Досрочные</button>}<button className="ghost compact" onClick={() => setMobileTableMode(value => !value)}>{mobileTableMode ? 'Карточки' : 'Таблица'}</button></div></div>
     <div className="schedule-filters"><label><span>Год</span><select value={yearFilter} onChange={event => setYearFilter(event.target.value)}><option value="all">Все годы</option>{years.map(year => <option value={year} key={year}>{year}</option>)}</select></label><label><span>Поиск суммы</span><input inputMode="decimal" value={amountSearch} onChange={event => setAmountSearch(event.target.value)} placeholder="Например 35479,81"/></label><button className="ghost" onClick={() => { setYearFilter('all'); setAmountSearch(''); setMonthsCollapsed(false); setOpenMonths(new Set()) }}>Сбросить</button><label className="schedule-collapse-toggle"><input type="checkbox" checked={monthsCollapsed} onChange={event => setMonthsCollapsed(event.target.checked)}/><span>Свернуть месяцы</span></label></div>
     <div className={mobileTableMode ? 'table-wrap force-mobile-table' : 'table-wrap'}>
       {monthsCollapsed ? <table className="bank-schedule"><caption className="sr-only">Свёрнутый график платежей по месяцам: количество строк, суммы погашения, проценты, комиссии, итог и задолженность на конец месяца.</caption><thead><tr><th>Месяц</th><th>Строк</th><th>По кредиту</th><th>По процентам</th>{showFees && <th>Комиссия</th>}<th>Итого</th><th>Остаток задолженности</th>{showDeferred && <><th>Отложенные проценты</th><th>Общая задолженность</th></>}<th>Действие</th></tr></thead><tbody>{groupedRows.map(group => {

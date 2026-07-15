@@ -1,4 +1,5 @@
 import { useCallback } from 'react'
+import { MONEY_DISPLAY_EPSILON } from '../constants'
 import type { ValidatedLoanData } from '../importExport'
 import type { PaymentScheduleItem } from '../loanEngine'
 import type { LoanCalculationSnapshot } from '../loanCalculationRunner'
@@ -133,8 +134,8 @@ export function useLoanExport({ loans, activeLoanId, calculatedSchedule, calcula
         return
       }
 
-      const showFees = schedule.some(row => Math.abs(row.feePaid ?? row.fee) > 0.004)
-      const showDeferred = schedule.some(row => Math.abs(row.deferredInterestOpening ?? 0) > 0.004 || Math.abs(row.deferredInterestClosing ?? 0) > 0.004)
+      const showFees = schedule.some(row => Math.abs(row.feePaid ?? row.fee) > MONEY_DISPLAY_EPSILON)
+      const showDeferred = schedule.some(row => Math.abs(row.deferredInterestOpening ?? 0) > MONEY_DISPLAY_EPSILON || Math.abs(row.deferredInterestClosing ?? 0) > MONEY_DISPLAY_EPSILON)
       const head = showFees
         ? ['№ п/п', 'Дата', 'По кредиту', 'По процентам', 'Комиссия', 'Итого', 'Остаток задолженности']
         : ['№ п/п', 'Дата', 'По кредиту', 'По процентам', 'Итого', 'Остаток задолженности']

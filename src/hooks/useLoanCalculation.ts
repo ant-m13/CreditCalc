@@ -18,6 +18,7 @@ const emptyResult: LoanCalculationResult = {
 }
 
 const MAX_OBJECT_REVISION = Number.MAX_SAFE_INTEGER
+const OVERVIEW_CHART_MAX_POINTS = 48
 
 export const createSnapshotRevisionTracker = (maxObjectRevision = MAX_OBJECT_REVISION) => {
   let objectRevisions = new WeakMap<object, number>()
@@ -104,7 +105,7 @@ export function useLoanCalculation({ config, repayments, repaymentRules, gracePe
 
   const overviewChartData = useMemo(() => {
     if (!base || !selected) return []
-    const baseStep = Math.max(1, Math.floor(base.schedule.length / 48))
+    const baseStep = Math.max(1, Math.floor(base.schedule.length / OVERVIEW_CHART_MAX_POINTS))
     const dates = new Set(base.schedule.filter((_, index) => index % baseStep === 0).map(row => row.date))
     dates.add(base.closingDate)
     dates.add(selected.closingDate)

@@ -1,4 +1,5 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react'
+import { ISO_DATE_LENGTH } from '../constants'
 import { PERSISTED_LOAN_STORAGE_KEY } from '../storageKeys'
 import { downloadBlob } from '../download'
 
@@ -36,7 +37,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
     }
 
     try {
-      downloadBlob(new Blob([data], { type: 'application/json' }), `credit-calculator-recovery-${new Date().toISOString().slice(0, 10)}.json`)
+      downloadBlob(new Blob([data], { type: 'application/json' }), `credit-calculator-recovery-${new Date().toISOString().slice(0, ISO_DATE_LENGTH)}.json`)
     } catch (error) {
       console.error('Failed to download recovery data', error)
       this.setState({ recoveryMessage: `Не удалось скачать файл восстановления: ${errorMessage(error)}.` })

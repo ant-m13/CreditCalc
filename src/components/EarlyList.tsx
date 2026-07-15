@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { addMonths, format, parseISO } from 'date-fns'
 import { ru } from 'date-fns/locale'
 import { CalendarDays, CircleHelp, ListChecks, Pencil, Plus, Power, PowerOff, Trash2, TrendingDown } from 'lucide-react'
+import { ISO_DATE_LENGTH, MONTHS_PER_YEAR } from '../constants'
 import { sortRepaymentsByApplicationOrder, type EarlyRepayment } from '../loanEngine'
 import { createMoneyFormatter, shortDate } from '../formatters'
 import { ruleTypeName, scenarioName, sourceName } from '../labels'
@@ -12,6 +13,10 @@ import { Field } from './ui'
 import { useBoundedPage } from '../hooks/useBoundedPage'
 
 export const EARLY_LIST_PAGE_SIZE = 50
+const DEFAULT_RULE_AMOUNT = 20_000
+const DEFAULT_RULE_PERCENT = 10
+const RULE_REPAYMENT_ID_PREFIX = 'rule-'
+const RULE_REPAYMENT_DATE_SUFFIX_LENGTH = ISO_DATE_LENGTH + 1
 
 function ListPagination({ page, label }: { page: ReturnType<typeof useBoundedPage<unknown>>; label: string }) {
   if (page.total <= EARLY_LIST_PAGE_SIZE) return null
@@ -48,12 +53,12 @@ function RepaymentRulesPanel({ rules, addRule, updateRule, removeRule, defaultSt
   const { money, currencySymbol } = createMoneyFormatter(currency, displayDecimals)
   const [editingRule, setEditingRule] = useState<RepaymentRule | null>(null)
   const safeDefaultStart = isISODate(defaultStart) ? defaultStart : format(new Date(), 'yyyy-MM-dd')
-  const defaultEnd = () => format(addMonths(parseISO(safeDefaultStart), 12), 'yyyy-MM-dd')
+  const defaultEnd = () => format(addMonths(parseISO(safeDefaultStart), MONTHS_PER_YEAR), 'yyyy-MM-dd')
   const [type, setType] = useState<RepaymentRule['type']>('monthlyFixed')
   const [start, setStart] = useState(safeDefaultStart)
   const [end, setEnd] = useState(defaultEnd())
-  const [amount, setAmount] = useState('20000')
-  const [percent, setPercent] = useState('10')
+  const [amount, setAmount] = useState(String(DEFAULT_RULE_AMOUNT))
+  const [percent, setPercent] = useState(String(DEFAULT_RULE_PERCENT))
   const [enabled, setEnabled] = useState(true)
   const [skip, setSkip] = useState('')
   const [error, setError] = useState('')
@@ -72,8 +77,8 @@ function RepaymentRulesPanel({ rules, addRule, updateRule, removeRule, defaultSt
     setType('monthlyFixed')
     setStart(safeDefaultStart)
     setEnd(defaultEnd())
-    setAmount('20000')
-    setPercent('10')
+    setAmount(String(DEFAULT_RULE_AMOUNT))
+    setPercent(String(DEFAULT_RULE_PERCENT))
     setEnabled(true)
     setSkip('')
     setError('')
@@ -87,8 +92,8 @@ function RepaymentRulesPanel({ rules, addRule, updateRule, removeRule, defaultSt
     setType(rule.type)
     setStart(rule.startDate)
     setEnd(rule.endDate)
-    setAmount(String(rule.amount ?? 20000))
-    setPercent(String(rule.percent ?? 10))
+    setAmount(String(rule.amount ?? DEFAULT_RULE_AMOUNT))
+    setPercent(String(rule.percent ?? DEFAULT_RULE_PERCENT))
     setEnabled(rule.enabled ?? true)
     setSkip(rule.skipMonths.join(', '))
     setStrategy(rule.strategy === 'custom' ? 'reduceTerm' : rule.strategy)
@@ -165,7 +170,10 @@ export function EarlyList({ items, rules, generated, currency, displayDecimals, 
   ]).map(item => {
     const manual = manualIds.has(item.id)
     if (manual) return { item, kind: 'manual' as const, label: 'Разовый платёж' }
-      const ruleId = item.id.startsWith('rule-') ? item.id.slice(5, -11) : ''
+    // sourceRuleId есть у новых операций; разбор ID сохраняет совместимость со старыми данными.
+    const ruleId = item.sourceRuleId ?? (item.id.startsWith(RULE_REPAYMENT_ID_PREFIX)
+      ? item.id.slice(RULE_REPAYMENT_ID_PREFIX.length, -RULE_REPAYMENT_DATE_SUFFIX_LENGTH)
+      : '')
     return { item, kind: 'rule' as const, label: ruleNames.get(ruleId) ?? 'Регулярный платёж' }
   }), [items, generated, manualIds, ruleNames])
   const manualTotal = activeItems.reduce((sum, item) => sum + item.amount, 0)
