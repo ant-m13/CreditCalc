@@ -37,6 +37,7 @@ describe('safe persisted storage hydration', () => {
       date: defaultConfig.firstPaymentDate,
       amount: 1000,
       amountMode: 'extra',
+      enabled: false,
       strategy: 'reduceTerm',
       source: 'own',
       sameDayOrder: 'regularFirst',
