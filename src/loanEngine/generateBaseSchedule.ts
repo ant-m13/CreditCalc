@@ -23,6 +23,7 @@ const EXTRA_SCHEDULE_PERIODS = 240
 const MIN_SCHEDULE_ITERATIONS = 360
 // Финальная корректировка считается существенной, если превышает 5% обычного платежа.
 const MATERIAL_BALLOON_RATIO = 0.05
+const DEFAULT_GRACE_PAYMENT_DIVISOR = 2
 
 const appendUnique = <T,>(items: T[], item: T) => {
   if (!items.includes(item)) items.push(item)
@@ -66,7 +67,7 @@ const estimateRemainingPeriods = (
     return Math.min(fallbackPeriods, Math.max(1, Math.ceil(balance.div(principalPerPeriod).toNumber())))
   }
   if (payment.lte(0)) return fallbackPeriods
-  const rate = new Decimal(annualRate).div(100).div(periodsPerYear(config.frequency))
+  const rate = new Decimal(annualRate).div(PERCENT_FACTOR).div(periodsPerYear(config.frequency))
   if (rate.isZero()) return Math.min(fallbackPeriods, Math.max(1, Math.ceil(balance.div(payment).toNumber())))
   if (payment.lte(balance.mul(rate))) return fallbackPeriods
   const ratio = new Decimal(1).minus(balance.mul(rate).div(payment))
@@ -455,7 +456,7 @@ export function generateBaseSchedule(config: LoanConfig, options: Options = {}):
         targetPayment = interestDue
         appendScheduleEvent(eventLabels, eventTypes, 'Погашение отложенных процентов', 'deferredInterestPayment')
       } else if (grace?.type === 'reduced' || grace?.type === 'custom') {
-        targetPayment = money(grace.paymentAmount ?? payment.div(2), config.rounding)
+        targetPayment = money(grace.paymentAmount ?? payment.div(DEFAULT_GRACE_PAYMENT_DIVISOR), config.rounding)
         appendScheduleEvent(eventLabels, eventTypes, 'Льготный период · особый платёж', 'graceSpecialPayment')
       } else if (config.paymentType === 'differentiated') {
         targetPayment = money(interestDue.add(principalPerPeriod), config.rounding)
