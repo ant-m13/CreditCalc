@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { beforeAll, describe, expect, it } from 'vitest'
 import { addMonths, format, parseISO } from 'date-fns'
 import { defaultConfig } from './loanDefaults'
 import { buildGoalPlanPreview, buildGoalPlans, type GoalPlannerInput } from './goalPlanner'
@@ -46,9 +46,15 @@ const operationsWithVariantAmount = (
   }
 }
 
+let baselinePlans: ReturnType<typeof buildGoalPlans>
+
+beforeAll(() => {
+  baselinePlans = buildGoalPlans(input())
+})
+
 describe('goal planner', { timeout: GOAL_PLANNER_TEST_TIMEOUT_MS }, () => {
   it('подбирает четыре варианта закрытия и подтверждает копеечную границу', () => {
-    const result = buildGoalPlans(input())
+    const result = baselinePlans
 
     expect(result.status).toBe('planned')
     expect(result.variants).toHaveLength(4)
@@ -70,7 +76,7 @@ describe('goal planner', { timeout: GOAL_PLANNER_TEST_TIMEOUT_MS }, () => {
     const repayment: EarlyRepayment = {
       id: 'existing', date: '2026-03-15', amount: 400_000, amountMode: 'extra', strategy: 'reduceTerm', source: 'own', sameDayOrder: 'regularFirst', interestFirst: true
     }
-    const withoutExisting = buildGoalPlans(input())
+    const withoutExisting = baselinePlans
     const withExisting = buildGoalPlans(input({ repayments: [repayment] }))
 
     expect(withExisting.current.closingDate < withoutExisting.current.closingDate).toBe(true)
@@ -92,7 +98,7 @@ describe('goal planner', { timeout: GOAL_PLANNER_TEST_TIMEOUT_MS }, () => {
       interestFirst: true,
       skipMonths: []
     }
-    const withoutExisting = buildGoalPlans(input())
+    const withoutExisting = baselinePlans
     const withExisting = buildGoalPlans(input({ repaymentRules: [repaymentRule] }))
 
     expect(withExisting.current.closingDate < withoutExisting.current.closingDate).toBe(true)
@@ -168,7 +174,7 @@ describe('goal planner', { timeout: GOAL_PLANNER_TEST_TIMEOUT_MS }, () => {
   })
 
   it('подбирает вариант для ограничения общей переплаты с комиссиями', () => {
-    const current = buildGoalPlans(input({ goal: { type: 'targetDate', targetDate: '2035-01-01' } })).current
+    const current = baselinePlans.current
     const result = buildGoalPlans(input({ goal: { type: 'maxOverpayment', amount: Math.round(current.overpayment * 0.8 * 100) / 100 } }))
 
     expect(result.status).toBe('planned')
@@ -288,7 +294,7 @@ describe('goal planner', { timeout: GOAL_PLANNER_TEST_TIMEOUT_MS }, () => {
 
   it('строит новый график из выбранного плана', () => {
     const plannerInput = input()
-    const result = buildGoalPlans(plannerInput)
+    const result = baselinePlans
     const variant = result.variants.find(item => item.kind === 'combined')!
     const preview = buildGoalPlanPreview(plannerInput, variant.operations)
 
