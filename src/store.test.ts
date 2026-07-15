@@ -2,11 +2,11 @@ import { describe, expect, it, vi } from 'vitest'
 import { validateScenario } from './loanEngine'
 import { buildLoanCalculation } from './loanCalculation'
 import { MAX_EARLY_REPAYMENTS, MAX_RATE_CHANGES, MAX_REPAYMENT_RULES } from './loanEngine/limits'
-import { defaultConfig, MAX_LOANS, normalizePersistedState, useLoanStore, type LoanProfile } from './store'
+import { MAX_LOANS, normalizePersistedState, useLoanStore, type LoanProfile } from './store'
 import type { EarlyRepayment } from './loanEngine'
 import { expandRepaymentRules, type RepaymentRule } from './repaymentRules'
 import type { GoalPlanOperations } from './goalPlanner'
-import { shortTestConfig } from './testFixtures'
+import { shortTestConfig as defaultConfig } from './testFixtures'
 
 const repaymentBase = {
   strategy: 'reduceTerm',
@@ -18,7 +18,7 @@ const repaymentBase = {
 const loanProfile = (patch: Partial<LoanProfile> = {}): LoanProfile => ({
   id: 'loan-active',
   name: 'Рабочий',
-  config: shortTestConfig,
+  config: defaultConfig,
   repayments: [],
   repaymentRules: [],
   gracePeriods: [],
