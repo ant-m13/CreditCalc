@@ -25,6 +25,15 @@ describe('release workflows', () => {
     expect(deployPages).toContain('E2E_BASE_PATH: /${{ github.event.repository.name }}/')
   })
 
+  it('не дублирует unit-тесты и typecheck в PR workflow', () => {
+    const pullRequestChecks = readWorkflow('pr-checks.yml')
+
+    expect(pullRequestChecks).toContain('run: pnpm test:coverage')
+    expect(pullRequestChecks).not.toMatch(/run: pnpm test\s*$/m)
+    expect(pullRequestChecks).not.toContain('run: pnpm typecheck')
+    expect(pullRequestChecks).toContain('run: pnpm build')
+  })
+
   it('не называет блокирующий audit non-blocking в release-документации', () => {
     const releaseDocumentation = `${readRepositoryDocument('README.md')}\n${readRepositoryDocument('docs/RELEASES.md')}`
 

@@ -33,16 +33,10 @@ jobs:
       - name: Install Playwright browser
         run: pnpm exec playwright install --with-deps chromium
 
-      - name: Typecheck
-        run: pnpm typecheck
-
       - name: Lint
         run: pnpm lint
 
-      - name: Run tests
-        run: pnpm test
-
-      - name: Run coverage
+      - name: Run tests with coverage
         run: pnpm test:coverage
 
       - name: Build site
