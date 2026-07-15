@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from './App'
 import { defaultConfig, STORAGE_CONFLICT_EVENT, useLoanStore, type LoanProfile } from './store'
 import { APP_VERSION } from './version'
+import { shortTestConfig } from './testFixtures'
 
 const ASYNC_QUERY_TIMEOUT_MS = 10_000
 const SMOKE_TEST_TIMEOUT_MS = 15_000
@@ -39,7 +40,7 @@ class ResizeObserverMock {
 const loan = (patch: Partial<LoanProfile> = {}): LoanProfile => ({
   id: 'loan-smoke',
   name: 'Мой кредит',
-  config: defaultConfig,
+  config: shortTestConfig,
   repayments: [],
   repaymentRules: [],
   gracePeriods: [],
@@ -67,7 +68,7 @@ const resetStore = () => {
 const sharedLoan = () => ({
   name: 'Кредит из ссылки',
   config: {
-    ...defaultConfig,
+    ...shortTestConfig,
     principal: 3_210_000,
     annualRate: 8.4
   },
@@ -268,7 +269,7 @@ describe('App smoke tests', () => {
   it('сбрасывает черновик изменения ставки при переключении кредита', async () => {
     const user = userEvent.setup()
     const first = loan({ id: 'loan-a', name: 'Первый' })
-    const second = loan({ id: 'loan-b', name: 'Второй', config: { ...defaultConfig, currency: 'USD' } })
+    const second = loan({ id: 'loan-b', name: 'Второй', config: { ...shortTestConfig, currency: 'USD' } })
     useLoanStore.setState({ ...first, loans: [first, second], activeLoanId: first.id })
     render(<App />)
 
@@ -292,7 +293,7 @@ describe('App smoke tests', () => {
     const user = userEvent.setup()
     const activeLoan = loan({
       config: {
-        ...defaultConfig,
+        ...shortTestConfig,
         issueDate: '2025-11-26',
         firstPaymentDate: '2025-12-26',
         paymentDay: 26
@@ -328,7 +329,7 @@ describe('App smoke tests', () => {
     const user = userEvent.setup()
     const activeLoan = loan({
       config: {
-        ...defaultConfig,
+        ...shortTestConfig,
         issueDate: '2026-06-23',
         firstPaymentDate: '2026-07-15',
         paymentDay: 15,
@@ -420,7 +421,7 @@ describe('App smoke tests', () => {
 
   it('блокирует CSV и печать при ошибке расчёта', async () => {
     const user = userEvent.setup()
-    const broken = loan({ config: { ...defaultConfig, principal: Number.MAX_VALUE } })
+    const broken = loan({ config: { ...shortTestConfig, principal: Number.MAX_VALUE } })
     useLoanStore.setState({ ...broken, loans: [broken], activeLoanId: broken.id })
     render(<App />)
 
@@ -433,7 +434,7 @@ describe('App smoke tests', () => {
 
   it('поясняет exact-date ставку без обещания следующего платёжного периода', async () => {
     const user = userEvent.setup()
-    const exact = loan({ config: { ...defaultConfig, rateChangeMode: 'exactDate' } })
+    const exact = loan({ config: { ...shortTestConfig, rateChangeMode: 'exactDate' } })
     useLoanStore.setState({ ...exact, loans: [exact], activeLoanId: exact.id })
     render(<App />)
 
@@ -459,7 +460,7 @@ describe('App smoke tests', () => {
   })
 
   it('объявляет ошибку и остановку расчёта assistive-технологиям', async () => {
-    const invalidLoan = loan({ config: { ...defaultConfig, principal: 0 } })
+    const invalidLoan = loan({ config: { ...shortTestConfig, principal: 0 } })
     useLoanStore.setState({ ...invalidLoan, loans: [invalidLoan], activeLoanId: invalidLoan.id })
     render(<App />)
 
