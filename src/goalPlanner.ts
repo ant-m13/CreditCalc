@@ -35,6 +35,11 @@ export type GoalPlannerGoal =
   | { type: 'maxOverpayment'; amount: number }
 
 export type GoalPlanVariantKind = 'monthlyExtra' | 'monthlyTotalPayment' | 'oneTime' | 'combined'
+export const GOAL_PLAN_VARIANT_KINDS: readonly GoalPlanVariantKind[] = ['monthlyExtra', 'monthlyTotalPayment', 'oneTime', 'combined']
+
+export interface GoalPlannerBuildOptions {
+  variantKinds?: readonly GoalPlanVariantKind[]
+}
 
 export interface GoalPlannerInput extends LoanCalculationSource {
   goal: GoalPlannerGoal
@@ -513,69 +518,83 @@ const planTargetGoal = (
   context: PlannerContext,
   predicate: (schedule: PaymentScheduleItem[]) => boolean,
   targetDate?: string,
-  objective?: (schedule: PaymentScheduleItem[]) => number
+  objective?: (schedule: PaymentScheduleItem[]) => number,
+  variantKinds: readonly GoalPlanVariantKind[] = GOAL_PLAN_VARIANT_KINDS
 ) => {
   const monthlyStartTooLate = Boolean(targetDate && context.input.planStartDate > targetDate)
   const oneTimeTooLate = Boolean(targetDate && context.input.oneTimeDate > targetDate)
-  const monthlyExtra = monthlyStartTooLate
-    ? infeasibleVariant('monthlyExtra', 'Дата начала ежемесячных платежей позже целевой даты')
-    : searchVariant(context, 'monthlyExtra', amount => ({ repayments: [], repaymentRules: amount > 0 ? [makeRule(context, 'monthlyFixed', amount, 'reduceTerm')] : [] }), predicate, 'monthlyExtra', objective)
-  const monthlyTotalPayment = monthlyStartTooLate
-    ? infeasibleVariant('monthlyTotalPayment', 'Дата начала общего платежа позже целевой даты')
-    : searchVariant(context, 'monthlyTotalPayment', amount => ({ repayments: [], repaymentRules: amount > 0 ? [makeRule(context, 'monthlyTotalPayment', amount, 'reduceTerm')] : [] }), predicate, 'totalMonthlyPayment', objective)
-  const oneTime = oneTimeTooLate
-    ? infeasibleVariant('oneTime', 'Дата разового взноса позже целевой даты')
-    : searchVariant(context, 'oneTime', amount => ({ repayments: amount > 0 ? [makeOneTime(context, amount, 'reduceTerm')] : [], repaymentRules: [] }), predicate, 'oneTimePayment', objective)
-  const combined = context.input.availableNow <= 0
-    ? infeasibleVariant('combined', 'Укажите сумму, доступную для разового взноса')
-    : monthlyStartTooLate || oneTimeTooLate
-      ? infeasibleVariant('combined', 'Дата одной из операций позже целевой даты')
-      : searchVariant(context, 'combined', amount => ({
-        repayments: [makeOneTime(context, context.input.availableNow, 'reduceTerm')],
-        repaymentRules: amount > 0 ? [makeRule(context, 'monthlyFixed', amount, 'reduceTerm')] : []
-      }), predicate, 'monthlyExtra', objective)
-  if (combined.status === 'achieved') combined.oneTimePayment = context.input.availableNow
-  return [monthlyExtra, monthlyTotalPayment, oneTime, combined]
+  const builders: Record<GoalPlanVariantKind, () => GoalPlanVariant> = {
+    monthlyExtra: () => monthlyStartTooLate
+      ? infeasibleVariant('monthlyExtra', 'Дата начала ежемесячных платежей позже целевой даты')
+      : searchVariant(context, 'monthlyExtra', amount => ({ repayments: [], repaymentRules: amount > 0 ? [makeRule(context, 'monthlyFixed', amount, 'reduceTerm')] : [] }), predicate, 'monthlyExtra', objective),
+    monthlyTotalPayment: () => monthlyStartTooLate
+      ? infeasibleVariant('monthlyTotalPayment', 'Дата начала общего платежа позже целевой даты')
+      : searchVariant(context, 'monthlyTotalPayment', amount => ({ repayments: [], repaymentRules: amount > 0 ? [makeRule(context, 'monthlyTotalPayment', amount, 'reduceTerm')] : [] }), predicate, 'totalMonthlyPayment', objective),
+    oneTime: () => oneTimeTooLate
+      ? infeasibleVariant('oneTime', 'Дата разового взноса позже целевой даты')
+      : searchVariant(context, 'oneTime', amount => ({ repayments: amount > 0 ? [makeOneTime(context, amount, 'reduceTerm')] : [], repaymentRules: [] }), predicate, 'oneTimePayment', objective),
+    combined: () => {
+      const combined = context.input.availableNow <= 0
+        ? infeasibleVariant('combined', 'Укажите сумму, доступную для разового взноса')
+        : monthlyStartTooLate || oneTimeTooLate
+          ? infeasibleVariant('combined', 'Дата одной из операций позже целевой даты')
+          : searchVariant(context, 'combined', amount => ({
+            repayments: [makeOneTime(context, context.input.availableNow, 'reduceTerm')],
+            repaymentRules: amount > 0 ? [makeRule(context, 'monthlyFixed', amount, 'reduceTerm')] : []
+          }), predicate, 'monthlyExtra', objective)
+      if (combined.status === 'achieved') combined.oneTimePayment = context.input.availableNow
+      return combined
+    }
+  }
+  return variantKinds.map(kind => builders[kind]())
 }
 
-const planBudgetGoal = (context: PlannerContext, budget: number) => {
+const planBudgetGoal = (
+  context: PlannerContext,
+  budget: number,
+  variantKinds: readonly GoalPlanVariantKind[] = GOAL_PLAN_VARIANT_KINDS
+) => {
   const predicate = (schedule: PaymentScheduleItem[]) => maxRegularTransfer(schedule, context.input.planStartDate) <= budget
-  const monthlyOperations: GoalPlanOperations = {
-    repayments: [],
-    repaymentRules: budget > 0 ? [makeRule(context, 'monthlyTotalPayment', budget, 'reduceTerm')] : []
-  }
-  let monthly: GoalPlanVariant
-  try {
-    const evaluated = evaluateOperations(context, monthlyOperations)
-    monthly = predicate(evaluated.schedule)
-      ? achievedVariant(context, 'monthlyTotalPayment', monthlyOperations, evaluated, true, { totalMonthlyPayment: budget })
-      : infeasibleVariant('monthlyTotalPayment', 'Обязательные или уже запланированные платежи превышают бюджет')
-  } catch (error) {
-    monthly = infeasibleVariant('monthlyTotalPayment', error instanceof Error ? error.message : 'Не удалось применить ежемесячный бюджет')
-  }
-  const oneTime = searchVariant(context, 'oneTime', amount => ({
-    repayments: amount > 0 ? [makeOneTime(context, amount, 'reducePayment')] : [],
-    repaymentRules: []
-  }), predicate, 'oneTimePayment')
-  let combined = infeasibleVariant('combined', 'Укажите сумму, доступную для разового взноса')
-  if (context.input.availableNow > 0) {
-    const operations: GoalPlanOperations = {
-      repayments: [makeOneTime(context, context.input.availableNow, 'reducePayment')],
-      repaymentRules: budget > 0 ? [makeRule(context, 'monthlyTotalPayment', budget, 'reduceTerm')] : []
+  const builders: Record<GoalPlanVariantKind, () => GoalPlanVariant> = {
+    monthlyExtra: () => infeasibleVariant('monthlyExtra', 'Для ограничения бюджета используется общий ежемесячный платёж'),
+    monthlyTotalPayment: () => {
+      const operations: GoalPlanOperations = {
+        repayments: [],
+        repaymentRules: budget > 0 ? [makeRule(context, 'monthlyTotalPayment', budget, 'reduceTerm')] : []
+      }
+      try {
+        const evaluated = evaluateOperations(context, operations)
+        return predicate(evaluated.schedule)
+          ? achievedVariant(context, 'monthlyTotalPayment', operations, evaluated, true, { totalMonthlyPayment: budget })
+          : infeasibleVariant('monthlyTotalPayment', 'Обязательные или уже запланированные платежи превышают бюджет')
+      } catch (error) {
+        return infeasibleVariant('monthlyTotalPayment', error instanceof Error ? error.message : 'Не удалось применить ежемесячный бюджет')
+      }
+    },
+    oneTime: () => searchVariant(context, 'oneTime', amount => ({
+      repayments: amount > 0 ? [makeOneTime(context, amount, 'reducePayment')] : [],
+      repaymentRules: []
+    }), predicate, 'oneTimePayment'),
+    combined: () => {
+      if (context.input.availableNow <= 0) return infeasibleVariant('combined', 'Укажите сумму, доступную для разового взноса')
+      const operations: GoalPlanOperations = {
+        repayments: [makeOneTime(context, context.input.availableNow, 'reducePayment')],
+        repaymentRules: budget > 0 ? [makeRule(context, 'monthlyTotalPayment', budget, 'reduceTerm')] : []
+      }
+      try {
+        const evaluated = evaluateOperations(context, operations)
+        return predicate(evaluated.schedule)
+          ? achievedVariant(context, 'combined', operations, evaluated, true, { oneTimePayment: context.input.availableNow, totalMonthlyPayment: budget })
+          : infeasibleVariant('combined', 'Даже комбинированный план превышает заданный бюджет')
+      } catch (error) {
+        return infeasibleVariant('combined', error instanceof Error ? error.message : 'Не удалось рассчитать комбинированный вариант')
+      }
     }
-    try {
-      const evaluated = evaluateOperations(context, operations)
-      combined = predicate(evaluated.schedule)
-        ? achievedVariant(context, 'combined', operations, evaluated, true, { oneTimePayment: context.input.availableNow, totalMonthlyPayment: budget })
-        : infeasibleVariant('combined', 'Даже комбинированный план превышает заданный бюджет')
-    } catch (error) {
-      combined = infeasibleVariant('combined', error instanceof Error ? error.message : 'Не удалось рассчитать комбинированный вариант')
-    }
   }
-  return [infeasibleVariant('monthlyExtra', 'Для ограничения бюджета используется общий ежемесячный платёж'), monthly, oneTime, combined]
+  return variantKinds.map(kind => builders[kind]())
 }
 
-export function buildGoalPlans(input: GoalPlannerInput): GoalPlannerResult {
+export function buildGoalPlans(input: GoalPlannerInput, options: GoalPlannerBuildOptions = {}): GoalPlannerResult {
   const context = prepareContext(input)
   const current = scheduleSummary(context.current.schedule, input.config.principal, null)
   const targetDate = targetDateFor(context)
@@ -591,14 +610,15 @@ export function buildGoalPlans(input: GoalPlannerInput): GoalPlannerResult {
     return { status: 'alreadyAchieved', monthlyBudget: goal.amount, message: 'Текущий план уже укладывается в заданный ежемесячный бюджет', current, variants: [] }
   }
 
+  const variantKinds = options.variantKinds ?? GOAL_PLAN_VARIANT_KINDS
   let variants: GoalPlanVariant[]
   if (targetDate) {
-    variants = planTargetGoal(context, schedule => (schedule.at(-1)?.date ?? input.config.issueDate) <= targetDate, targetDate)
+    variants = planTargetGoal(context, schedule => (schedule.at(-1)?.date ?? input.config.issueDate) <= targetDate, targetDate, undefined, variantKinds)
   } else if (goal.type === 'maxOverpayment') {
     const objective = (schedule: PaymentScheduleItem[]) => overpaymentFor(schedule, input.config.principal)
-    variants = planTargetGoal(context, schedule => objective(schedule) <= goal.amount, undefined, objective)
+    variants = planTargetGoal(context, schedule => objective(schedule) <= goal.amount, undefined, objective, variantKinds)
   } else if (goal.type === 'monthlyBudget') {
-    variants = planBudgetGoal(context, goal.amount)
+    variants = planBudgetGoal(context, goal.amount, variantKinds)
   } else {
     throw new Error('Не удалось определить цель планировщика')
   }
