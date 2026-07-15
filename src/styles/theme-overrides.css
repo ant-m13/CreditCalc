@@ -1,4 +1,4 @@
-/* Shared component theme layer. Theme-specific CSS should stay in token values only. */
+/* Общий тематический слой компонентов. Различия тем должны оставаться только в значениях токенов. */
 
 .app-shell[data-theme] main,
 .app-shell[data-theme] .content{

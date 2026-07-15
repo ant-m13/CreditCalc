@@ -392,8 +392,8 @@ const searchMinimum = (
       const refineStructure = structureChanged && depth < 1
       const refineObjective = objectiveChangedDirection && depth < 2
 
-      // Every band is sampled at five points. Further subdivision follows schedule/outcome
-      // transitions, bounded local valleys, or a sampled feasible boundary.
+      // Каждый диапазон проверяется в пяти точках. Дальнейшее деление выполняется при смене
+      // структуры графика, локальном изменении направления цели или найденной достижимой точке.
       if (!potentialBoundary && !refineStructure && !refineObjective) return null
 
       const middle = left + Math.floor(distance / 2)

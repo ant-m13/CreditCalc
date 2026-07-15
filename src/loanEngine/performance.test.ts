@@ -40,8 +40,8 @@ describe('performance regressions', () => {
 
     expect(validateScenario(longTermConfig, repayments, [])).toEqual([])
 
-    // Wide enough for shared CI runners; the structural Set-based lookup is the
-    // primary regression guard, while this catches accidental nested scans.
+    // Запас учитывает общие CI-среды. Основную защиту даёт структура поиска на Set,
+    // а ограничение времени выявляет случайно добавленные вложенные обходы.
     expect(performance.now() - startedAt).toBeLessThan(3000)
   })
 })

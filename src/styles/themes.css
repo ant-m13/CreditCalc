@@ -1,4 +1,4 @@
-/* Theme tokens. Components below use the same selectors for every theme. */
+/* Токены тем. Компоненты ниже используют одинаковые селекторы для каждой темы. */
 .app-shell[data-theme]{
   --green:#0b9873;
   --deep:#071c18;
