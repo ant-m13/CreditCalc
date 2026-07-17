@@ -47,7 +47,10 @@ describe('Android configuration', () => {
     expect(releaseWorkflow).toContain('app-release.apk')
     expect(autoReleaseWorkflow).toContain('uses: ./.github/workflows/android-release.yml')
     expect(autoReleaseWorkflow).toContain('tag: ${{ needs.verify.outputs.tag }}')
+    expect(autoReleaseWorkflow).toContain('run_source_checks: false')
     expect(autoReleaseWorkflow).toContain('secrets: inherit')
+    expect(releaseWorkflow).toContain('if: inputs.run_source_checks')
+    expect(releaseWorkflow.match(/ANDROID_KEYSTORE_PATH: \$\{\{ runner\.temp \}\}/g)).toHaveLength(2)
   })
 
   it('регистрирует системную печать Android для WebView', () => {

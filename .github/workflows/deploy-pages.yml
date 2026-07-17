@@ -1,17 +1,10 @@
-name: Deploy to GitHub Pages
+name: Redeploy GitHub Pages
 
 on:
-  push:
-    tags:
-      - 'v*'
-  workflow_run:
-    workflows: ['Auto tag on version change']
-    types: [completed]
-    branches: [main]
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Тег релиза, например v1.6.6'
+        description: 'Существующий тег релиза, например v1.8.0'
         required: true
         type: string
 
@@ -26,48 +19,14 @@ jobs:
   build:
     permissions:
       contents: read
-    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
+    env:
+      RELEASE_TAG: ${{ inputs.tag }}
     steps:
-      - name: Checkout release source metadata
-        if: github.event_name == 'workflow_run'
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
-        with:
-          ref: ${{ github.event.workflow_run.head_sha }}
-          persist-credentials: false
-
-      - name: Resolve release tag
-        id: release
-        shell: bash
-        env:
-          EVENT_NAME: ${{ github.event_name }}
-          INPUT_TAG: ${{ github.event.inputs.tag || '' }}
-          REF_NAME: ${{ github.ref_name }}
-        run: |
-          case "$EVENT_NAME" in
-            workflow_dispatch)
-              TAG="$INPUT_TAG"
-              ;;
-            push)
-              TAG="$REF_NAME"
-              ;;
-            workflow_run)
-              VERSION="$(node -p "require('./package.json').version")"
-              TAG="v$VERSION"
-              ;;
-            *)
-              echo "Неподдерживаемое событие: $EVENT_NAME"
-              exit 1
-              ;;
-          esac
-
-          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
-
       - name: Validate release tag
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ steps.release.outputs.tag }}
         run: |
           if [[ ! "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
             echo "Некорректный тег релиза: $RELEASE_TAG"
@@ -78,20 +37,15 @@ jobs:
             "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" \
             "refs/tags/${RELEASE_TAG}" >/dev/null
 
-      - name: Checkout repository
+      - name: Checkout release tag
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
-          ref: ${{ steps.release.outputs.tag }}
+          ref: ${{ inputs.tag }}
           fetch-depth: 0
           persist-credentials: false
 
       - name: Verify release revision
         shell: bash
-        env:
-          EVENT_NAME: ${{ github.event_name }}
-          EVENT_SHA: ${{ github.sha }}
-          RELEASE_TAG: ${{ steps.release.outputs.tag }}
-          WORKFLOW_SHA: ${{ github.event.workflow_run.head_sha || '' }}
         run: |
           VERSION="$(node -p "require('./package.json').version")"
           EXPECTED_TAG="v$VERSION"
@@ -104,17 +58,6 @@ jobs:
           fi
           if [[ "$TAG_SHA" != "$HEAD_SHA" ]]; then
             echo "Тег $RELEASE_TAG указывает на $TAG_SHA вместо checkout-ревизии $HEAD_SHA"
-            exit 1
-          fi
-
-          EXPECTED_SHA=""
-          if [[ "$EVENT_NAME" == "workflow_run" ]]; then
-            EXPECTED_SHA="$WORKFLOW_SHA"
-          elif [[ "$EVENT_NAME" == "push" ]]; then
-            EXPECTED_SHA="$EVENT_SHA"
-          fi
-          if [[ -n "$EXPECTED_SHA" && "$HEAD_SHA" != "$EXPECTED_SHA" ]]; then
-            echo "Тег $RELEASE_TAG указывает на $HEAD_SHA вместо ожидаемой ревизии события $EXPECTED_SHA"
             exit 1
           fi
 
@@ -134,17 +77,8 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Audit production dependencies
-        run: pnpm audit --prod
-
       - name: Install Playwright browser
         run: pnpm exec playwright install --with-deps chromium
-
-      - name: Lint
-        run: pnpm lint
-
-      - name: Run tests
-        run: pnpm test
 
       - name: Build site
         run: pnpm build
@@ -176,7 +110,6 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
-
     steps:
       - name: Configure GitHub Pages
         uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # v5
