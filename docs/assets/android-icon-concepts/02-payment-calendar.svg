@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-labelledby="title desc">
+  <title id="title">CreditCalc — календарь платежей</title>
+  <desc id="desc">Бирюзовый календарь с тремя строками платежей и выделенной контрольной отметкой.</desc>
+  <rect width="1024" height="1024" fill="#071a17"/>
+  <rect x="190" y="214" width="644" height="620" rx="100" fill="#12b886"/>
+  <path fill="#e8fff7" d="M190 314c0-55 45-100 100-100h444c55 0 100 45 100 100v96H190v-96Z"/>
+  <rect x="316" y="158" width="56" height="170" rx="28" fill="#071a17"/>
+  <rect x="652" y="158" width="56" height="170" rx="28" fill="#071a17"/>
+  <circle cx="294" cy="514" r="25" fill="#e8fff7"/>
+  <rect x="350" y="488" width="378" height="52" rx="26" fill="#071a17"/>
+  <circle cx="294" cy="620" r="25" fill="#e8fff7"/>
+  <rect x="350" y="594" width="304" height="52" rx="26" fill="#071a17"/>
+  <circle cx="294" cy="726" r="25" fill="#e8fff7"/>
+  <path d="m270 726 18 18 42-46" fill="none" stroke="#071a17" stroke-width="32" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="350" y="700" width="226" height="52" rx="26" fill="#071a17"/>
+</svg>

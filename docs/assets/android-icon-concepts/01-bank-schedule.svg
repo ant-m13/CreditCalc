@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-labelledby="title desc">
-  <title id="title">CreditCalc</title>
-  <desc id="desc">Банк и уменьшающийся график кредитных платежей</desc>
+  <title id="title">CreditCalc — банк и график платежей</title>
+  <desc id="desc">Светлая крыша над бирюзовой карточкой с тремя уменьшающимися строками платежей.</desc>
   <rect width="1024" height="1024" fill="#071a17"/>
   <path fill="#e8fff7" d="M512 176 150 424h724L512 176Z"/>
   <rect x="220" y="442" width="584" height="390" rx="64" fill="#12b886"/>
