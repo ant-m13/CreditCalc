@@ -1,7 +1,7 @@
 {
   "name": "credit-calculator",
   "private": true,
-  "version": "1.7.5",
+  "version": "1.8.0",
   "description": "CreditCalc — бесплатный кредитный график с досрочными погашениями и локальным хранением данных.",
   "license": "MIT",
   "homepage": "https://ant-m13.github.io/CreditCalc/",
