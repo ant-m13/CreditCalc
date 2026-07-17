@@ -51,8 +51,6 @@ JSON-файл создаётся кнопкой экспорта в прилож
   "settings": {
     "termUnit": "months",
     "displayDecimals": 2,
-    "appFontSize": "normal",
-    "scheduleFontSize": "large",
     "theme": "emerald",
     "customAccentColor": "#0b9873",
     "useCustomAccentColor": false
@@ -218,8 +216,6 @@ Legacy-значение `365` при импорте и миграции persiste
 {
   termUnit: 'months' | 'years'
   displayDecimals: 0 | 2
-  appFontSize: 'normal' | 'large' | 'xlarge'
-  scheduleFontSize: 'normal' | 'large' | 'xlarge'
   theme: 'emerald' | 'ocean' | 'violet' | 'graphite' | 'warm' | 'night'
   customAccentColor?: string
   useCustomAccentColor?: boolean
