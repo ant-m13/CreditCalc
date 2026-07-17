@@ -63,11 +63,18 @@ describe('release workflows', () => {
 
   it('собирает подписанный Android APK с read-only token и публикует отдельным job', () => {
     const androidRelease = readWorkflow('android-release.yml')
+    const autoRelease = readWorkflow('auto-release.yml')
 
+    expect(androidRelease).toContain('workflow_call:')
+    expect(androidRelease).toContain('workflow_dispatch:')
     expect(androidRelease).toMatch(/\n {2}verify-and-build:\n {4}permissions:\n {6}contents: read/)
     expect(androidRelease).toMatch(/\n {2}publish:\n {4}needs: verify-and-build\n {4}permissions:\n {6}contents: write/)
     expect(androidRelease).toContain('ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}')
     expect(androidRelease).toContain('./gradlew --no-daemon clean assembleRelease')
+    expect(autoRelease).toMatch(/\n {2}android:\n {4}needs:\n {6}- verify\n {6}- publish/)
+    expect(autoRelease).toContain('uses: ./.github/workflows/android-release.yml')
+    expect(autoRelease).toContain('tag: ${{ needs.verify.outputs.tag }}')
+    expect(autoRelease).toContain('secrets: inherit')
   })
 
   it('не сохраняет checkout credentials там, где workflow не выполняет push', () => {

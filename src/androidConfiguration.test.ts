@@ -9,6 +9,7 @@ const appGradle = readRepositoryFile('android/app/build.gradle')
 const rootGradle = readRepositoryFile('android/build.gradle')
 const capacitorConfig = readRepositoryFile('capacitor.config.ts')
 const releaseWorkflow = readRepositoryFile('.github/workflows/android-release.yml')
+const autoReleaseWorkflow = readRepositoryFile('.github/workflows/auto-release.yml')
 const fileProviderPaths = readRepositoryFile('android/app/src/main/res/xml/file_paths.xml')
 const mainActivity = readRepositoryFile('android/app/src/main/java/io/github/antm13/creditcalc/MainActivity.java')
 const androidPrintPlugin = readRepositoryFile('android/app/src/main/java/io/github/antm13/creditcalc/AndroidPrintPlugin.java')
@@ -38,11 +39,15 @@ describe('Android configuration', () => {
     expect(fileProviderPaths).not.toContain('<external-path')
   })
 
-  it('публикует APK только из ручного workflow с release-подписью', () => {
+  it('публикует APK автоматически после web-релиза и допускает ручной перезапуск', () => {
+    expect(releaseWorkflow).toContain('workflow_call:')
     expect(releaseWorkflow).toContain('workflow_dispatch:')
     expect(releaseWorkflow).toContain('ANDROID_KEYSTORE_BASE64')
     expect(releaseWorkflow).toContain('./gradlew --no-daemon clean assembleRelease')
     expect(releaseWorkflow).toContain('app-release.apk')
+    expect(autoReleaseWorkflow).toContain('uses: ./.github/workflows/android-release.yml')
+    expect(autoReleaseWorkflow).toContain('tag: ${{ needs.verify.outputs.tag }}')
+    expect(autoReleaseWorkflow).toContain('secrets: inherit')
   })
 
   it('регистрирует системную печать Android для WebView', () => {
