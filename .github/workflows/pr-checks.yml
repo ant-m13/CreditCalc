@@ -27,6 +27,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Validate GitHub Actions workflows
+        run: pnpm lint:workflows
+
       - name: Audit production dependencies
         run: pnpm audit --prod
 

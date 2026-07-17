@@ -1,4 +1,4 @@
-name: Auto tag on version change
+name: Release version
 
 on:
   push:
@@ -119,6 +119,27 @@ jobs:
           path: credit-calculator-dist.zip
           if-no-files-found: error
 
+      - name: Build site for GitHub Pages
+        run: pnpm build
+        env:
+          VITE_BASE_PATH: /${{ github.event.repository.name }}/
+          VITE_COMMIT_SHA: ${{ github.sha }}
+
+      - name: Verify GitHub Pages PWA build
+        run: pnpm test:pwa
+        env:
+          VITE_BASE_PATH: /${{ github.event.repository.name }}/
+
+      - name: Run GitHub Pages E2E
+        run: pnpm test:e2e
+        env:
+          E2E_BASE_PATH: /${{ github.event.repository.name }}/
+
+      - name: Upload GitHub Pages artifact
+        uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3
+        with:
+          path: ./dist
+
   publish:
     needs: verify
     permissions:
@@ -167,4 +188,24 @@ jobs:
     uses: ./.github/workflows/android-release.yml
     with:
       tag: ${{ needs.verify.outputs.tag }}
+      run_source_checks: false
     secrets: inherit
+
+  deploy-pages:
+    needs:
+      - verify
+      - publish
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # v5
+
+      - name: Deploy site
+        id: deployment
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4
