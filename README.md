@@ -182,10 +182,10 @@ https://<owner>.github.io/<repository>/
 
 Для релизов, публикации и обслуживания используются:
 
-- `.github/workflows/auto-release.yml` — при изменении версии в `package.json` проверяет проект, создаёт git-тег `vX.Y.Z`, собирает архив сайта и создаёт GitHub Release;
+- `.github/workflows/auto-release.yml` — при изменении версии в `package.json` проверяет проект, создаёт git-тег `vX.Y.Z`, собирает архив сайта, создаёт GitHub Release и запускает подписанную Android-сборку;
 - `.github/workflows/deploy-pages.yml` — публикует GitHub Pages только из release-тега после auto-release, прямого tag push или ручного запуска;
 - `.github/workflows/release-dist.yml` — ручной или резервный workflow для сборки релиза по уже существующему тегу;
-- `.github/workflows/android-release.yml` — вручную собирает подписанный APK для существующего release-тега и прикрепляет APK с SHA-256 к тому же GitHub Release;
+- `.github/workflows/android-release.yml` — автоматически после web-релиза или вручную собирает подписанный APK для существующего release-тега и прикрепляет APK с SHA-256 к тому же GitHub Release;
 - `.github/dependabot.yml` — еженедельно проверяет обновления npm-зависимостей и GitHub Actions.
 
 Обычный выпуск версии:
@@ -204,7 +204,7 @@ git commit -m "chore(release): prepare 1.8.0"
 git push origin release/1.8.0
 ```
 
-После merge release-ветки в `main` workflow сам создаст тег, релиз и запустит публикацию GitHub Pages из release-тега. Ручной запуск `release-dist.yml`, `deploy-pages.yml` или `android-release.yml` требует существующий тег, например `v1.8.0`; для Android также должны быть настроены секреты release-подписи.
+После merge release-ветки в `main` workflow сам создаст тег и GitHub Release, запустит публикацию GitHub Pages и добавит в тот же релиз подписанный Android APK с SHA-256. Ручной запуск `release-dist.yml`, `deploy-pages.yml` или `android-release.yml` остаётся доступен для существующего тега, например `v1.8.0`; для Android должны быть настроены секреты release-подписи.
 
 Архив релиза содержит готовую папку `dist` и подходит для размещения на любом статическом хостинге.
 

@@ -157,3 +157,14 @@ jobs:
           generate_release_notes: true
           fail_on_unmatched_files: true
           overwrite_files: true
+
+  android:
+    needs:
+      - verify
+      - publish
+    permissions:
+      contents: write
+    uses: ./.github/workflows/android-release.yml
+    with:
+      tag: ${{ needs.verify.outputs.tag }}
+    secrets: inherit

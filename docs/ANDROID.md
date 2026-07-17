@@ -64,7 +64,7 @@ keytool -genkeypair -v -keystore creditcalc-release.jks -alias creditcalc -keyal
 - `ANDROID_KEY_ALIAS` — alias ключа;
 - `ANDROID_KEY_PASSWORD` — пароль ключа.
 
-Workflow запускается вручную для существующего тега `vX.Y.Z`, проверяет исходники, собирает подписанный APK, формирует SHA-256 и прикрепляет оба файла к GitHub Release. Тот же APK загружается в RuStore.
+После успешного создания тега и web-релиза `auto-release.yml` автоматически вызывает Android workflow для того же `vX.Y.Z`. Он проверяет исходники, собирает подписанный APK, формирует SHA-256 и прикрепляет оба файла к GitHub Release. Ручной запуск `android-release.yml` сохраняется для повторной сборки существующего тега. Тот же APK загружается в RuStore.
 
 ## Хранение данных и разрешения
 
@@ -89,8 +89,7 @@ Workflow запускается вручную для существующего
 1. зарегистрировать и подтвердить кабинет разработчика RuStore;
 2. создать release-ключ и настроить четыре GitHub Secret;
 3. предоставить публичный email поддержки и данные правообладателя;
-4. после merge дождаться release-тега `v1.8.0` и GitHub Release;
-5. запустить `android-release.yml` для тега `v1.8.0`;
-6. проверить подписанный APK на реальном устройстве и загрузить тот же файл в RuStore.
+4. после merge дождаться release-тега `v1.8.0`, GitHub Release и автоматической Android-сборки;
+5. проверить подписанный APK на реальном устройстве и загрузить тот же файл в RuStore.
 
 Шесть готовых скриншотов карточки находятся в `store-assets/rustore/screenshots`. Их состав и пересборка описаны в [RUSTORE_LISTING.md](RUSTORE_LISTING.md).

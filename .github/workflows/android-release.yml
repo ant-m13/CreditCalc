@@ -1,6 +1,21 @@
 name: Build signed Android APK
 
 on:
+  workflow_call:
+    inputs:
+      tag:
+        description: 'Существующий тег релиза, например v1.8.0'
+        required: true
+        type: string
+    secrets:
+      ANDROID_KEYSTORE_BASE64:
+        required: true
+      ANDROID_KEYSTORE_PASSWORD:
+        required: true
+      ANDROID_KEY_ALIAS:
+        required: true
+      ANDROID_KEY_PASSWORD:
+        required: true
   workflow_dispatch:
     inputs:
       tag:
