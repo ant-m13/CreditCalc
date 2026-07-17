@@ -41,8 +41,6 @@ const loan: LoanProfile = {
   selectedScenario: 'combined',
   termUnit: 'months',
   displayDecimals: 2,
-  appFontSize: 'normal',
-  scheduleFontSize: 'large',
   theme: 'emerald',
   customAccentColor: '#0b9873',
   useCustomAccentColor: false

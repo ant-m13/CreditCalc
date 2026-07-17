@@ -10,14 +10,14 @@ export const QUARANTINE_EXPORT_LIMITS = {
 
 const truncateString = (value: string) =>
   value.length > QUARANTINE_EXPORT_LIMITS.maxStringLength
-    ? `${value.slice(0, QUARANTINE_EXPORT_LIMITS.maxStringLength)}…[truncated]`
+    ? `${value.slice(0, QUARANTINE_EXPORT_LIMITS.maxStringLength)}…[строка сокращена]`
     : value
 
 export const sanitizeQuarantineRaw = (value: unknown, depth = 0, seen = new WeakSet<object>()): unknown => {
   if (typeof value === 'string') return truncateString(value)
   if (value === null || typeof value !== 'object') return value
-  if (seen.has(value)) return '[circular]'
-  if (depth >= QUARANTINE_EXPORT_LIMITS.maxDepth) return '[max-depth]'
+  if (seen.has(value)) return '[циклическая ссылка]'
+  if (depth >= QUARANTINE_EXPORT_LIMITS.maxDepth) return '[достигнута предельная глубина]'
 
   seen.add(value)
   if (Array.isArray(value)) {
@@ -36,7 +36,7 @@ export const sanitizeQuarantineRaw = (value: unknown, depth = 0, seen = new Weak
 export const createQuarantineExport = (items: QuarantinedLoanRaw[], exportedAt = new Date().toISOString()) => ({
   format: 'sanitized-quarantine-v1',
   rawIsComplete: false,
-  notice: 'Поле raw является ограниченной recovery-копией и может содержать маркеры усечения; это не побайтовый backup localStorage.',
+  notice: 'Ограниченная копия исходных данных для восстановления может включать маркеры усечения; это не полная побайтовая копия локального хранилища браузера.',
   exportedAt,
   limits: QUARANTINE_EXPORT_LIMITS,
   quarantinedLoans: items.map(item => ({

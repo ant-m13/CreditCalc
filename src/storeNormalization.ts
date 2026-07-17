@@ -21,7 +21,7 @@ import { sortRepaymentRulesByApplicationOrder, validateRepaymentRuleStructure, t
 import type { LoanData, LoanImportData, LoanPersistedState, LoanProfile, QuarantinedLoanRaw, ThemeName } from './storeTypes'
 import { createId } from './utils/createId'
 import { isISODate, isISOYearMonth } from './utils/dateValidation'
-import { balanceMoments, dayCountBases, firstInterestOnlyModes, fontSizes, frequencies, graceTypes, interestMethods, isOneOf, migrateLegacyDayCountBasis, paymentTypes, periodStarts, rateChangeModes, repaymentRuleTypes, repaymentSources, repaymentStrategies, roundingModes, sameDayOrders, scenarioIds, supportedCurrencies, termUnits, themeNames } from './portableSchemas'
+import { balanceMoments, dayCountBases, firstInterestOnlyModes, frequencies, graceTypes, interestMethods, isOneOf, migrateLegacyDayCountBasis, paymentTypes, periodStarts, rateChangeModes, repaymentRuleTypes, repaymentSources, repaymentStrategies, roundingModes, sameDayOrders, scenarioIds, supportedCurrencies, termUnits, themeNames } from './portableSchemas'
 import { defaultAccentColor, normalizeAccentColor } from './accentColor'
 import { CURRENCY_DECIMAL_PLACES } from './constants'
 
@@ -115,8 +115,6 @@ export const defaultLoanData = (withSeedRepayment = false, today = new Date()): 
     selectedScenario: 'combined',
     termUnit: 'months',
     displayDecimals: CURRENCY_DECIMAL_PLACES,
-    appFontSize: 'normal',
-    scheduleFontSize: 'large',
     theme: 'emerald',
     customAccentColor: defaultAccentColor,
     useCustomAccentColor: false
@@ -290,8 +288,6 @@ export const normalizeLoanData = (data: Partial<LoanImportData | LoanData>): Loa
     selectedScenario: oneOf(data.selectedScenario, scenarioIds, 'reduceTerm'),
     termUnit: oneOf(data.termUnit, termUnits, 'months'),
     displayDecimals: data.displayDecimals === 0 ? 0 : CURRENCY_DECIMAL_PLACES,
-    appFontSize: oneOf(data.appFontSize, fontSizes, 'normal'),
-    scheduleFontSize: oneOf(data.scheduleFontSize, fontSizes, 'large'),
     theme: normalizeTheme(data.theme),
     customAccentColor: normalizeAccentColor(data.customAccentColor),
     useCustomAccentColor: typeof data.useCustomAccentColor === 'boolean' ? data.useCustomAccentColor : false
@@ -312,8 +308,6 @@ export const loanDataFromValidated = (data: ValidatedLoanData): LoanData => ({
   selectedScenario: data.selectedScenario,
   termUnit: data.termUnit,
   displayDecimals: data.displayDecimals,
-  appFontSize: data.appFontSize ?? 'normal',
-  scheduleFontSize: data.scheduleFontSize ?? 'large',
   theme: data.theme,
   customAccentColor: data.customAccentColor ?? defaultAccentColor,
   useCustomAccentColor: data.useCustomAccentColor ?? false
@@ -333,8 +327,6 @@ export const publicData = (state: LoanData): LoanData => ({
   selectedScenario: state.selectedScenario,
   termUnit: state.termUnit,
   displayDecimals: state.displayDecimals,
-  appFontSize: state.appFontSize,
-  scheduleFontSize: state.scheduleFontSize,
   theme: state.theme,
   customAccentColor: state.customAccentColor,
   useCustomAccentColor: state.useCustomAccentColor
@@ -409,8 +401,6 @@ export const loanToBackupData = (loan: LoanProfile): LoanBackupData => ({
   selectedScenario: loan.selectedScenario,
   termUnit: loan.termUnit,
   displayDecimals: loan.displayDecimals,
-  appFontSize: loan.appFontSize,
-  scheduleFontSize: loan.scheduleFontSize,
   theme: loan.theme,
   customAccentColor: loan.customAccentColor,
   useCustomAccentColor: loan.useCustomAccentColor

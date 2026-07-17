@@ -15,12 +15,14 @@ const DEV_SERVER_PORT = 4317
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, '.', '')
   const pkg = packageJson as PackageMetadata
+  const androidBuild = mode === 'android'
 
   return {
     base: env.VITE_BASE_PATH || '/',
     plugins: [
       react(),
       VitePWA({
+        disable: androidBuild,
         strategies: 'injectManifest',
         srcDir: 'src',
         filename: 'service-worker.ts',
@@ -45,7 +47,12 @@ export default defineConfig(({ mode }) => {
       __BUILD_DATE__: JSON.stringify(new Date().toISOString()),
       __COMMIT_SHA__: JSON.stringify(env.VITE_COMMIT_SHA || env.GITHUB_SHA || 'dev')
     },
+    build: {
+      outDir: androidBuild ? 'dist-android' : 'dist'
+    },
     test: {
+      // Ограничение предотвращает конкуренцию тяжёлых jsdom-suite за CPU и случайные тайм-ауты на Windows и небольших CI runner.
+      maxWorkers: 4,
       coverage: {
         provider: 'v8',
         reporter: ['text', 'json-summary'],

@@ -1,15 +1,15 @@
 import { format } from 'date-fns'
-import { Landmark } from 'lucide-react'
 import { MONEY_DISPLAY_EPSILON } from '../constants'
 import type { ComparisonResult, EarlyRepayment, GracePeriod, LoanConfig, PaymentScheduleItem, ScenarioResult } from '../loanEngine'
 import { createMoneyFormatter, fmtMonths, shortDate } from '../formatters'
 import { dayCountBasisLabel, firstInterestOnlyModeName, graceTypeName, rateChangeModeName, roundingName, ruleTypeName, scenarioName } from '../labels'
 import type { RepaymentRule } from '../repaymentRules'
 import { APP_VERSION, COMMIT_SHA, shortCommitSha } from '../version'
+import { BrandMark } from './BrandMark'
 
 export function StalePrintReport() {
   return <article className="print-report print-warning">
-    <div className="print-title"><div><span>Кредитный калькулятор</span><h1>Расчёт обновляется</h1><p>График пересчитывается · версия {APP_VERSION} · commit {shortCommitSha(COMMIT_SHA)}</p></div><Landmark/></div>
+    <div className="print-title"><div><span>CreditCalc — кредитный график</span><h1>Расчёт обновляется</h1><p>График пересчитывается · версия {APP_VERSION} · ревизия {shortCommitSha(COMMIT_SHA)}</p></div><BrandMark className="print-brand-mark"/></div>
     <section className="print-stale-warning">
       <h2>Печать временно недоступна</h2>
       <p>Дождитесь окончания пересчёта, чтобы распечатать актуальный финансовый отчёт.</p>
@@ -35,7 +35,7 @@ export function PrintReport({ config, displayDecimals, repayments, repaymentRule
   const rateHistory = config.rateChanges.map(change => `${shortDate(change.date)} — ${change.annualRate}%`).join('; ')
   const finalBalloon = selected.schedule.find(row => row.eventTypes.includes('materialBalloon'))
   return <article className="print-report">
-    <div className="print-title"><div><span>Кредитный калькулятор</span><h1>Расчёт кредита</h1><p>Сформировано {generated} · сценарий «{selected.name}» · версия {APP_VERSION} · commit {shortCommitSha(COMMIT_SHA)}</p></div><Landmark/></div>
+    <div className="print-title"><div><span>CreditCalc — кредитный график</span><h1>Расчёт кредита</h1><p>Сформировано {generated} · сценарий «{selected.name}» · версия {APP_VERSION} · ревизия {shortCommitSha(COMMIT_SHA)}</p></div><BrandMark className="print-brand-mark"/></div>
     <section className="print-summary"><div><span>Сумма кредита</span><b>{money(config.principal)}</b></div><div><span>{paymentLabel}</span><b>{money(selected.monthlyPayment)}</b></div><div><span>Дата закрытия</span><b>{shortDate(selected.closingDate)}</b></div><div><span>Переплата</span><b>{money(selected.overpayment)}</b></div></section>
     {finalBalloon && <section className="print-stale-warning"><h2>Финальный платёж</h2><p>{shortDate(finalBalloon.date)} · {money(finalBalloon.cashFlowTotal ?? finalBalloon.payment + finalBalloon.earlyPayment + finalBalloon.fee)}. Закрывает остаток долга и процентов в последнюю договорную дату по выбранным настройкам.</p></section>}
     <h2>Параметры кредита</h2>

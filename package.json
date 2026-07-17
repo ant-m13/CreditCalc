@@ -2,7 +2,7 @@
   "name": "credit-calculator",
   "private": true,
   "version": "1.7.5",
-  "description": "Кредитный калькулятор с досрочными погашениями, банковским графиком платежей и локальным хранением данных.",
+  "description": "CreditCalc — бесплатный кредитный график с досрочными погашениями и локальным хранением данных.",
   "license": "MIT",
   "homepage": "https://ant-m13.github.io/CreditCalc/",
   "repository": {
@@ -17,6 +17,10 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "build:android": "tsc -b && vite build --mode android --base ./",
+    "android:sync": "pnpm build:android && cap sync android",
+    "android:open": "pnpm android:sync && cap open android",
+    "android:apk:debug": "pnpm android:sync && node scripts/build-android-debug.mjs",
     "lint": "eslint .",
     "typecheck": "tsc -b",
     "test": "vitest run src",
@@ -26,6 +30,12 @@
     "test:e2e": "playwright test"
   },
   "dependencies": {
+    "@capacitor/android": "8.4.1",
+    "@capacitor/app": "8.1.0",
+    "@capacitor/clipboard": "8.0.1",
+    "@capacitor/core": "8.4.1",
+    "@capacitor/filesystem": "8.1.2",
+    "@capacitor/share": "8.0.1",
     "date-fns": "4.4.0",
     "decimal.js": "10.6.0",
     "lucide-react": "1.23.0",
@@ -35,6 +45,7 @@
     "zustand": "5.0.14"
   },
   "devDependencies": {
+    "@capacitor/cli": "8.4.1",
     "@eslint/js": "10.0.1",
     "@playwright/test": "1.61.1",
     "@testing-library/react": "16.3.2",

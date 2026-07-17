@@ -86,6 +86,20 @@ afterEach(() => {
 })
 
 describe('useLoanCalculation', () => {
+  it('подставляет текущую дату для нового досрочного платежа', () => {
+    vi.useFakeTimers()
+    try {
+      vi.setSystemTime(new Date(2026, 6, 17, 12))
+
+      render(<Probe {...loanInput()}/>)
+
+      expect(current().defaultEarlyDate).toBe('2026-07-17')
+      expect(current().defaultEarlyDate).not.toBe(shortTestConfig.firstPaymentDate)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('changes revision epoch when the object revision counter is exhausted', () => {
     const tracker = createSnapshotRevisionTracker(4)
     const firstInput = loanInput()

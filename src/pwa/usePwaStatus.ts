@@ -5,6 +5,7 @@ import {
   subscribeServiceWorker,
   type ServiceWorkerSnapshot
 } from './serviceWorkerRegistration'
+import { isNativeApp } from '../platform'
 
 export interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>
@@ -26,6 +27,7 @@ export interface PwaStatus {
 }
 
 const isStandalone = () => {
+  if (isNativeApp()) return true
   if (typeof window === 'undefined' || typeof navigator === 'undefined') return false
   const iosNavigator = navigator as Navigator & { standalone?: boolean }
   return iosNavigator.standalone === true || window.matchMedia?.('(display-mode: standalone)').matches === true
@@ -34,13 +36,15 @@ const isStandalone = () => {
 const isIos = () => typeof navigator !== 'undefined' && /iphone|ipad|ipod/i.test(navigator.userAgent)
 
 export function usePwaStatus(): PwaStatus {
+  const nativeApp = isNativeApp()
   const serviceWorker = useSyncExternalStore(subscribeServiceWorker, getServiceWorkerSnapshot, getServiceWorkerSnapshot)
-  const [online, setOnline] = useState(() => typeof navigator === 'undefined' || navigator.onLine !== false)
+  const [online, setOnline] = useState(() => nativeApp || typeof navigator === 'undefined' || navigator.onLine !== false)
   const [installed, setInstalled] = useState(isStandalone)
   const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null)
-  const [browserPersistence, setBrowserPersistence] = useState<BrowserPersistenceStatus>('checking')
+  const [browserPersistence, setBrowserPersistence] = useState<BrowserPersistenceStatus>(nativeApp ? 'persisted' : 'checking')
 
   useEffect(() => {
+    if (nativeApp) return
     const displayMode = window.matchMedia?.('(display-mode: standalone)')
     const updateDisplayMode = () => setInstalled(isStandalone())
     const captureInstallPrompt = (event: Event) => {
@@ -67,9 +71,10 @@ export function usePwaStatus(): PwaStatus {
       window.removeEventListener('offline', markOffline)
       displayMode?.removeEventListener?.('change', updateDisplayMode)
     }
-  }, [])
+  }, [nativeApp])
 
   useEffect(() => {
+    if (nativeApp) return
     let cancelled = false
     if (!navigator.storage?.persisted) {
       setBrowserPersistence('unsupported')
@@ -83,7 +88,7 @@ export function usePwaStatus(): PwaStatus {
         if (!cancelled) setBrowserPersistence('failed')
       })
     return () => { cancelled = true }
-  }, [])
+  }, [nativeApp])
 
   const install = useCallback(async () => {
     if (!installPrompt) return 'unavailable' as const
@@ -99,6 +104,7 @@ export function usePwaStatus(): PwaStatus {
   }, [installPrompt])
 
   const requestBrowserPersistence = useCallback(async () => {
+    if (nativeApp) return true
     if (!navigator.storage?.persist) {
       setBrowserPersistence('unsupported')
       return false
@@ -112,14 +118,14 @@ export function usePwaStatus(): PwaStatus {
       setBrowserPersistence('failed')
       return false
     }
-  }, [])
+  }, [nativeApp])
 
   return {
     serviceWorker,
     online,
     installed,
-    installAvailable: Boolean(installPrompt) && !installed,
-    iosInstallHint: isIos() && !installed && !installPrompt,
+    installAvailable: !nativeApp && Boolean(installPrompt) && !installed,
+    iosInstallHint: !nativeApp && isIos() && !installed && !installPrompt,
     browserPersistence,
     install,
     activateUpdate: activateWaitingServiceWorker,

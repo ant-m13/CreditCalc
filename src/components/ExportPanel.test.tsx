@@ -51,7 +51,7 @@ describe('ExportPanel', () => {
     expect(print).not.toHaveBeenCalled()
 
     expect(download).not.toHaveBeenCalled()
-    await user.click(screen.getByRole('button', { name: /Raw recovery JSON/i }))
+    await user.click(screen.getByRole('button', { name: 'Скачать JSON для восстановления' }))
     expect(downloadRecovery).toHaveBeenCalledOnce()
   })
 
@@ -82,5 +82,19 @@ describe('ExportPanel', () => {
     await user.click(screen.getByRole('button', { name: 'Следующие предупреждения' }))
     expect(screen.queryByText('Предупреждение 1')).toBeNull()
     expect(screen.getByText('Предупреждение 21')).toBeTruthy()
+  })
+
+  it('вставляет код параметров из буфера обмена', async () => {
+    const user = userEvent.setup()
+    const readText = vi.fn(async () => '  v1.from-clipboard  ')
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { readText } })
+    renderPanel()
+
+    await user.click(screen.getByRole('button', { name: 'Загрузить код' }))
+    await user.click(screen.getByRole('button', { name: 'Из буфера' }))
+
+    expect(readText).toHaveBeenCalledOnce()
+    expect((screen.getByRole('textbox', { name: 'Строка параметров' }) as HTMLTextAreaElement).value).toBe('v1.from-clipboard')
+    expect(screen.getByText('Код параметров вставлен из буфера')).toBeTruthy()
   })
 })

@@ -106,18 +106,18 @@ const notifyStorageStatus = (kind: StorageStatusKind, message: string) => {
 
 const notifyStorageError = (error: unknown) => {
   const message = error instanceof Error ? error.message : 'Локальное хранилище недоступно'
-  notifyStorageStatus('failed', `Последние изменения не сохранены в localStorage: ${message}`)
+  notifyStorageStatus('failed', `Последние изменения не сохранены в локальном хранилище браузера: ${message}`)
   if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent(STORAGE_ERROR_EVENT, { detail: { message } }))
 }
 
 const storageRecoveryState = (raw: string, reason: string): StorageValue<LoanState> => ({
   version: PERSISTED_STATE_VERSION,
   state: {
-    storageRecoveryReport: [`Сохранённое состояние localStorage помещено в карантин: ${reason}. Автосохранение заблокировано до удаления повреждённых данных.`],
+    storageRecoveryReport: [`Сохранённое состояние локального хранилища браузера помещено в карантин: ${reason}. Автосохранение заблокировано до удаления повреждённых данных.`],
     storageRecoveryDismissed: false,
     quarantinedLoansRaw: [{
       id: 'persisted-storage',
-      name: 'Повреждённое состояние localStorage',
+      name: 'Повреждённое состояние локального хранилища браузера',
       reason,
       raw
     }]
@@ -126,7 +126,7 @@ const storageRecoveryState = (raw: string, reason: string): StorageValue<LoanSta
 
 const quarantinePersistedStorage = (raw: string, reason: string) => {
   storageWriteBlockedReason = reason
-  notifyStorageStatus('failed', `Автосохранение заблокировано: ${reason}. Сначала скачайте backup или удалите повреждённые данные`)
+  notifyStorageStatus('failed', `Автосохранение заблокировано: ${reason}. Сначала скачайте резервную копию или удалите повреждённые данные`)
   return storageRecoveryState(raw, reason)
 }
 
@@ -136,7 +136,7 @@ export const deserializePersistedStorage = (raw: string): StorageValue<LoanState
   }
   try {
     const parsed = JSON.parse(raw) as unknown
-    if (!isObject(parsed) || !isObject(parsed.state)) throw new Error('корневой объект persisted state повреждён')
+    if (!isObject(parsed) || !isObject(parsed.state)) throw new Error('корневой объект сохранённого состояния повреждён')
     return parsed as unknown as StorageValue<LoanState>
   } catch (error) {
     const reason = error instanceof Error ? `JSON не удалось разобрать (${error.message})` : 'JSON не удалось разобрать'
@@ -168,7 +168,7 @@ const writePersistedItem = (name: string, value: StorageValue<LoanState>) => {
     return
   }
   if (storageWriteBlockedReason) {
-    notifyStorageStatus('failed', `Автосохранение заблокировано: ${storageWriteBlockedReason}. Сначала скачайте backup или удалите повреждённые данные`)
+    notifyStorageStatus('failed', `Автосохранение заблокировано: ${storageWriteBlockedReason}. Сначала скачайте резервную копию или удалите повреждённые данные`)
     return
   }
   try {
@@ -271,8 +271,6 @@ interface LoanState extends LoanData {
   selectScenario: (id: string) => void
   setTermUnit: (unit: 'months' | 'years') => void
   setDisplayDecimals: (value: 0 | 2) => void
-  setAppFontSize: (value: LoanState['appFontSize']) => void
-  setScheduleFontSize: (value: LoanState['scheduleFontSize']) => void
   setTheme: (theme: LoanState['theme']) => void
   setCustomAccentColor: (color: string) => void
   setUseCustomAccentColor: (enabled: boolean) => void
@@ -420,8 +418,6 @@ export const useLoanStore = create<LoanState>()(persist((set) => ({
   selectScenario: (selectedScenario) => set(s => syncActive(s, { selectedScenario })),
   setTermUnit: (termUnit) => set(s => syncActive(s, { termUnit })),
   setDisplayDecimals: (displayDecimals) => set(s => syncActive(s, { displayDecimals })),
-  setAppFontSize: (appFontSize) => set(s => syncActive(s, { appFontSize, scheduleFontSize: appFontSize })),
-  setScheduleFontSize: (scheduleFontSize) => set(s => syncActive(s, { scheduleFontSize })),
   setTheme: (theme) => set(s => syncActive(s, { theme })),
   setCustomAccentColor: (customAccentColor) => set(s => syncActive(s, { customAccentColor: normalizeAccentColor(customAccentColor), useCustomAccentColor: true })),
   setUseCustomAccentColor: (useCustomAccentColor) => set(s => syncActive(s, { useCustomAccentColor })),
@@ -527,7 +523,7 @@ export const useLoanStore = create<LoanState>()(persist((set) => ({
   },
   onRehydrateStorage: () => (_state, error) => {
     if (!error) return
-    storageWriteBlockedReason = error instanceof Error ? error.message : 'неизвестная ошибка восстановления localStorage'
+    storageWriteBlockedReason = error instanceof Error ? error.message : 'неизвестная ошибка восстановления локального хранилища браузера'
     notifyStorageError(error)
   }
 }))

@@ -1,10 +1,9 @@
-import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { flushSync } from 'react-dom'
 import { ArrowDownToLine, CalendarDays, History, Landmark, Menu, Moon, PanelLeftClose, PanelLeftOpen, Plus, Printer, ReceiptText, Settings2, ShieldCheck, Sun, Target, TrendingDown, X } from 'lucide-react'
 import { ISO_DATE_LENGTH, JSON_INDENT_SPACES } from './constants'
 import { isRegularPaymentDate, validateScenario, type EarlyRepayment } from './loanEngine'
 import { useLoanStore } from './store'
-import { FontControls } from './components/FontControls'
 import { GraceList } from './components/GraceList'
 import { LoanSwitcher } from './components/LoanSwitcher'
 import { SharedCalculationModal } from './components/SharedCalculationModal'
@@ -22,9 +21,11 @@ import { useLoanImport } from './hooks/useLoanImport'
 import { useSharedCalculation } from './hooks/useSharedCalculation'
 import { useStorageStatus } from './hooks/useStorageStatus'
 import { createQuarantineExport } from './quarantineExport'
-import { downloadBlob } from './download'
+import { saveBlob } from './download'
 import { PwaNotices } from './components/PwaNotices'
 import { usePwaStatus } from './pwa/usePwaStatus'
+import { BrandMark } from './components/BrandMark'
+import { isNativeApp, setSystemBarsForTheme } from './platform'
 
 const Overview = lazy(() => import('./components/Overview').then(module => ({ default: module.Overview })))
 const Settings = lazy(() => import('./components/Settings').then(module => ({ default: module.Settings })))
@@ -203,12 +204,57 @@ function App() {
     shell.style.removeProperty('--theme-accent-contrast')
   }, [store.customAccentColor, store.theme, store.useCustomAccentColor])
 
+  useLayoutEffect(() => {
+    const darkTheme = store.theme === 'night'
+    const themeColor = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]')
+    document.documentElement.dataset.appTheme = store.theme
+    themeColor?.setAttribute('content', darkTheme ? '#08111f' : '#071a17')
+    void setSystemBarsForTheme(darkTheme)
+    return () => {
+      delete document.documentElement.dataset.appTheme
+      themeColor?.setAttribute('content', '#071a17')
+    }
+  }, [store.theme])
+
   const nav = [
     ['overview', Landmark, 'Обзор'], ['settings', Settings2, 'Параметры'], ['early', TrendingDown, 'Досрочные'],
     ['planner', Target, 'Планировщик цели'], ['grace', CalendarDays, 'Льготные периоды'], ['schedule', ReceiptText, 'График платежей'], ['export', ArrowDownToLine, 'Импорт/экспорт'], ['changes', History, 'Что изменилось']
   ] as const
   const openEarly = (repayment: EarlyRepayment | null = null, error = '') => { setEditingEarly(repayment); setEarlyError(error); setShowEarly(true) }
   const closeEarly = () => { setShowEarly(false); setEditingEarly(null); setEarlyError('') }
+
+  useEffect(() => {
+    if (!isNativeApp()) return
+    let cancelled = false
+    let removeListener: (() => Promise<void>) | undefined
+    void import('@capacitor/app')
+      .then(({ App: NativeApp }) => NativeApp.addListener('backButton', () => {
+        if (sharedCalculation) declineSharedCalculation()
+        else if (showOnboarding) finishOnboarding()
+        else if (showWhatsNew) closeWhatsNew()
+        else if (mobileNav) setMobileNav(false)
+        else if (showEarly) {
+          setShowEarly(false)
+          setEditingEarly(null)
+          setEarlyError('')
+        }
+        else if (showGrace) setShowGrace(false)
+        else if (section !== 'overview') setSection('overview')
+        else void NativeApp.minimizeApp()
+      }))
+      .then(handle => {
+        if (cancelled) void handle.remove()
+        else removeListener = () => handle.remove()
+      })
+      .catch(() => {
+        // Android keeps its default back behavior if the App plugin is unavailable.
+      })
+    return () => {
+      cancelled = true
+      if (removeListener) void removeListener()
+    }
+  }, [closeWhatsNew, declineSharedCalculation, finishOnboarding, mobileNav, section, sharedCalculation, showEarly, showGrace, showOnboarding, showWhatsNew])
+
   const toggleEarlyRepayment = (repayment: EarlyRepayment) => {
     const currentlyEnabled = repayment.enabled !== false && repayment.amount > 0
     const nextEnabled = !currentlyEnabled
@@ -277,32 +323,33 @@ function App() {
   const downloadQuarantinedLoans = useCallback(() => {
     try {
       const body = JSON.stringify(createQuarantineExport(store.quarantinedLoansRaw), null, JSON_INDENT_SPACES)
-      downloadBlob(new Blob([body], { type: 'application/json' }), `credit-quarantine-${new Date().toISOString().slice(0, ISO_DATE_LENGTH)}.json`)
-      setImportStatus({ kind: 'success', text: 'Ограниченная recovery-копия карантина скачана' })
+      void saveBlob(new Blob([body], { type: 'application/json' }), `credit-quarantine-${new Date().toISOString().slice(0, ISO_DATE_LENGTH)}.json`)
+        .then(() => setImportStatus({ kind: 'success', text: 'Ограниченная копия данных карантина для восстановления подготовлена' }))
+        .catch(error => setImportStatus({ kind: 'error', text: error instanceof Error ? error.message : 'Не удалось сохранить повреждённые данные' }))
     } catch (error) {
       setImportStatus({ kind: 'error', text: error instanceof Error ? error.message : 'Не удалось скачать повреждённые данные' })
     }
   }, [setImportStatus, store.quarantinedLoansRaw])
   const deleteQuarantinedLoans = useCallback(() => {
-    if (!window.confirm('Удалить raw-данные карантина без возможности восстановления? Сначала скачайте резервную копию, если она может понадобиться.')) return
+    if (!window.confirm('Удалить исходные данные карантина без возможности восстановления? Сначала скачайте резервную копию, если она может понадобиться.')) return
     store.deleteQuarantinedLoans()
-    setImportStatus({ kind: 'success', text: 'Raw-данные карантина удалены' })
+    setImportStatus({ kind: 'success', text: 'Исходные данные карантина удалены' })
   }, [setImportStatus, store])
 
-  return <div ref={shellRef} className={sidebarCollapsed ? 'app-shell sidebar-collapsed' : 'app-shell'} data-theme={store.theme} data-ui-font={store.appFontSize} data-schedule-font={store.scheduleFontSize}>
+  return <div ref={shellRef} className={sidebarCollapsed ? 'app-shell sidebar-collapsed' : 'app-shell'} data-theme={store.theme}>
     <aside ref={sidebarRef} id="primary-sidebar" className={mobileNav ? 'sidebar open' : 'sidebar'} inert={mobileViewport && !mobileNav ? true : undefined} aria-hidden={mobileViewport && !mobileNav ? true : undefined} role={mobileViewport && mobileNav ? 'dialog' : undefined} aria-modal={mobileViewport && mobileNav ? true : undefined} aria-label={mobileViewport && mobileNav ? 'Основное меню' : undefined} tabIndex={mobileViewport && mobileNav ? -1 : undefined}>
-      <div className="brand"><div className="brand-mark"><Landmark size={22}/></div><div className="brand-copy"><b>Кредитный калькулятор</b><span>версия {APP_VERSION}</span></div><button className="icon-btn sidebar-collapse" aria-label={sidebarCollapsed ? 'Развернуть меню' : 'Свернуть меню'} aria-controls="primary-sidebar" aria-expanded={!sidebarCollapsed} onClick={() => setSidebarCollapsed(value => !value)}>{sidebarCollapsed ? <PanelLeftOpen/> : <PanelLeftClose/>}</button><button className="icon-btn close-nav" aria-label="Закрыть меню" onClick={() => setMobileNav(false)}><X/></button></div>
+      <div className="brand"><div className="brand-mark"><BrandMark/></div><div className="brand-copy"><b>CreditCalc</b><span>кредитный график</span></div><button className="icon-btn sidebar-collapse" aria-label={sidebarCollapsed ? 'Развернуть меню' : 'Свернуть меню'} aria-controls="primary-sidebar" aria-expanded={!sidebarCollapsed} onClick={() => setSidebarCollapsed(value => !value)}>{sidebarCollapsed ? <PanelLeftOpen/> : <PanelLeftClose/>}</button><button className="icon-btn close-nav" aria-label="Закрыть меню" onClick={() => setMobileNav(false)}><X/></button></div>
       <nav aria-label="Основная навигация">{nav.map(([id, Icon, label]) => <button key={id} className={section === id ? 'active' : ''} aria-label={label} aria-current={section === id ? 'page' : undefined} title={sidebarCollapsed ? label : undefined} onClick={() => { setSection(id); setMobileNav(false) }}><Icon size={18}/><span>{label}</span>{id === 'early' && store.repayments.length > 0 && <em>{store.repayments.length}</em>}</button>)}</nav>
       <div className="sidebar-note"><ShieldCheck size={20}/><div><b>Расчёт локально</b><span>Ваши данные не покидают устройство</span></div></div>
     </aside>
     <main inert={mobileViewport && mobileNav ? true : undefined} aria-hidden={mobileViewport && mobileNav ? true : undefined}>
-      <header><button className="icon-btn menu-btn" aria-label="Открыть меню" onClick={() => setMobileNav(true)}><Menu/></button><div className="header-title"><p>Финансовый план · v{APP_VERSION}</p><h1>{section === 'overview' ? 'Ваш кредит' : nav.find(x => x[0] === section)?.[2]}</h1></div><LoanSwitcher loans={store.loans} activeLoanId={store.activeLoanId} switchLoan={store.switchLoan} createLoan={store.createLoan} renameLoan={store.renameLoan} removeLoan={store.removeLoan}/><button className="icon-btn theme-toggle" onClick={toggleNightTheme} title={store.theme === 'night' ? 'Вернуть светлую тему' : 'Включить ночной режим'} aria-label={store.theme === 'night' ? 'Вернуть светлую тему' : 'Включить ночной режим'}>{store.theme === 'night' ? <Sun/> : <Moon/>}</button><FontControls fontSize={store.appFontSize} setFontSize={store.setAppFontSize}/><div className="header-actions"><span className={storageStatus.kind === 'saved' ? 'status-dot' : 'status-dot warning'}><i/> {storageStatus.kind === 'failed' ? 'Сохранение не удалось' : storageStatus.kind === 'nearQuota' ? 'Мало места' : storageStatus.kind === 'conflict' ? 'Конфликт сохранения' : storageStatus.kind === 'memoryOnly' ? 'Только в памяти' : 'Данные сохранены'}</span><button className="ghost print-action" onClick={printCalculated} disabled={calculatedResultsUnavailable} title={calculatedResultsUnavailable ? (isStale ? STALE_EXPORT_MESSAGE : 'Исправьте ошибки расчёта перед печатью') : undefined}><Printer size={16}/> Печать</button><button className="primary add-payment-action" onClick={() => openEarly()}><Plus size={17}/> Досрочный платёж</button></div></header>
+      <header><button className="icon-btn menu-btn" aria-label="Открыть меню" onClick={() => setMobileNav(true)}><Menu/></button><div className="header-title"><p>Финансовый план · v{APP_VERSION}</p><h1>{section === 'overview' ? 'Ваш кредит' : nav.find(x => x[0] === section)?.[2]}</h1></div><LoanSwitcher loans={store.loans} activeLoanId={store.activeLoanId} switchLoan={store.switchLoan} createLoan={store.createLoan} renameLoan={store.renameLoan} removeLoan={store.removeLoan}/><button className="icon-btn theme-toggle" onClick={toggleNightTheme} title={store.theme === 'night' ? 'Вернуть светлую тему' : 'Включить ночной режим'} aria-label={store.theme === 'night' ? 'Вернуть светлую тему' : 'Включить ночной режим'}>{store.theme === 'night' ? <Sun/> : <Moon/>}</button><div className="header-actions"><span className={storageStatus.kind === 'saved' ? 'status-dot' : 'status-dot warning'}><i/> {storageStatus.kind === 'failed' ? 'Сохранение не удалось' : storageStatus.kind === 'nearQuota' ? 'Мало места' : storageStatus.kind === 'conflict' ? 'Конфликт сохранения' : storageStatus.kind === 'memoryOnly' ? 'Только в памяти' : 'Данные сохранены'}</span><button className="ghost print-action" onClick={printCalculated} disabled={calculatedResultsUnavailable} title={calculatedResultsUnavailable ? (isStale ? STALE_EXPORT_MESSAGE : 'Исправьте ошибки расчёта перед печатью') : undefined}><Printer size={16}/> Печать</button><button className="primary add-payment-action" onClick={() => openEarly()}><Plus size={17}/> Досрочный платёж</button></div></header>
       <div className="content">
         <PwaNotices status={pwaStatus} storageAtRisk={storageStatus.kind !== 'saved'} downloadBackup={() => download('json')}/>
         {importStatus?.kind === 'error' && section !== 'export' && <div className="alert alert-with-actions" role="alert"><span>{importStatus.text}</span><button className="ghost compact" onClick={() => setSection('export')}>Открыть импорт/экспорт</button></div>}
         {storageWarning && <div className="alert alert-with-actions"><span>{storageWarning}</span><button className="ghost compact" onClick={() => download('json')}>Скачать JSON</button>{storageStatus.kind === 'failed' && <button className="ghost compact" onClick={store.retryStorageSave}>Повторить</button>}</div>}
         {storageConflict && <div className="alert alert-with-actions" role="alert"><span>{storageConflict.kind === 'deleted' ? 'В другой вкладке сохранённые данные были удалены или сброшены' : storageConflict.kind === 'race' ? 'Обнаружена одновременная запись данных из другой вкладки' : 'В другой вкладке сохранена более новая версия данных'}{storageConflict.updatedAt ? ` (${new Date(storageConflict.updatedAt).toLocaleString('ru-RU')})` : ''}. Автоматическое объединение финансовых данных отключено.</span><button className="ghost compact" onClick={() => window.location.reload()}>Загрузить внешнее состояние</button><button className="ghost compact danger" onClick={() => { store.overwriteExternalStorageChanges(); clearStorageConflict() }}>Перезаписать из этой вкладки</button></div>}
-        {!store.storageRecoveryDismissed && (store.storageRecoveryReport.length > 0 || store.quarantinedLoansRaw.length > 0) && <div className="alert alert-with-actions"><span>{store.storageRecoveryReport.length > 0 ? store.storageRecoveryReport.join(' · ') : `В карантине ${store.quarantinedLoansRaw.length} повреждённых записей localStorage.`} Скачиваемая recovery-копия ограничена и может содержать маркеры усечения.</span>{store.quarantinedLoansRaw.length > 0 && <><button className="ghost compact" onClick={downloadQuarantinedLoans}>Скачать ограниченную recovery-копию</button><button className="ghost compact danger" onClick={deleteQuarantinedLoans}>Удалить данные</button></>}<button className="ghost compact" onClick={store.dismissStorageRecoveryReport}>Скрыть уведомление</button></div>}
+        {!store.storageRecoveryDismissed && (store.storageRecoveryReport.length > 0 || store.quarantinedLoansRaw.length > 0) && <div className="alert alert-with-actions"><span>{store.storageRecoveryReport.length > 0 ? store.storageRecoveryReport.join(' · ') : `В карантине ${store.quarantinedLoansRaw.length} повреждённых записей локального хранилища браузера.`} Скачиваемая копия для восстановления ограничена и может содержать маркеры усечения.</span>{store.quarantinedLoansRaw.length > 0 && <><button className="ghost compact" onClick={downloadQuarantinedLoans}>Скачать ограниченную копию для восстановления</button><button className="ghost compact danger" onClick={deleteQuarantinedLoans}>Удалить данные</button></>}<button className="ghost compact" onClick={store.dismissStorageRecoveryReport}>Скрыть уведомление</button></div>}
         {store.storageRecoveryDismissed && store.quarantinedLoansRaw.length > 0 && <button className="ghost compact" onClick={store.showStorageRecoveryReport}>Показать карантин ({store.quarantinedLoansRaw.length})</button>}
         {isStale && <div className="alert" role="status" aria-live="polite" aria-atomic="true">Пересчитываем график. На экране пока показан предыдущий согласованный расчёт.</div>}
         {errors.length > 0 && <div className="alert" role="alert" aria-live="assertive" aria-atomic="true">{errors.join(' · ')}</div>}
@@ -310,7 +357,7 @@ function App() {
           <Suspense fallback={<SectionLoading/>}>
             {section === 'overview' && comparison && selected && <Overview config={calculationSnapshot.config} displayDecimals={calculationSnapshot.displayDecimals} repayments={allRepayments} gracePeriods={calculationSnapshot.gracePeriods} comparison={comparison} selected={selected} chartData={overviewChartData} onSelect={store.selectScenario} onOpen={() => openEarly()}/>}
             {section === 'overview' && (!comparison || !selected) && <section className="panel list-panel" role="status" aria-live="polite"><div className="panel-head"><div><h3>Расчёт временно остановлен</h3><p>Исправьте параметры кредита или правила досрочных платежей, чтобы построить график.</p></div></div></section>}
-            {section === 'settings' && <Settings key={`settings-${store.activeLoanId}`} config={store.config} update={store.updateConfig} updateInterest={store.updateInterest} termUnit={store.termUnit} setTermUnit={store.setTermUnit} displayDecimals={store.displayDecimals} setDisplayDecimals={store.setDisplayDecimals} appFontSize={store.appFontSize} setAppFontSize={store.setAppFontSize} theme={store.theme} setTheme={store.setTheme} customAccentColor={store.customAccentColor} useCustomAccentColor={store.useCustomAccentColor} setCustomAccentColor={store.setCustomAccentColor} setUseCustomAccentColor={store.setUseCustomAccentColor} resetCustomAccentColor={store.resetCustomAccentColor} persistentStorageEnabled={store.persistentStorageEnabled} setPersistentStorageEnabled={store.setPersistentStorageEnabled} browserPersistence={pwaStatus.browserPersistence} requestBrowserPersistence={pwaStatus.requestBrowserPersistence}/>}
+            {section === 'settings' && <Settings key={`settings-${store.activeLoanId}`} config={store.config} update={store.updateConfig} updateInterest={store.updateInterest} termUnit={store.termUnit} setTermUnit={store.setTermUnit} displayDecimals={store.displayDecimals} setDisplayDecimals={store.setDisplayDecimals} theme={store.theme} setTheme={store.setTheme} customAccentColor={store.customAccentColor} useCustomAccentColor={store.useCustomAccentColor} setCustomAccentColor={store.setCustomAccentColor} setUseCustomAccentColor={store.setUseCustomAccentColor} resetCustomAccentColor={store.resetCustomAccentColor} persistentStorageEnabled={store.persistentStorageEnabled} setPersistentStorageEnabled={store.setPersistentStorageEnabled} browserPersistence={pwaStatus.browserPersistence} requestBrowserPersistence={pwaStatus.requestBrowserPersistence} installAvailable={pwaStatus.installAvailable} iosInstallHint={pwaStatus.iosInstallHint} install={pwaStatus.install}/>}
             {section === 'early' && <EarlyList key={`early-${store.activeLoanId}`} items={store.repayments} rules={store.repaymentRules} generated={generatedRepayments} currency={store.config.currency} displayDecimals={store.displayDecimals} remove={store.removeRepayment} edit={openEarly} toggle={toggleEarlyRepayment} open={() => openEarly()} addRule={store.addRepaymentRule} updateRule={store.updateRepaymentRule} removeRule={store.removeRepaymentRule} defaultStart={store.config.firstPaymentDate}/>}
             {section === 'planner' && <GoalPlanner key={`planner-${store.activeLoanId}`} loanId={store.activeLoanId} sourceRevision={calculationSnapshot.revision} config={store.config} repayments={store.repayments} repaymentRules={store.repaymentRules} gracePeriods={store.gracePeriods} selectedScenario={store.selectedScenario} displayDecimals={store.displayDecimals} disabled={calculatedResultsUnavailable} applyGoalPlan={store.applyGoalPlan}/>}
             {section === 'grace' && <GraceList items={store.gracePeriods} remove={store.removeGrace} open={() => setShowGrace(true)}/>}

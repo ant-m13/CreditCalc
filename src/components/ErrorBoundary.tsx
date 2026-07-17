@@ -1,7 +1,8 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react'
 import { ISO_DATE_LENGTH } from '../constants'
 import { PERSISTED_LOAN_STORAGE_KEY } from '../storageKeys'
-import { downloadBlob } from '../download'
+import { saveBlob } from '../download'
+import { isNativeApp } from '../platform'
 
 interface ErrorBoundaryState {
   message: string | null
@@ -33,14 +34,18 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
       data = window.localStorage.getItem(PERSISTED_LOAN_STORAGE_KEY) ?? '{}'
     } catch (error) {
       console.error('Failed to read localStorage recovery data', error)
-      this.setState({ recoveryMessage: 'localStorage недоступен. Скачан пустой файл восстановления.' })
+      this.setState({ recoveryMessage: 'Локальное хранилище недоступно. Скачан пустой файл восстановления.' })
     }
 
     try {
-      downloadBlob(new Blob([data], { type: 'application/json' }), `credit-calculator-recovery-${new Date().toISOString().slice(0, ISO_DATE_LENGTH)}.json`)
+      void saveBlob(new Blob([data], { type: 'application/json' }), `credit-calculator-recovery-${new Date().toISOString().slice(0, ISO_DATE_LENGTH)}.json`)
+        .catch(error => {
+          console.error('Failed to save recovery data', error)
+          this.setState({ recoveryMessage: `Не удалось сохранить файл восстановления: ${errorMessage(error)}.` })
+        })
     } catch (error) {
       console.error('Failed to download recovery data', error)
-      this.setState({ recoveryMessage: `Не удалось скачать файл восстановления: ${errorMessage(error)}.` })
+      this.setState({ recoveryMessage: `Не удалось сохранить файл восстановления: ${errorMessage(error)}.` })
     }
   }
 
@@ -49,7 +54,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
       window.localStorage.removeItem(PERSISTED_LOAN_STORAGE_KEY)
     } catch (error) {
       console.error('Failed to clear localStorage during recovery', error)
-      this.setState({ recoveryMessage: `Не удалось очистить localStorage: ${errorMessage(error)}. Откройте приложение в приватном окне или очистите данные сайта в настройках браузера.` })
+      this.setState({ recoveryMessage: isNativeApp() ? `Не удалось очистить локальное хранилище: ${errorMessage(error)}. Очистите данные CreditCalc в системных настройках Android.` : `Не удалось очистить локальное хранилище: ${errorMessage(error)}. Откройте приложение в приватном окне или очистите данные сайта в настройках браузера.` })
       return
     }
 
@@ -58,12 +63,12 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
       reloadPage()
     } catch (error) {
       console.error('Failed to reload during recovery', error)
-      this.setState({ recoveryMessage: `localStorage очищен, но автоматическая перезагрузка не удалась: ${errorMessage(error)}. Перезагрузите страницу вручную (Ctrl+F5).` })
+      this.setState({ recoveryMessage: isNativeApp() ? `Локальное хранилище очищено, но перезапуск не удался: ${errorMessage(error)}. Закройте и снова откройте приложение.` : `Локальное хранилище очищено, но автоматическая перезагрузка не удалась: ${errorMessage(error)}. Перезагрузите страницу вручную (Ctrl+F5).` })
     }
   }
 
   render() {
     if (!this.state.message) return this.props.children
-    return <main className="error-boundary"><section className="panel list-panel"><div className="panel-head"><div><span className="eyebrow">Ошибка приложения</span><h3>Не удалось отобразить расчёт</h3><p>{this.state.message}</p>{this.state.recoveryMessage ? <p role="status">{this.state.recoveryMessage}</p> : null}</div></div><div className="error-actions"><button className="ghost" onClick={this.downloadLocalData}>Скачать данные</button><button className="ghost" onClick={this.restartWithoutStorage}>Запустить без localStorage</button><button className="primary" onClick={() => window.location.reload()}>Перезагрузить приложение</button></div></section></main>
+    return <main className="error-boundary"><section className="panel list-panel"><div className="panel-head"><div><span className="eyebrow">Ошибка приложения</span><h3>Не удалось отобразить расчёт</h3><p>{this.state.message}</p>{this.state.recoveryMessage ? <p role="status">{this.state.recoveryMessage}</p> : null}</div></div><div className="error-actions"><button className="ghost" onClick={this.downloadLocalData}>{isNativeApp() ? 'Сохранить данные' : 'Скачать данные'}</button><button className="ghost" onClick={this.restartWithoutStorage}>{isNativeApp() ? 'Запустить без сохранения' : 'Запустить без локального сохранения'}</button><button className="primary" onClick={() => window.location.reload()}>Перезагрузить приложение</button></div></section></main>
   }
 }

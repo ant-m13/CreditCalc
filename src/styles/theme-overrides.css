@@ -9,8 +9,7 @@
 .app-shell[data-theme] .panel,
 .app-shell[data-theme] .scenario,
 .app-shell[data-theme] .current-debt,
-.app-shell[data-theme] .modal,
-.app-shell[data-theme] .font-controls{
+.app-shell[data-theme] .modal{
   background:var(--theme-panel);
   border-color:var(--theme-line);
   color:var(--theme-text);
@@ -30,7 +29,6 @@
 .app-shell[data-theme] .toggle-row,
 .app-shell[data-theme] .theme-toggle,
 .app-shell[data-theme] .ghost,
-.app-shell[data-theme] .font-controls div,
 .app-shell[data-theme] .loan-switcher,
 .app-shell[data-theme] .loan-switcher select,
 .app-shell[data-theme] .loan-switcher .icon-btn,
@@ -214,8 +212,6 @@
 .app-shell[data-theme] .onboarding-steps span,
 .app-shell[data-theme] .accent-picker span,
 .app-shell[data-theme] .loan-switcher span,
-.app-shell[data-theme] .font-controls>span,
-.app-shell[data-theme] .font-controls em,
 .app-shell[data-theme] .next-payment-grid span,
 .app-shell[data-theme] .next-payment-grid small{
   color:var(--theme-muted);

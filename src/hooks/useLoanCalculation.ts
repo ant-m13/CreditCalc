@@ -1,10 +1,9 @@
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
-import { addMonths, format, parseISO } from 'date-fns'
+import { format, parseISO } from 'date-fns'
 import { ru } from 'date-fns/locale'
 import type { PaymentScheduleItem } from '../loanEngine'
 import type { LoanCalculationResult } from '../loanCalculation'
 import { calculateLoanSynchronously, canUseLoanCalculationWorker, LoanCalculationRunner, type LoanCalculationEnvelope, type LoanCalculationSnapshot } from '../loanCalculationRunner'
-import { isISODate } from '../utils/dateValidation'
 
 export type LoanCalculationInput = Omit<LoanCalculationSnapshot, 'revision'>
 
@@ -127,10 +126,7 @@ export function useLoanCalculation({ config, repayments, repaymentRules, gracePe
     }))
   }, [selected, base])
 
-  const defaultEarlyDate = useMemo(
-    () => isISODate(config.firstPaymentDate) ? format(addMonths(parseISO(config.firstPaymentDate), 1), 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd'),
-    [config.firstPaymentDate]
-  )
+  const defaultEarlyDate = format(new Date(), 'yyyy-MM-dd')
 
   return {
     generatedRepayments,

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
-import { PwaNotices } from './PwaNotices'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { INSTALL_REMINDER_DELAY_MS, PwaNotices } from './PwaNotices'
 import type { PwaStatus } from '../pwa/usePwaStatus'
 
 const status = (patch: Partial<PwaStatus> = {}): PwaStatus => ({
@@ -17,7 +17,13 @@ const status = (patch: Partial<PwaStatus> = {}): PwaStatus => ({
   ...patch
 })
 
-afterEach(cleanup)
+beforeEach(() => localStorage.clear())
+
+afterEach(() => {
+  cleanup()
+  localStorage.clear()
+  vi.useRealTimers()
+})
 
 describe('PwaNotices', () => {
   it('показывает офлайн-режим без утверждения, что сеть точно недоступна серверу', () => {
@@ -32,6 +38,42 @@ describe('PwaNotices', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /Установить приложение/i }))
     expect(install).toHaveBeenCalledTimes(1)
+  })
+
+  it('после отказа откладывает следующее напоминание об установке на неделю', () => {
+    vi.useFakeTimers()
+    const start = new Date(2026, 6, 17, 12)
+    vi.setSystemTime(start)
+    const props = { status: status({ installAvailable: true }), storageAtRisk: false, downloadBackup: vi.fn() }
+    const first = render(<PwaNotices {...props}/>)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Напомнить через неделю' }))
+    expect(screen.queryByText('Установите приложение.')).toBeNull()
+
+    first.unmount()
+    const beforeWeek = render(<PwaNotices {...props}/>)
+    expect(screen.queryByText('Установите приложение.')).toBeNull()
+
+    beforeWeek.unmount()
+    vi.setSystemTime(start.getTime() + INSTALL_REMINDER_DELAY_MS + 1)
+    render(<PwaNotices {...props}/>)
+    expect(screen.getByText('Установите приложение.')).toBeTruthy()
+  })
+
+  it('навсегда скрывает автоматическое напоминание по выбору пользователя', () => {
+    vi.useFakeTimers()
+    const start = new Date(2026, 6, 17, 12)
+    vi.setSystemTime(start)
+    const props = { status: status({ installAvailable: true }), storageAtRisk: false, downloadBackup: vi.fn() }
+    const first = render(<PwaNotices {...props}/>)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Больше не напоминать' }))
+    expect(screen.queryByText('Установите приложение.')).toBeNull()
+
+    first.unmount()
+    vi.setSystemTime(start.getTime() + INSTALL_REMINDER_DELAY_MS * 10)
+    render(<PwaNotices {...props}/>)
+    expect(screen.queryByText('Установите приложение.')).toBeNull()
   })
 
   it('не активирует новую версию автоматически и предлагает backup при риске хранения', () => {

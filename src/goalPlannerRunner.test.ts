@@ -101,7 +101,7 @@ describe('GoalPlannerRunner', () => {
     runner.calculate(snapshot('unsupported'), onResult, onError)
 
     expect(onResult).not.toHaveBeenCalled()
-    expect(onError).toHaveBeenCalledWith(expect.stringContaining('Web Worker'))
+    expect(onError).toHaveBeenCalledWith(expect.stringContaining('фоновые вычисления'))
   })
 
   it('отправляет отдельный запрос предпросмотра', () => {
@@ -171,7 +171,7 @@ describe('GoalPlannerRunner', () => {
     const onError = vi.fn()
     FakeWorker.throwOnConstruction = true
     runner.calculate(snapshot('constructor'), vi.fn(), onError)
-    expect(onError).toHaveBeenLastCalledWith(expect.stringContaining('запустить Worker'))
+    expect(onError).toHaveBeenLastCalledWith(expect.stringContaining('запустить фоновый расчёт'))
 
     FakeWorker.throwOnConstruction = false
     FakeWorker.throwOnPost = true

@@ -14,8 +14,6 @@ export interface LoanProfile {
   selectedScenario: string
   termUnit: 'months' | 'years'
   displayDecimals: 0 | 2
-  appFontSize: 'normal' | 'large' | 'xlarge'
-  scheduleFontSize: 'normal' | 'large' | 'xlarge'
   theme: ThemeName
   customAccentColor: string
   useCustomAccentColor: boolean
@@ -25,7 +23,7 @@ export type LoanData = Omit<LoanProfile, 'id' | 'name'>
 
 export type LoanImportData =
   Pick<LoanProfile, 'config' | 'repayments' | 'gracePeriods' | 'selectedScenario' | 'termUnit' | 'displayDecimals' | 'theme'> &
-  Partial<Pick<LoanProfile, 'name' | 'appFontSize' | 'scheduleFontSize' | 'repaymentRules' | 'customAccentColor' | 'useCustomAccentColor'>>
+  Partial<Pick<LoanProfile, 'name' | 'repaymentRules' | 'customAccentColor' | 'useCustomAccentColor'>>
 
 export interface QuarantinedLoanRaw {
   id: string

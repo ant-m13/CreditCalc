@@ -61,6 +61,15 @@ describe('release workflows', () => {
     expect(deployPages).toMatch(/\n {2}deploy:\n {4}needs: build\n {4}permissions:\n {6}pages: write\n {6}id-token: write/)
   })
 
+  it('собирает подписанный Android APK с read-only token и публикует отдельным job', () => {
+    const androidRelease = readWorkflow('android-release.yml')
+
+    expect(androidRelease).toMatch(/\n {2}verify-and-build:\n {4}permissions:\n {6}contents: read/)
+    expect(androidRelease).toMatch(/\n {2}publish:\n {4}needs: verify-and-build\n {4}permissions:\n {6}contents: write/)
+    expect(androidRelease).toContain('ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}')
+    expect(androidRelease).toContain('./gradlew --no-daemon clean assembleRelease')
+  })
+
   it('не сохраняет checkout credentials там, где workflow не выполняет push', () => {
     const expected = new Map([
       ['pr-checks.yml', [1, 1]],

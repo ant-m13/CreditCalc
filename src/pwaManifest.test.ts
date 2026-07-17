@@ -11,6 +11,8 @@ interface ManifestIcon {
 }
 
 interface WebManifest {
+  name: string
+  short_name: string
   start_url: string
   scope: string
   display: string
@@ -27,7 +29,7 @@ const pngSize = (name: string) => {
 
 describe('PWA manifest', () => {
   it('остаётся переносимым между GitHub Pages scope и standalone dist', () => {
-    expect(manifest).toMatchObject({ start_url: './', scope: './', display: 'standalone' })
+    expect(manifest).toMatchObject({ name: 'CreditCalc — кредитный график', short_name: 'CreditCalc', start_url: './', scope: './', display: 'standalone' })
     const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8')
     expect(html).toContain('rel="manifest" href="manifest.webmanifest"')
     expect(html).toContain('rel="apple-touch-icon" href="apple-touch-icon.png"')

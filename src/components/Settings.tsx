@@ -8,9 +8,9 @@ import { currencySymbol } from '../formatters'
 import { createId } from '../utils/createId'
 import { isISODate } from '../utils/dateValidation'
 import { Field, NumberInput } from './ui'
-import type { BrowserPersistenceStatus } from '../pwa/usePwaStatus'
+import type { BrowserPersistenceStatus, PwaStatus } from '../pwa/usePwaStatus'
+import { isNativeApp } from '../platform'
 
-type TextScale = 'normal' | 'large' | 'xlarge'
 type ThemeName = 'emerald' | 'ocean' | 'violet' | 'graphite' | 'warm' | 'night'
 type SettingHelpProps = { text: string }
 type DateCommitInputProps = {
@@ -34,8 +34,6 @@ interface SettingsProps {
   setTermUnit: (unit: 'months' | 'years') => void
   displayDecimals: 0 | 2
   setDisplayDecimals: (value: 0 | 2) => void
-  appFontSize: TextScale
-  setAppFontSize: (value: TextScale) => void
   theme: ThemeName
   setTheme: (theme: ThemeName) => void
   customAccentColor: string
@@ -47,6 +45,9 @@ interface SettingsProps {
   setPersistentStorageEnabled: (enabled: boolean) => void
   browserPersistence: BrowserPersistenceStatus
   requestBrowserPersistence: () => Promise<boolean>
+  installAvailable: boolean
+  iosInstallHint: boolean
+  install: PwaStatus['install']
 }
 
 function SettingHelp({ text }: SettingHelpProps) {
@@ -95,12 +96,14 @@ function DateCommitInput({ value, applyLabel, onCommit, validate }: DateCommitIn
 
 export function Settings({
   config, update, updateInterest, termUnit, setTermUnit,
-  displayDecimals, setDisplayDecimals, appFontSize, setAppFontSize,
+  displayDecimals, setDisplayDecimals,
   theme, setTheme, customAccentColor, useCustomAccentColor,
   setCustomAccentColor, setUseCustomAccentColor, resetCustomAccentColor,
   persistentStorageEnabled, setPersistentStorageEnabled,
-  browserPersistence, requestBrowserPersistence
+  browserPersistence, requestBrowserPersistence,
+  installAvailable, iosInstallHint, install
 }: SettingsProps) {
+  const nativeApp = isNativeApp()
   const [newRateDate, setNewRateDate] = useState('')
   const [newRateAnnualRate, setNewRateAnnualRate] = useState(config.annualRate)
   const [rateError, setRateError] = useState('')
@@ -192,8 +195,8 @@ export function Settings({
         <div className="setting-item"><Field label="Годовая ставка" help="Процентная ставка банка. Влияет на начисленные проценты, долю тела в каждом платеже, переплату и срок после досрочных погашений."><div className="with-suffix"><NumberInput value={config.annualRate} min="0" max={MAX_PERCENT} step={RATE_STEP} onCommit={annualRate => commitConfig({ annualRate })}/><i>%</i></div></Field></div>
         <div className="setting-item"><Field label="Дата выдачи" help="День выдачи кредита и старт первого процентного периода. От него зависит количество дней до первого платежа."><DateCommitInput value={config.issueDate} applyLabel="Применить дату выдачи" onCommit={issueDate => commitConfig({ issueDate })} validate={issueDate => isAfterDateHorizon(issueDate, config.firstPaymentDate) ? `Первый платёж должен быть в пределах ${MAX_CALENDAR_YEARS} лет от даты выдачи` : ''}/></Field></div>
         <div className="setting-item"><Field label="Первый платёж" help="Первая плановая дата списания. Задает первый расчетный период и дальнейший календарь платежей."><DateCommitInput value={config.firstPaymentDate} applyLabel="Применить дату первого платежа" onCommit={firstPaymentDate => commitConfig({ firstPaymentDate })} validate={firstPaymentDate => isAfterDateHorizon(config.issueDate, firstPaymentDate) ? `Первый платёж должен быть в пределах ${MAX_CALENDAR_YEARS} лет от даты выдачи` : ''}/></Field></div>
-        <div className="setting-item"><label className="toggle-row"><div><b className="setting-title">Первый платёж только проценты<SettingHelp text="Первое списание погашает только проценты. Отдельный режим определяет, добавляется ли этот stub-период к сроку или занимает первый платёжный период договора."/></b><span>Без погашения тела в первую дату</span></div><input type="checkbox" checked={config.firstPaymentInterestOnly} onChange={e => commitConfig({ firstPaymentInterestOnly: e.target.checked })}/></label></div>
-        {config.firstPaymentInterestOnly && <div className="setting-item"><Field label="Первый interest-only период" help="«Добавить к сроку» сохраняет полное число амортизирующих платежей и сдвигает закрытие. «Включить в срок» сохраняет договорную дату, поэтому тело погашается за оставшиеся периоды."><select aria-label="Режим первого interest-only периода" value={config.firstPaymentInterestOnlyMode ?? 'addToTerm'} onChange={e => commitConfig({ firstPaymentInterestOnlyMode: e.target.value as NonNullable<LoanConfig['firstPaymentInterestOnlyMode']> })}><option value="addToTerm">Добавить к договорному сроку</option><option value="withinTerm">Включить в договорный срок</option></select></Field></div>}
+        <div className="setting-item"><label className="toggle-row"><div><b className="setting-title">Первый платёж только проценты<SettingHelp text="Первое списание погашает только проценты. Отдельный режим определяет, добавляется ли этот дополнительный процентный период к сроку или занимает первый платёжный период договора."/></b><span>Без погашения тела в первую дату</span></div><input type="checkbox" checked={config.firstPaymentInterestOnly} onChange={e => commitConfig({ firstPaymentInterestOnly: e.target.checked })}/></label></div>
+        {config.firstPaymentInterestOnly && <div className="setting-item"><Field label="Режим первого платежа только процентами" help="«Добавить к сроку» сохраняет полное число амортизирующих платежей и сдвигает закрытие. «Включить в срок» сохраняет договорную дату, поэтому тело погашается за оставшиеся периоды."><select aria-label="Режим первого платежа только процентами" value={config.firstPaymentInterestOnlyMode ?? 'addToTerm'} onChange={e => commitConfig({ firstPaymentInterestOnlyMode: e.target.value as NonNullable<LoanConfig['firstPaymentInterestOnlyMode']> })}><option value="addToTerm">Добавить к договорному сроку</option><option value="withinTerm">Включить в договорный срок</option></select></Field></div>}
         <div className="setting-item"><Field label="Срок кредита" help="Договорной срок. Используется для расчета регулярного платежа и для сравнения, сколько месяцев экономят досрочные погашения."><div className="term-control"><NumberInput min="1" step={termUnit === 'years' ? YEAR_TERM_STEP : 1} value={termUnit === 'years' ? Number((config.termMonths / MONTHS_PER_YEAR).toFixed(YEAR_TERM_FRACTION_DIGITS)) : config.termMonths} onCommit={value => commitConfig({ termMonths: Math.max(1, Math.round(value * (termUnit === 'years' ? MONTHS_PER_YEAR : 1))) })}/><select aria-label="Единица срока" value={termUnit} onChange={e => setTermUnit(e.target.value as 'months' | 'years')}><option value="months">месяцев</option><option value="years">лет</option></select></div></Field></div>
         <div className="setting-item"><Field label="День платежа" help="День месяца для следующих платежей. Меняет длину процентных периодов и даты строк графика."><NumberInput min="1" max={MAX_PAYMENT_DAY} step="1" value={config.paymentDay} onCommit={paymentDay => commitConfig({ paymentDay })}/></Field></div>
         <div className="setting-item"><Field label="Тип платежа" help="Аннуитет держит платеж почти постоянным, дифференцированный гасит равную часть тела. Меняет весь график и эффект досрочных платежей."><select value={config.paymentType} onChange={e => commitConfig({ paymentType: e.target.value as LoanConfig['paymentType'] })}><option value="annuity">Аннуитетный</option><option value="differentiated">Дифференцированный</option></select></Field></div>
@@ -250,7 +253,7 @@ export function Settings({
     </section>
 
     <section className="panel form-panel appearance-panel">
-      <div className="panel-head"><div><h3>Интерфейс</h3><p>Внешний вид, общий масштаб текста и формат отображения сумм</p></div></div>
+      <div className="panel-head"><div><h3>Интерфейс</h3><p>Тема, акцентный цвет и формат отображения сумм</p></div></div>
       <div className="form-grid">
         <div className="setting-item"><Field label="Цветовая схема" help="Меняет визуальную тему приложения. На расчеты и сохраненные данные не влияет.">
           <select value={theme} onChange={e => setTheme(e.target.value as ThemeName)}>
@@ -274,15 +277,21 @@ export function Settings({
           <input type="checkbox" checked={useCustomAccentColor} onChange={e => setUseCustomAccentColor(e.target.checked)}/>
         </label></div>
         <div className="setting-item"><label className="toggle-row">
-          <div><b className="setting-title">Постоянное сохранение<SettingHelp text="Если выключить, сохранённые кредиты удаляются из localStorage, а дальнейшие изменения остаются только в текущей вкладке. Перед закрытием скачайте JSON."/></b><span>{persistentStorageEnabled ? 'Кредиты хранятся в localStorage' : 'Данные только в памяти этой вкладки'}</span></div>
+          <div><b className="setting-title">Постоянное сохранение<SettingHelp text={nativeApp ? 'Если выключить, сохранённые кредиты удаляются из локального хранилища приложения, а дальнейшие изменения остаются только до закрытия приложения. Перед закрытием экспортируйте JSON.' : 'Если выключить, сохранённые кредиты удаляются из локального хранилища браузера, а дальнейшие изменения остаются только в текущей вкладке. Перед закрытием скачайте JSON.'}/></b><span>{persistentStorageEnabled ? nativeApp ? 'Кредиты хранятся локально на устройстве' : 'Кредиты хранятся в локальном хранилище браузера' : nativeApp ? 'Данные только до закрытия приложения' : 'Данные только в памяти этой вкладки'}</span></div>
           <input type="checkbox" checked={persistentStorageEnabled} onChange={e => setPersistentStorageEnabled(e.target.checked)}/>
         </label></div>
-        <div className="setting-item"><div className="toggle-row browser-persistence-row">
+        {!nativeApp && <div className="setting-item"><div className="toggle-row browser-persistence-row">
           <div><b className="setting-title">Защита хранилища браузером<SettingHelp text="Просит браузер не удалять данные приложения автоматически при нехватке места. Это не защищает от ручной очистки данных и не заменяет JSON-резервную копию."/></b><span>{!persistentStorageEnabled ? 'Сначала включите постоянное сохранение' : browserPersistence === 'persisted' ? 'Браузер подтвердил постоянное хранилище' : browserPersistence === 'checking' ? 'Проверяем режим хранения' : browserPersistence === 'requesting' ? 'Запрашиваем разрешение' : browserPersistence === 'unsupported' ? 'Этот браузер не поддерживает запрос' : browserPersistence === 'denied' ? 'Браузер пока не подтвердил защиту' : browserPersistence === 'failed' ? 'Не удалось проверить режим хранения' : 'Можно повысить устойчивость к автоматической очистке'}</span></div>
           {persistentStorageEnabled && !['persisted', 'checking', 'requesting', 'unsupported'].includes(browserPersistence) && <button type="button" className="ghost compact" onClick={() => { void requestBrowserPersistence() }}>{browserPersistence === 'available' ? 'Повысить надёжность' : 'Повторить'}</button>}
-        </div></div>
+        </div></div>}
+        {!nativeApp && installAvailable && <div className="setting-item"><div className="toggle-row">
+          <div><b className="setting-title">Установка приложения<SettingHelp text="Открывает системное предложение браузера. Автоматические напоминания об установке можно отключить независимо от этой кнопки."/></b><span>Установить CreditCalc как отдельное офлайн-приложение</span></div>
+          <button type="button" className="ghost compact" onClick={() => { void install() }}>Установить приложение</button>
+        </div></div>}
+        {!nativeApp && iosInstallHint && <div className="setting-item"><div className="toggle-row">
+          <div><b className="setting-title">Установка приложения</b><span>Откройте меню «Поделиться» и выберите «На экран Домой»</span></div>
+        </div></div>}
         <div className="setting-item"><Field label="Точность денежных сумм" help="Меняет только отображение сумм в интерфейсе. Расчетное ядро продолжает считать по выбранному правилу округления."><select value={displayDecimals} onChange={e => setDisplayDecimals(Number(e.target.value) as 0 | 2)}><option value="2">До копеек — 0,00 ₽</option><option value="0">До рублей — 0 ₽</option></select></Field></div>
-        <div className="setting-item"><Field label="Масштаб текста" help="Увеличивает текст приложения и графика для удобства чтения. На расчеты не влияет."><select value={appFontSize} onChange={e => setAppFontSize(e.target.value as TextScale)}><option value="normal">Обычный</option><option value="large">Крупнее</option><option value="xlarge">Максимальный</option></select></Field></div>
       </div>
     </section>
   </div>
