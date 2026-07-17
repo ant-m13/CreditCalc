@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-labelledby="title desc">
+  <title id="title">CreditCalc — досрочное погашение</title>
+  <desc id="desc">Уменьшающиеся столбцы графика и направленная вниз стрелка показывают сокращение долга.</desc>
+  <rect width="1024" height="1024" fill="#071a17"/>
+  <rect x="204" y="274" width="148" height="500" rx="54" fill="#e8fff7"/>
+  <rect x="438" y="404" width="148" height="370" rx="54" fill="#12b886"/>
+  <rect x="672" y="534" width="148" height="240" rx="54" fill="#74e0bf"/>
+  <path d="M246 214 480 344 714 474" fill="none" stroke="#12b886" stroke-width="66" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="m668 418 112 92-136 48" fill="none" stroke="#12b886" stroke-width="66" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="204" y="814" width="616" height="54" rx="27" fill="#e8fff7"/>
+</svg>

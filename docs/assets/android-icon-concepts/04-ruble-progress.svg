@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-labelledby="title desc">
+  <title id="title">CreditCalc — рубль и прогресс</title>
+  <desc id="desc">Геометрический знак рубля внутри разомкнутого кольца финансового прогресса.</desc>
+  <rect width="1024" height="1024" fill="#071a17"/>
+  <circle cx="512" cy="512" r="314" fill="none" stroke="#183f37" stroke-width="84"/>
+  <circle cx="512" cy="512" r="314" fill="none" stroke="#12b886" stroke-width="84" stroke-linecap="round" stroke-dasharray="1440 534" transform="rotate(-90 512 512)"/>
+  <path d="M432 314v396M432 340h134c99 0 154 51 154 130s-55 130-154 130H432M368 600h250M368 680h198" fill="none" stroke="#e8fff7" stroke-width="58" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="773" cy="695" r="54" fill="#12b886"/>
+  <path d="m744 696 20 20 40-46" fill="none" stroke="#071a17" stroke-width="26" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

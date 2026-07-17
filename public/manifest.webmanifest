@@ -1,8 +1,8 @@
 {
   "$schema": "https://json.schemastore.org/web-manifest-combined.json",
-  "name": "Кредитный калькулятор",
+  "name": "CreditCalc — кредитный график",
   "short_name": "CreditCalc",
-  "description": "Локальный кредитный калькулятор с досрочными погашениями, банковским графиком и экспортом.",
+  "description": "Бесплатный кредитный график с досрочными погашениями, локальными расчётами и экспортом. Без рекламы и аналитики.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
