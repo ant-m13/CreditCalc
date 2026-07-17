@@ -1,6 +1,6 @@
 # CreditCalc — кредитный график
 [![Pull request checks](https://github.com/ant-m13/CreditCalc/actions/workflows/pr-checks.yml/badge.svg)](https://github.com/ant-m13/CreditCalc/actions/workflows/pr-checks.yml)
-[![Deploy to GitHub Pages](https://github.com/ant-m13/CreditCalc/actions/workflows/deploy-pages.yml/badge.svg)](https://github.com/ant-m13/CreditCalc/actions/workflows/deploy-pages.yml)
+[![Release version](https://github.com/ant-m13/CreditCalc/actions/workflows/auto-release.yml/badge.svg)](https://github.com/ant-m13/CreditCalc/actions/workflows/auto-release.yml)
 [![Release](https://img.shields.io/github/v/release/ant-m13/CreditCalc?display_name=tag&sort=semver)](https://github.com/ant-m13/CreditCalc/releases)
 [![Version](https://img.shields.io/github/package-json/v/ant-m13/CreditCalc?label=version)](package.json)
 [![License](https://img.shields.io/github/license/ant-m13/CreditCalc)](LICENSE)
@@ -117,6 +117,7 @@ pnpm android:open
 ## Проверки перед публикацией
 
 ```bash
+pnpm lint:workflows
 pnpm lint
 pnpm typecheck
 pnpm test
@@ -155,20 +156,17 @@ pnpm audit --prod
 
 ## Публикация на GitHub Pages
 
-В проекте есть workflow `.github/workflows/deploy-pages.yml`.
+Основная публикация GitHub Pages выполняется внутри `.github/workflows/auto-release.yml` вместе с созданием релиза.
 
 Он выполняет:
 
-1. установку зависимостей;
-2. обязательный блокирующий audit production-зависимостей;
-3. запуск ESLint;
-4. запуск тестов;
-5. production-сборку;
-6. проверку состава PWA-сборки;
-7. production E2E, включая автономный запуск в repository scope;
-8. публикацию папки `dist` через GitHub Pages.
+1. использует уже проверенные исходники версии;
+2. собирает сайт с repository scope;
+3. проверяет состав PWA-сборки;
+4. запускает production E2E, включая автономный запуск;
+5. публикует папку `dist` через GitHub Pages после создания тега и GitHub Release.
 
-Для первого запуска в GitHub откройте `Settings → Pages` и выберите источник `GitHub Actions`. После этого публикация будет выполняться после успешного auto-release, при push release-тега `v*` или вручную через вкладку `Actions` с указанием существующего тега.
+Для первого запуска в GitHub откройте `Settings → Pages` и выберите источник `GitHub Actions`. После этого публикация будет выполняться при успешном выпуске версии. `.github/workflows/deploy-pages.yml` оставлен только для ручной повторной публикации уже существующего release-тега.
 
 Адрес опубликованного сайта обычно выглядит так:
 
@@ -182,15 +180,16 @@ https://<owner>.github.io/<repository>/
 
 Для релизов, публикации и обслуживания используются:
 
-- `.github/workflows/auto-release.yml` — при изменении версии в `package.json` проверяет проект, создаёт git-тег `vX.Y.Z`, собирает архив сайта, создаёт GitHub Release и запускает подписанную Android-сборку;
-- `.github/workflows/deploy-pages.yml` — публикует GitHub Pages только из release-тега после auto-release, прямого tag push или ручного запуска;
-- `.github/workflows/release-dist.yml` — ручной или резервный workflow для сборки релиза по уже существующему тегу;
-- `.github/workflows/android-release.yml` — автоматически после web-релиза или вручную собирает подписанный APK для существующего release-тега и прикрепляет APK с SHA-256 к тому же GitHub Release;
+- `.github/workflows/auto-release.yml` — единственный автоматический release-процесс: проверяет проект, создаёт git-тег `vX.Y.Z` и GitHub Release, публикует Pages и запускает подписанную Android-сборку;
+- `.github/workflows/deploy-pages.yml` — вручную повторно публикует GitHub Pages из уже существующего release-тега;
+- `.github/workflows/release-dist.yml` — вручную пересобирает архив сайта по уже существующему release-тегу;
+- `.github/workflows/android-release.yml` — автоматически использует результаты проверки основного release-процесса или при ручном запуске повторяет проверки и собирает подписанный APK для существующего release-тега;
 - `.github/dependabot.yml` — еженедельно проверяет обновления npm-зависимостей и GitHub Actions.
 
 Обычный выпуск версии:
 
 ```bash
+pnpm lint:workflows
 pnpm lint
 pnpm typecheck
 pnpm test

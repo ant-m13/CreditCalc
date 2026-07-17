@@ -64,7 +64,7 @@ keytool -genkeypair -v -keystore creditcalc-release.jks -alias creditcalc -keyal
 - `ANDROID_KEY_ALIAS` — alias ключа;
 - `ANDROID_KEY_PASSWORD` — пароль ключа.
 
-После успешного создания тега и web-релиза `auto-release.yml` автоматически вызывает Android workflow для того же `vX.Y.Z`. Он проверяет исходники, собирает подписанный APK, формирует SHA-256 и прикрепляет оба файла к GitHub Release. Ручной запуск `android-release.yml` сохраняется для повторной сборки существующего тега. Тот же APK загружается в RuStore.
+После успешной проверки исходников, создания тега и web-релиза `auto-release.yml` автоматически вызывает Android workflow для того же `vX.Y.Z`. Повторные audit, ESLint и unit-тесты при этом пропускаются: Android job проверяет версию, собирает подписанный APK, формирует SHA-256 и прикрепляет оба файла к GitHub Release. При ручном запуске `android-release.yml` для существующего тега проверки исходников включены по умолчанию. Тот же APK загружается в RuStore.
 
 ## Хранение данных и разрешения
 
