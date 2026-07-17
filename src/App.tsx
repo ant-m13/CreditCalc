@@ -5,7 +5,7 @@ import { ISO_DATE_LENGTH, JSON_INDENT_SPACES } from './constants'
 import { isRegularPaymentDate, validateScenario, type EarlyRepayment } from './loanEngine'
 import { useLoanStore } from './store'
 import { GraceList } from './components/GraceList'
-import { LoanSwitcher } from './components/LoanSwitcher'
+import { LoanSwitcher, type LoanSwitcherHandle } from './components/LoanSwitcher'
 import { SharedCalculationModal } from './components/SharedCalculationModal'
 import { PrintReport, StalePrintReport } from './components/PrintReport'
 import { SectionErrorBoundary } from './components/SectionErrorBoundary'
@@ -54,6 +54,7 @@ function App() {
   const pwaStatus = usePwaStatus()
   const shellRef = useRef<HTMLDivElement>(null)
   const sidebarRef = useRef<HTMLElement>(null)
+  const loanSwitcherRef = useRef<LoanSwitcherHandle>(null)
   const resetRows = useCallback(() => setRows(0), [])
   const {
     generatedRepayments,
@@ -232,6 +233,7 @@ function App() {
         if (sharedCalculation) declineSharedCalculation()
         else if (showOnboarding) finishOnboarding()
         else if (showWhatsNew) closeWhatsNew()
+        else if (loanSwitcherRef.current?.closeDialog()) return
         else if (mobileNav) setMobileNav(false)
         else if (showEarly) {
           setShowEarly(false)
@@ -343,7 +345,7 @@ function App() {
       <div className="sidebar-note"><ShieldCheck size={20}/><div><b>Расчёт локально</b><span>Ваши данные не покидают устройство</span></div></div>
     </aside>
     <main inert={mobileViewport && mobileNav ? true : undefined} aria-hidden={mobileViewport && mobileNav ? true : undefined}>
-      <header><button className="icon-btn menu-btn" aria-label="Открыть меню" onClick={() => setMobileNav(true)}><Menu/></button><div className="header-title"><p>Финансовый план · v{APP_VERSION}</p><h1>{section === 'overview' ? 'Ваш кредит' : nav.find(x => x[0] === section)?.[2]}</h1></div><LoanSwitcher loans={store.loans} activeLoanId={store.activeLoanId} switchLoan={store.switchLoan} createLoan={store.createLoan} renameLoan={store.renameLoan} removeLoan={store.removeLoan}/><button className="icon-btn theme-toggle" onClick={toggleNightTheme} title={store.theme === 'night' ? 'Вернуть светлую тему' : 'Включить ночной режим'} aria-label={store.theme === 'night' ? 'Вернуть светлую тему' : 'Включить ночной режим'}>{store.theme === 'night' ? <Sun/> : <Moon/>}</button><div className="header-actions"><span className={storageStatus.kind === 'saved' ? 'status-dot' : 'status-dot warning'}><i/> {storageStatus.kind === 'failed' ? 'Сохранение не удалось' : storageStatus.kind === 'nearQuota' ? 'Мало места' : storageStatus.kind === 'conflict' ? 'Конфликт сохранения' : storageStatus.kind === 'memoryOnly' ? 'Только в памяти' : 'Данные сохранены'}</span><button className="ghost print-action" onClick={printCalculated} disabled={calculatedResultsUnavailable} title={calculatedResultsUnavailable ? (isStale ? STALE_EXPORT_MESSAGE : 'Исправьте ошибки расчёта перед печатью') : undefined}><Printer size={16}/> Печать</button><button className="primary add-payment-action" onClick={() => openEarly()}><Plus size={17}/> Досрочный платёж</button></div></header>
+      <header><button className="icon-btn menu-btn" aria-label="Открыть меню" onClick={() => setMobileNav(true)}><Menu/></button><div className="header-title"><p>Финансовый план · v{APP_VERSION}</p><h1>{section === 'overview' ? 'Ваш кредит' : nav.find(x => x[0] === section)?.[2]}</h1></div><LoanSwitcher ref={loanSwitcherRef} loans={store.loans} activeLoanId={store.activeLoanId} switchLoan={store.switchLoan} createLoan={store.createLoan} renameLoan={store.renameLoan} removeLoan={store.removeLoan}/><button className="icon-btn theme-toggle" onClick={toggleNightTheme} title={store.theme === 'night' ? 'Вернуть светлую тему' : 'Включить ночной режим'} aria-label={store.theme === 'night' ? 'Вернуть светлую тему' : 'Включить ночной режим'}>{store.theme === 'night' ? <Sun/> : <Moon/>}</button><div className="header-actions"><span className={storageStatus.kind === 'saved' ? 'status-dot' : 'status-dot warning'}><i/> {storageStatus.kind === 'failed' ? 'Сохранение не удалось' : storageStatus.kind === 'nearQuota' ? 'Мало места' : storageStatus.kind === 'conflict' ? 'Конфликт сохранения' : storageStatus.kind === 'memoryOnly' ? 'Только в памяти' : 'Данные сохранены'}</span><button className="ghost print-action" onClick={printCalculated} disabled={calculatedResultsUnavailable} title={calculatedResultsUnavailable ? (isStale ? STALE_EXPORT_MESSAGE : 'Исправьте ошибки расчёта перед печатью') : undefined}><Printer size={16}/> Печать</button><button className="primary add-payment-action" onClick={() => openEarly()}><Plus size={17}/> Досрочный платёж</button></div></header>
       <div className="content">
         <PwaNotices status={pwaStatus} storageAtRisk={storageStatus.kind !== 'saved'} downloadBackup={() => download('json')}/>
         {importStatus?.kind === 'error' && section !== 'export' && <div className="alert alert-with-actions" role="alert"><span>{importStatus.text}</span><button className="ghost compact" onClick={() => setSection('export')}>Открыть импорт/экспорт</button></div>}

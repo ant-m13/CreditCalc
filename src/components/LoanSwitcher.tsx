@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react'
+import { forwardRef, useCallback, useImperativeHandle, useState } from 'react'
 import { Pencil, Plus, Trash2, X } from 'lucide-react'
 import type { LoanProfile } from '../store'
 import { useModalDialog } from '../hooks/useModalDialog'
@@ -6,13 +6,33 @@ import { Field } from './ui'
 
 type LoanSwitcherMode = 'create' | 'rename' | 'delete'
 
-export function LoanSwitcher({ loans, activeLoanId, switchLoan, createLoan, renameLoan, removeLoan }: { loans: LoanProfile[]; activeLoanId: string; switchLoan: (id: string) => void; createLoan: (name?: string, sourceLoanId?: string) => void; renameLoan: (id: string, name: string) => void; removeLoan: (id: string) => void }) {
+export interface LoanSwitcherHandle {
+  closeDialog: () => boolean
+}
+
+interface LoanSwitcherProps {
+  loans: LoanProfile[]
+  activeLoanId: string
+  switchLoan: (id: string) => void
+  createLoan: (name?: string, sourceLoanId?: string) => void
+  renameLoan: (id: string, name: string) => void
+  removeLoan: (id: string) => void
+}
+
+export const LoanSwitcher = forwardRef<LoanSwitcherHandle, LoanSwitcherProps>(function LoanSwitcher({ loans, activeLoanId, switchLoan, createLoan, renameLoan, removeLoan }, ref) {
   const activeLoan = loans.find(loan => loan.id === activeLoanId)
   const [mode, setMode] = useState<LoanSwitcherMode | null>(null)
   const [name, setName] = useState('')
   const [sourceLoanId, setSourceLoanId] = useState('')
   const [error, setError] = useState('')
   const closeModal = useCallback(() => setMode(null), [])
+  useImperativeHandle(ref, () => ({
+    closeDialog: () => {
+      if (!mode) return false
+      closeModal()
+      return true
+    }
+  }), [closeModal, mode])
   const openCreate = () => { setName(`Кредит ${loans.length + 1}`); setSourceLoanId(''); setError(''); setMode('create') }
   const openRename = () => { setName(activeLoan?.name ?? 'Мой кредит'); setError(''); setMode('rename') }
   const openDelete = () => { if (activeLoan && loans.length > 1) { setError(''); setMode('delete') } }
@@ -33,7 +53,7 @@ export function LoanSwitcher({ loans, activeLoanId, switchLoan, createLoan, rena
     setMode(null)
   }
   return <div className="loan-switcher"><label><span>Кредит</span><select value={activeLoanId} onChange={event => switchLoan(event.target.value)}>{loans.map(loan => <option key={loan.id} value={loan.id}>{loan.name}</option>)}</select></label><button className="icon-btn" onClick={openRename} title="Переименовать кредит" aria-label="Переименовать кредит"><Pencil/></button><button className="icon-btn" onClick={openCreate} title="Добавить кредит" aria-label="Добавить кредит"><Plus/></button><button className="icon-btn danger" onClick={openDelete} title={loans.length <= 1 ? 'Нельзя удалить единственный кредит' : 'Удалить кредит'} aria-label="Удалить кредит" disabled={loans.length <= 1}><Trash2/></button>{mode && <LoanSwitcherDialog mode={mode} loans={loans} activeLoan={activeLoan} name={name} sourceLoanId={sourceLoanId} error={error} setName={setName} setSourceLoanId={setSourceLoanId} submit={submit} confirmDelete={confirmDelete} close={closeModal}/>}</div>
-}
+})
 
 function LoanSwitcherDialog({ mode, loans, activeLoan, name, sourceLoanId, error, setName, setSourceLoanId, submit, confirmDelete, close }: { mode: LoanSwitcherMode; loans: LoanProfile[]; activeLoan?: LoanProfile; name: string; sourceLoanId: string; error: string; setName: (value: string) => void; setSourceLoanId: (value: string) => void; submit: () => void; confirmDelete: () => void; close: () => void }) {
   const { dialogRef, titleId } = useModalDialog(close)
