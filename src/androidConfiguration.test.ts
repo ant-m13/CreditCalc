@@ -43,7 +43,7 @@ describe('Android configuration', () => {
     expect(releaseWorkflow).toContain('workflow_call:')
     expect(releaseWorkflow).toContain('workflow_dispatch:')
     expect(releaseWorkflow).toContain('ANDROID_KEYSTORE_BASE64')
-    expect(releaseWorkflow).toContain('./gradlew --no-daemon clean assembleRelease')
+    expect(releaseWorkflow).toMatch(/chmod \+x gradlew\s+\.\/gradlew --no-daemon clean assembleRelease/)
     expect(releaseWorkflow).toContain('app-release.apk')
     expect(autoReleaseWorkflow).toContain('uses: ./.github/workflows/android-release.yml')
     expect(autoReleaseWorkflow).toContain('tag: ${{ needs.verify.outputs.tag }}')
