@@ -7,8 +7,10 @@ import { buildShareUrl, createLoanSnapshot, decodeSharedCalculation, encodeShare
 import { loanToBackupData, type LoanProfile } from '../store'
 import type { ImportStatus } from './useLoanImport'
 import { assertPortableJsonSize } from '../portabilityLimits'
-import { downloadBlob } from '../download'
+import { saveBlob } from '../download'
 import { BACKUP_FORMAT_VERSION } from '../protocolVersions'
+import { printDocument, shareBaseUrl } from '../platform'
+import { writeClipboardText } from '../clipboard'
 
 interface UseLoanExportOptions {
   loans: LoanProfile[]
@@ -24,7 +26,7 @@ const STALE_EXPORT_MESSAGE = 'Дождитесь окончания пересч
 
 const copyText = async (text: string) => {
   try {
-    await navigator.clipboard.writeText(text)
+    await writeClipboardText(text)
   } catch {
     const textarea = document.createElement('textarea')
     textarea.value = text
@@ -79,7 +81,9 @@ export const createSnapshotFromReadyCalculation = (loan: LoanProfile, calculated
 
 export function useLoanExport({ loans, activeLoanId, calculatedSchedule, calculatedExportsReady, calculationErrors, readyCalculationSnapshot, setImportStatus }: UseLoanExportOptions) {
   const activeLoan = useCallback(() => loans.find(item => item.id === activeLoanId) ?? loans[0], [loans, activeLoanId])
-  const print = useCallback(() => window.print(), [])
+  const print = useCallback(() => {
+    void printDocument().catch(error => setImportStatus({ kind: 'error', text: error instanceof Error ? error.message : 'Не удалось открыть печать' }))
+  }, [setImportStatus])
   const downloadRecovery = useCallback(() => {
     const loan = activeLoan()
     if (!loan) return
@@ -93,10 +97,11 @@ export function useLoanExport({ loans, activeLoanId, calculatedSchedule, calcula
       }, (_key, value) => typeof value === 'number' && !Number.isFinite(value) ? String(value) : value, JSON_INDENT_SPACES)
       assertPortableJsonSize(body)
       const safeName = loan.name.toLowerCase().replace(/[^a-zа-яё0-9]+/gi, '-').replace(/^-|-$/g, '') || 'credit'
-      downloadBlob(new Blob([body], { type: 'application/json' }), `credit-${safeName}.recovery.json`)
-      setImportStatus({ kind: 'success', text: 'Raw recovery backup исходных параметров сохранён; файл не является подтверждённым расчётом' })
+      void saveBlob(new Blob([body], { type: 'application/json' }), `credit-${safeName}.recovery.json`)
+        .then(() => setImportStatus({ kind: 'success', text: 'Резервная копия исходных параметров подготовлена; файл не является подтверждённым расчётом' }))
+        .catch(error => setImportStatus({ kind: 'error', text: error instanceof Error ? error.message : 'Не удалось сохранить резервную копию исходных параметров' }))
     } catch (error) {
-      setImportStatus({ kind: 'error', text: error instanceof Error ? error.message : 'Не удалось сохранить raw recovery backup' })
+      setImportStatus({ kind: 'error', text: error instanceof Error ? error.message : 'Не удалось сохранить резервную копию исходных параметров' })
     }
   }, [activeLoan, calculationErrors, setImportStatus])
 
@@ -159,7 +164,11 @@ export function useLoanExport({ loans, activeLoanId, calculatedSchedule, calcula
     }
 
     const safeName = loan.name.toLowerCase().replace(/[^a-zа-яё0-9]+/gi, '-').replace(/^-|-$/g, '') || 'credit'
-    downloadBlob(new Blob([body], { type }), `credit-${safeName}.${ext}`)
+    void saveBlob(new Blob([body], { type }), `credit-${safeName}.${ext}`)
+      .then(result => {
+        if (result === 'shared') setImportStatus({ kind: 'success', text: 'Файл подготовлен. Выберите приложение или место для сохранения.' })
+      })
+      .catch(error => setImportStatus({ kind: 'error', text: error instanceof Error ? error.message : 'Не удалось сохранить файл' }))
   }, [activeLoan, calculatedExportsReady, calculatedSchedule, calculationErrors, readyCalculationSnapshot, setImportStatus])
 
   const copyShareLink = useCallback(async () => {
@@ -167,7 +176,7 @@ export function useLoanExport({ loans, activeLoanId, calculatedSchedule, calcula
       const loan = activeLoan()
       if (!loan) return
       const snapshot = createSnapshotFromReadyCalculation(loan, calculatedExportsReady, calculationErrors, readyCalculationSnapshot)
-      const url = await buildShareUrl(snapshot, window.location.href)
+      const url = await buildShareUrl(snapshot, shareBaseUrl())
       await copyText(url)
       setImportStatus({ kind: 'success', text: `Ссылка на кредит «${loan.name}» скопирована. Ссылка содержит параметры кредита, досрочные платежи и льготные периоды. Не отправляйте её тем, кому не доверяете.` })
     } catch (error) {

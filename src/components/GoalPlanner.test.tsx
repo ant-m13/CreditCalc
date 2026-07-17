@@ -134,7 +134,13 @@ describe('GoalPlanner UI', () => {
     const compareButton = screen.getByRole('button', { name: 'Сравнить варианты' })
     expect(compareButton.parentElement).toBe(calculateButton.parentElement)
     await user.click(compareButton)
-    expect(screen.getByRole('table').parentElement?.classList.contains('force-mobile-table')).toBe(true)
+    const comparison = screen.getByRole('region', { name: 'Сравнение вариантов' })
+    expect(comparison.classList.contains('force-mobile-table')).toBe(true)
+    expect(comparison.getAttribute('tabindex')).toBe('0')
+    expect(screen.getByRole('table').parentElement).toBe(comparison)
+    expect(Array.from(comparison.querySelectorAll('tbody td'), cell => cell.getAttribute('data-label')).slice(0, 6)).toEqual([
+      'Вариант', 'Закрытие', 'Проценты', 'Комиссии', 'Доп. вложения', 'Всего банку'
+    ])
     await user.click(screen.getByRole('button', { name: 'Скрыть сравнение' }))
     expect(screen.queryByRole('table')).toBeNull()
 
@@ -191,14 +197,14 @@ describe('GoalPlanner UI', () => {
     expect(screen.getByRole('button', { name: 'Рассчитать план' })).toBeTruthy()
   })
 
-  it('показывает ошибку Worker и снимает состояние загрузки', async () => {
+  it('показывает ошибку фонового расчёта и снимает состояние загрузки', async () => {
     const user = userEvent.setup()
-    runnerMocks.calculate.mockImplementationOnce((_snapshot: unknown, _onResult: unknown, onError: (message: string) => void) => onError('Worker недоступен'))
+    runnerMocks.calculate.mockImplementationOnce((_snapshot: unknown, _onResult: unknown, onError: (message: string) => void) => onError('Фоновый расчёт недоступен'))
     render(<GoalPlanner {...props()}/>)
 
     await user.click(screen.getByRole('button', { name: 'Рассчитать план' }))
 
-    expect(screen.getByRole('alert').textContent).toContain('Worker недоступен')
+    expect(screen.getByRole('alert').textContent).toContain('Фоновый расчёт недоступен')
     expect(screen.getByRole('button', { name: 'Рассчитать план' })).toBeTruthy()
   })
 

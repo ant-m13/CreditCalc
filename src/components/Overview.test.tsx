@@ -60,4 +60,25 @@ describe('Overview debt metrics', () => {
 
     expect(screen.getByText(/Финальный платёж по выбранным настройкам/)).toBeTruthy()
   })
+
+  it('не объявляет один сценарий лучшим при одинаковой экономии с вариантом по операциям', () => {
+    const repayments = [{
+      id: 'reduce-term-only',
+      date: shortTestConfig.firstPaymentDate,
+      amount: 100_000,
+      amountMode: 'extra' as const,
+      strategy: 'reduceTerm' as const,
+      source: 'own' as const,
+      sameDayOrder: 'regularFirst' as const,
+      interestFirst: true
+    }]
+    const result = buildLoanCalculation({ config: shortTestConfig, repayments, repaymentRules: [], gracePeriods: [], selectedScenario: 'combined' })
+    const term = result.comparison!.scenarios.find(scenario => scenario.id === 'reduceTerm')!
+    const combined = result.comparison!.scenarios.find(scenario => scenario.id === 'combined')!
+
+    expect(term.interestSavings).toBeCloseTo(combined.interestSavings, 2)
+    render(<Overview config={shortTestConfig} displayDecimals={2} repayments={repayments} gracePeriods={[]} comparison={result.comparison!} selected={result.selected!} chartData={[]} onSelect={vi.fn()} onOpen={vi.fn()}/>)
+
+    expect(screen.queryByText('Макс. экономия процентов')).toBeNull()
+  })
 })

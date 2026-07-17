@@ -27,10 +27,10 @@ export const handleLoanCalculationWorkerRequest = (value: unknown): LoanCalculat
   if (!isWorkerRequestEnvelope(value)) return null
   const { requestId, revision } = value
   if (value.kind !== 'calculate') {
-    return { requestId, kind: 'error', revision, error: `Неизвестный тип запроса Worker: ${value.kind}` }
+    return { requestId, kind: 'error', revision, error: `Неизвестный тип запроса фонового расчёта: ${value.kind}` }
   }
   if (!isCalculationRequest(value)) {
-    return { requestId, kind: 'error', revision, error: 'Некорректные данные запроса Worker' }
+    return { requestId, kind: 'error', revision, error: 'Некорректные данные запроса фонового расчёта' }
   }
 
   let result: ReturnType<typeof buildLoanCalculation>

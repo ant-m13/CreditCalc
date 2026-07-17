@@ -1,0 +1,139 @@
+name: Build signed Android APK
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Тег релиза, например v1.8.0'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  verify-and-build:
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    env:
+      RELEASE_TAG: ${{ inputs.tag }}
+      ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/creditcalc-release.jks
+    steps:
+      - name: Validate tag and signing secrets
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          if [[ ! "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Некорректный тег релиза: $RELEASE_TAG"
+            exit 1
+          fi
+          git ls-remote --exit-code --tags \
+            "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" \
+            "refs/tags/${RELEASE_TAG}" >/dev/null
+          for name in ANDROID_KEYSTORE_BASE64 ANDROID_KEYSTORE_PASSWORD ANDROID_KEY_ALIAS ANDROID_KEY_PASSWORD; do
+            if [[ -z "${!name}" ]]; then
+              echo "GitHub Secret $name не настроен"
+              exit 1
+            fi
+          done
+
+      - name: Checkout release tag
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          ref: ${{ inputs.tag }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+
+      - name: Set up Java
+        uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9 # v4
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: gradle
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
+
+      - name: Install Android SDK 36
+        run: sdkmanager 'platforms;android-36' 'build-tools;36.0.0'
+
+      - name: Enable pnpm
+        run: corepack enable
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Verify source
+        run: |
+          VERSION="$(node -p "require('./package.json').version")"
+          if [[ "$RELEASE_TAG" != "v$VERSION" ]]; then
+            echo "Тег $RELEASE_TAG не соответствует версии package.json v$VERSION"
+            exit 1
+          fi
+          pnpm audit --prod
+          pnpm lint
+          pnpm test
+
+      - name: Build Android web assets
+        run: pnpm android:sync
+
+      - name: Restore release keystore
+        run: printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$ANDROID_KEYSTORE_PATH"
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+
+      - name: Build signed release APK
+        working-directory: android
+        run: ./gradlew --no-daemon clean assembleRelease
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+
+      - name: Prepare release files
+        run: |
+          VERSION="$(node -p "require('./package.json').version")"
+          cp android/app/build/outputs/apk/release/app-release.apk "CreditCalc-v${VERSION}.apk"
+          sha256sum "CreditCalc-v${VERSION}.apk" > "CreditCalc-v${VERSION}.apk.sha256"
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: CreditCalc-${{ inputs.tag }}-apk
+          path: |
+            CreditCalc-*.apk
+            CreditCalc-*.apk.sha256
+          if-no-files-found: error
+
+  publish:
+    needs: verify-and-build
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    env:
+      RELEASE_TAG: ${{ inputs.tag }}
+    steps:
+      - name: Download verified APK
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: CreditCalc-${{ inputs.tag }}-apk
+
+      - name: Attach APK to GitHub Release
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
+        with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          files: |
+            CreditCalc-*.apk
+            CreditCalc-*.apk.sha256
+          fail_on_unmatched_files: true

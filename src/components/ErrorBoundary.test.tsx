@@ -63,7 +63,7 @@ describe('ErrorBoundary', () => {
 
     const blob = createObjectURLMock.mock.calls[0][0] as Blob
     await expect(blob.text()).resolves.toBe('{}')
-    expect(screen.getByRole('status').textContent).toContain('localStorage недоступен')
+    expect(screen.getByRole('status').textContent).toContain('Локальное хранилище недоступно')
   })
 
   it('показывает понятное сообщение, если localStorage нельзя очистить', () => {
@@ -71,10 +71,10 @@ describe('ErrorBoundary', () => {
 
     render(<ErrorBoundary><BrokenApp/></ErrorBoundary>)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Запустить без localStorage' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Запустить без локального сохранения' }))
 
     expect(storage.removeItem).toHaveBeenCalledWith('ipoteka-calculator-v1')
-    expect(screen.getByRole('status').textContent).toContain('Не удалось очистить localStorage: storage blocked')
+    expect(screen.getByRole('status').textContent).toContain('Не удалось очистить локальное хранилище: storage blocked')
   })
 
   it('подсказывает ручную перезагрузку, если localStorage очищен, но reload не удался', () => {
@@ -93,11 +93,11 @@ describe('ErrorBoundary', () => {
 
     render(<ErrorBoundary reloadPage={reloadPage}><BrokenApp/></ErrorBoundary>)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Запустить без localStorage' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Запустить без локального сохранения' }))
 
     expect(storage.removeItem).toHaveBeenCalledWith('ipoteka-calculator-v1')
     expect(reloadPage).toHaveBeenCalled()
-    expect(screen.getByRole('status').textContent).toContain('localStorage очищен')
+    expect(screen.getByRole('status').textContent).toContain('Локальное хранилище очищено')
     expect(screen.getByRole('status').textContent).toContain('Ctrl+F5')
   })
 })

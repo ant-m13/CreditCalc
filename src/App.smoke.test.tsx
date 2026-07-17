@@ -46,8 +46,6 @@ const loan = (patch: Partial<LoanProfile> = {}): LoanProfile => ({
   selectedScenario: 'combined',
   termUnit: 'months',
   displayDecimals: 2,
-  appFontSize: 'normal',
-  scheduleFontSize: 'large',
   theme: 'emerald',
   customAccentColor: '#0b9873',
   useCustomAccentColor: false,
@@ -77,8 +75,6 @@ const sharedLoan = () => ({
   selectedScenario: 'reducePayment',
   termUnit: 'months' as const,
   displayDecimals: 2 as const,
-  appFontSize: 'normal' as const,
-  scheduleFontSize: 'large' as const,
   theme: 'ocean' as const
 })
 
@@ -89,6 +85,10 @@ const openSharedCalculation = async (data = sharedLoan()) => {
 }
 
 beforeEach(() => {
+  const themeColor = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]') ?? document.createElement('meta')
+  themeColor.name = 'theme-color'
+  themeColor.content = '#071a17'
+  if (!themeColor.isConnected) document.head.appendChild(themeColor)
   localStorage.clear()
   localStorage.setItem('credit-calculator-onboarding-done', 'yes')
   localStorage.setItem('credit-calculator-seen-version', APP_VERSION)
@@ -112,6 +112,8 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup()
+  delete document.documentElement.dataset.appTheme
+  document.querySelector('meta[name="theme-color"]')?.remove()
   vi.unstubAllGlobals()
 })
 
@@ -144,9 +146,24 @@ describe('App smoke tests', () => {
     render(<App />)
 
     expect(screen.getByRole('heading', { name: 'Ваш кредит' })).toBeTruthy()
-    expect(screen.getAllByText('Кредитный калькулятор').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('CreditCalc').length).toBeGreaterThan(0)
+    expect(screen.getByText('кредитный график')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Обзор' }).getAttribute('aria-current')).toBe('page')
     expect(screen.getByText('Данные сохранены')).toBeTruthy()
+    expect(screen.queryByLabelText('Быстрая настройка размера текста')).toBeNull()
+  }, SMOKE_TEST_TIMEOUT_MS)
+
+  it('окрашивает безопасную область страницы вместе с ночной темой', async () => {
+    render(<App />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Включить ночной режим' }))
+
+    await waitFor(() => expect(document.documentElement.dataset.appTheme).toBe('night'))
+    expect(document.querySelector<HTMLMetaElement>('meta[name="theme-color"]')?.content).toBe('#08111f')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Вернуть светлую тему' }))
+    await waitFor(() => expect(document.documentElement.dataset.appTheme).toBe('emerald'))
+    expect(document.querySelector<HTMLMetaElement>('meta[name="theme-color"]')?.content).toBe('#071a17')
   }, SMOKE_TEST_TIMEOUT_MS)
 
   it('монтирует печатный отчёт только на время печати', async () => {
@@ -173,7 +190,7 @@ describe('App smoke tests', () => {
     render(<App />)
 
     expect(await screen.findByRole('dialog', { name: 'Короткое знакомство' })).toBeTruthy()
-    expect(screen.getByText(/общего origin/)).toBeTruthy()
+    expect(screen.getByText(/общего домена/)).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Работать без сохранения' })).toBeTruthy()
   })
 

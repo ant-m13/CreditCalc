@@ -68,6 +68,30 @@ describe('Schedule', () => {
     expect(screen.getByText('Дата/месяц не найден')).toBeTruthy()
   })
 
+  it('переключает мобильный график между карточками и компактной таблицей', () => {
+    const { container } = render(<ScheduleProbe/>)
+
+    const quickActions = container.querySelector('.mobile-quick-actions')
+    expect(quickActions?.querySelectorAll('button')).toHaveLength(3)
+    expect(screen.getByRole('button', { name: 'Текущий год' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Следующий платёж' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Досрочные' })).toBeNull()
+    expect(container.querySelectorAll('.mobile-schedule-cards > .schedule-card')).toHaveLength(2)
+    expect(container.querySelector('.mobile-schedule-total')?.textContent).toContain('Итого за весь срок')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Таблица' }))
+    expect(screen.getByRole('button', { name: 'Карточки' })).toBeTruthy()
+    expect(container.querySelector('.mobile-schedule-table-wrap')).toBeTruthy()
+    expect(container.querySelector('.mobile-schedule-table-wrap td[data-label="Дата"]')).toBeTruthy()
+    expect(container.querySelector('.mobile-schedule-cards')).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Карточки' }))
+    expect(container.querySelectorAll('.mobile-schedule-cards > .schedule-card')).toHaveLength(2)
+
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Свернуть месяцы' }))
+    expect(container.querySelectorAll('.mobile-month-card')).toHaveLength(2)
+  })
+
   it('помечает базу года как неприменимую в формуле периодического метода', () => {
     const periodicConfig = { ...shortTestConfig, interest: { ...shortTestConfig.interest, method: 'annuity' as const } }
     const schedule = generateBaseSchedule(periodicConfig)

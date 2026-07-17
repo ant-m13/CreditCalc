@@ -78,7 +78,7 @@ export class GoalPlannerRunner {
     // Занятый Worker заменяется, чтобы новый запрос не ждал в очереди за устаревшим тяжёлым расчётом.
     if (this.activeRequestId !== null) this.cancelWorker()
     if (!canUseGoalPlannerWorker()) {
-      onError('Планировщик недоступен: браузер не поддерживает Web Worker')
+      onError('Планировщик недоступен: браузер не поддерживает фоновые вычисления')
       return
     }
 
@@ -89,7 +89,7 @@ export class GoalPlannerRunner {
         worker = new Worker(new URL('./goalPlanner.worker.ts', import.meta.url), { type: 'module' })
         this.worker = worker
       } catch {
-        onError('Не удалось запустить Worker планировщика')
+        onError('Не удалось запустить фоновый расчёт планировщика')
         return
       }
     }
@@ -115,32 +115,32 @@ export class GoalPlannerRunner {
     worker.onmessage = (event: MessageEvent<unknown>) => {
       const response = event.data
       if (!isWorkerResponseEnvelope(response)) {
-        fail('Worker планировщика вернул повреждённый ответ')
+        fail('Фоновый расчёт планировщика вернул повреждённый ответ')
         return
       }
       if (response.requestId !== requestId || response.revision !== request.snapshot.revision) {
-        fail('Worker планировщика вернул ответ для другого запроса')
+        fail('Фоновый расчёт планировщика вернул ответ для другого запроса')
         return
       }
       if (response.kind === 'error') {
-        fail(response.error || 'Worker планировщика не смог выполнить расчёт', true)
+        fail(response.error || 'Фоновый расчёт планировщика не смог выполнить вычисления', true)
         return
       }
       if (response.kind !== expectedKind) {
-        fail('Worker планировщика вернул неожиданный ответ')
+        fail('Фоновый расчёт планировщика вернул неожиданный ответ')
         return
       }
       if (settle(true)) onResult(response.result as T)
     }
     worker.onerror = event => {
       event.preventDefault()
-      fail('Worker планировщика завершился с ошибкой')
+      fail('Фоновый расчёт планировщика завершился с ошибкой')
     }
 
     try {
       worker.postMessage({ ...request, requestId } as GoalPlannerWorkerRequest)
     } catch {
-      fail('Не удалось передать данные в Worker планировщика')
+      fail('Не удалось передать данные в фоновый расчёт планировщика')
     }
   }
 

@@ -25,8 +25,6 @@ const loanProfile = (patch: Partial<LoanProfile> = {}): LoanProfile => ({
   selectedScenario: 'reduceTerm',
   termUnit: 'months',
   displayDecimals: 2,
-  appFontSize: 'normal',
-  scheduleFontSize: 'large',
   theme: 'emerald',
   customAccentColor: '#0b9873',
   useCustomAccentColor: false,
@@ -123,8 +121,6 @@ describe('миграция локального хранилища', () => {
         selectedScenario: 'reduceTerm',
         termUnit: 'months',
         displayDecimals: 2,
-        appFontSize: 'normal',
-        scheduleFontSize: 'large',
         theme: 'emerald'
       }]
     }) as any
@@ -147,7 +143,7 @@ describe('миграция локального хранилища', () => {
   })
 
   it('игнорирует повреждённые элементы массива loans и ограничивает их число', () => {
-    const validLoan = { id: 'valid', name: 'Рабочий', config: defaultConfig, repayments: [], repaymentRules: [], gracePeriods: [], selectedScenario: 'reduceTerm', termUnit: 'months', displayDecimals: 2, appFontSize: 'normal', scheduleFontSize: 'large', theme: 'emerald' }
+    const validLoan = { id: 'valid', name: 'Рабочий', config: defaultConfig, repayments: [], repaymentRules: [], gracePeriods: [], selectedScenario: 'reduceTerm', termUnit: 'months', displayDecimals: 2, theme: 'emerald' }
     const manyLoans = Array.from({ length: 105 }, (_, index) => ({ ...validLoan, id: `loan-${index}` }))
     const normalized = normalizePersistedState({ activeLoanId: 'valid', loans: [null, 15, 'broken', validLoan, ...manyLoans] }) as any
     expect(normalized.loans).toHaveLength(100)
@@ -171,8 +167,6 @@ describe('миграция локального хранилища', () => {
         selectedScenario: 'reduceTerm',
         termUnit: 'months',
         displayDecimals: 2,
-        appFontSize: 'normal',
-        scheduleFontSize: 'large',
         theme: 'emerald'
       }]
     }) as any
@@ -279,11 +273,9 @@ describe('миграция локального хранилища', () => {
           selectedScenario: 'reduceTerm',
           termUnit: 'months',
           displayDecimals: 2,
-          appFontSize: 'normal',
-          scheduleFontSize: 'large',
           theme: 'emerald'
         },
-        { id: 'duplicate', name: 'Второй', config: defaultConfig, repayments: [], repaymentRules: [], gracePeriods: [], selectedScenario: 'reduceTerm', termUnit: 'months', displayDecimals: 2, appFontSize: 'normal', scheduleFontSize: 'large', theme: 'emerald' }
+        { id: 'duplicate', name: 'Второй', config: defaultConfig, repayments: [], repaymentRules: [], gracePeriods: [], selectedScenario: 'reduceTerm', termUnit: 'months', displayDecimals: 2, theme: 'emerald' }
       ]
     }) as any
     expect(new Set(normalized.loans.map((loan: any) => loan.id)).size).toBe(2)
@@ -395,7 +387,7 @@ describe('миграция локального хранилища', () => {
   })
 
   it('не теряет валидный tail кредита после повреждённых первых 100 записей', () => {
-    const validLoan = { id: 'tail-loan', name: 'Хвост', config: defaultConfig, repayments: [], repaymentRules: [], gracePeriods: [], selectedScenario: 'reduceTerm', termUnit: 'months', displayDecimals: 2, appFontSize: 'normal', scheduleFontSize: 'large', theme: 'emerald' }
+    const validLoan = { id: 'tail-loan', name: 'Хвост', config: defaultConfig, repayments: [], repaymentRules: [], gracePeriods: [], selectedScenario: 'reduceTerm', termUnit: 'months', displayDecimals: 2, theme: 'emerald' }
     const brokenPrefix = Array.from({ length: MAX_LOANS }, (_, index) => ({ id: `broken-${index}` }))
     const normalized = normalizePersistedState({ activeLoanId: 'tail-loan', loans: [...brokenPrefix, validLoan] }) as any
 

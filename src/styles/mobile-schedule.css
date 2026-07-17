@@ -1,12 +1,29 @@
 /* Мобильный график платежей */
-.mobile-schedule-bar,.mobile-schedule-cards{display:none}
+.mobile-schedule-bar,.mobile-schedule-cards,.mobile-schedule-total{display:none}
 @media(max-width:720px){
   .mobile-schedule-bar{position:sticky;top:0;z-index:12;display:block;background:#f8fbfa;border:1px solid #d9e6e1;border-radius:14px;padding:12px;margin:0 0 14px;box-shadow:0 8px 22px #10231f12}
   .mobile-schedule-bar span,.mobile-schedule-bar b{display:block}.mobile-schedule-bar span{font-size:11px;text-transform:uppercase;letter-spacing:.1em;color:#6d817b;font-weight:800}.mobile-schedule-bar b{font-size:18px;margin-top:4px;color:#0b755a}
   .mobile-quick-actions{display:flex;flex-wrap:wrap;gap:7px;margin-top:10px}.mobile-quick-actions .compact{flex:1;min-width:120px}
   .table-wrap:not(.force-mobile-table){display:none}
   .mobile-schedule-cards{display:grid;gap:10px}
+  .mobile-schedule-table-wrap{display:block!important;overflow:visible;border:0;border-radius:0}
+  .mobile-schedule-table-wrap table,.mobile-schedule-table-wrap tbody,.mobile-schedule-table-wrap tr,.mobile-schedule-table-wrap td{display:block;width:100%}
+  .mobile-schedule-table-wrap table{min-width:0;white-space:normal;background:transparent}
+  .mobile-schedule-table-wrap thead{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
+  .mobile-schedule-table-wrap tbody{display:grid;gap:10px}
+  .mobile-schedule-table-wrap tbody>tr:not(.audit-row){overflow:hidden;border:1px solid var(--theme-line,#dfe8e5);border-radius:12px;background:var(--theme-surface,#fff)}
+  .mobile-schedule-table-wrap tbody>tr:not(.audit-row)>td{display:grid;grid-template-columns:minmax(112px,.85fr) minmax(0,1.15fr);gap:10px;align-items:start;padding:9px 11px;text-align:right;white-space:normal;overflow-wrap:anywhere}
+  .mobile-schedule-table-wrap tbody>tr:not(.audit-row)>td::before{content:attr(data-label);color:var(--theme-muted,#6d817b);font-size:10px;font-weight:800;text-align:left;text-transform:uppercase;letter-spacing:.04em}
+  .mobile-schedule-table-wrap tbody>tr:not(.audit-row)>td:last-child{border-bottom:0}
+  .mobile-schedule-table-wrap .schedule-cell-value{display:inline-flex;align-items:center;justify-content:flex-end;gap:6px}
+  .mobile-schedule-table-wrap .audit-spacer{display:none}
+  .mobile-schedule-table-wrap .audit-row{display:block}
+  .mobile-schedule-table-wrap .audit-row>td{display:block;padding:0;border:0}
   .schedule-card{border:1px solid #dfe8e5;background:white;border-radius:13px;padding:13px;scroll-margin-top:105px}.schedule-card.recalc-row{background:#f0faf6}.schedule-card>div:first-child{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:10px}.schedule-card>div:first-child span{font-size:11px;color:#7a8e88;font-weight:800}.schedule-card>div:first-child b{font-size:14px}
   .schedule-card dl{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:0 0 10px}.schedule-card dl div{border:1px solid #edf2f0;border-radius:10px;padding:9px;background:#fbfdfc}.schedule-card dt{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:#7d908a}.schedule-card dd{margin:4px 0 0;font-size:12px;font-weight:800;color:#203630}
   .mobile-audit{margin-top:10px}.mobile-audit .audit-card dl{grid-template-columns:1fr}.force-mobile-table{display:block!important}
+  .desktop-schedule-totals{display:none}
+  .mobile-schedule-total{display:block;margin-top:12px;padding:13px;border:1px solid var(--theme-line,#dfe8e5);border-radius:13px;background:var(--theme-surface,#fff);color:var(--theme-text,#203630)}
+  .mobile-schedule-total>b{display:block;margin-bottom:10px;font-size:13px}.mobile-schedule-total dl{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:0}.mobile-schedule-total dl div{padding:9px;border:1px solid var(--theme-line-soft,#edf2f0);border-radius:10px;background:var(--theme-surface-2,#fbfdfc)}.mobile-schedule-total dt{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--theme-muted,#7d908a)}.mobile-schedule-total dd{margin:4px 0 0;font-size:12px;font-weight:800}
+  .mobile-month-card>button{width:100%}.mobile-month-rows{display:grid;gap:8px;margin-top:10px;padding-top:10px;border-top:1px solid var(--theme-line-soft,#edf2f0)}.mobile-month-rows .schedule-card{box-shadow:0 4px 14px #10231f0d}
 }

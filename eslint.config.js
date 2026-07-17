@@ -5,7 +5,7 @@ import tseslint from 'typescript-eslint'
 
 export default tseslint.config(
   {
-    ignores: ['dist', 'coverage', 'node_modules', '*.tsbuildinfo']
+    ignores: ['dist', 'dist-android', 'android', 'coverage', 'node_modules', '*.tsbuildinfo']
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,

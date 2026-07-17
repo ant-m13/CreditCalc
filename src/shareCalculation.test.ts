@@ -56,8 +56,6 @@ const snapshot = () => createLoanSnapshot({
   selectedScenario: 'combined',
   termUnit: 'years',
   displayDecimals: 0,
-  appFontSize: 'xlarge',
-  scheduleFontSize: 'large',
   theme: 'violet'
 })
 
@@ -92,12 +90,10 @@ describe('ссылка на расчёт', () => {
     expect(decodedSnapshot.repaymentRules).toEqual(repaymentRules)
   })
 
-  it('сохраняет selectedScenario и настройки интерфейса', async () => {
+  it('сохраняет selectedScenario и актуальные настройки интерфейса', async () => {
     expect(decodedSnapshot.selectedScenario).toBe('combined')
     expect(decodedSnapshot.termUnit).toBe('years')
     expect(decodedSnapshot.displayDecimals).toBe(0)
-    expect(decodedSnapshot.appFontSize).toBe('xlarge')
-    expect(decodedSnapshot.scheduleFontSize).toBe('large')
     expect(decodedSnapshot.theme).toBe('violet')
   })
 
@@ -205,10 +201,10 @@ describe('ссылка на расчёт', () => {
     expect(decoded.gracePeriods).toEqual([])
   })
 
-  it('отсутствующие необязательные настройки получают значения по умолчанию', () => {
-    const decoded = parseLoanSnapshot({ version: 1, config, repayments: [], gracePeriods: [], selectedScenario: 'reduceTerm', settings: { termUnit: 'months', displayDecimals: 2, theme: 'emerald' } })
-    expect(decoded.appFontSize).toBe('normal')
-    expect(decoded.scheduleFontSize).toBe('large')
+  it('игнорирует устаревшие настройки масштаба', () => {
+    const decoded = parseLoanSnapshot({ version: 1, config, repayments: [], gracePeriods: [], selectedScenario: 'reduceTerm', settings: { termUnit: 'months', displayDecimals: 2, appFontSize: 'xlarge', scheduleFontSize: 'normal', theme: 'emerald' } })
+    expect(decoded).not.toHaveProperty('appFontSize')
+    expect(decoded).not.toHaveProperty('scheduleFontSize')
   })
 
   it('поддерживает старый payload ссылки без внутреннего поля version', () => {

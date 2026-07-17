@@ -12,7 +12,7 @@ describe('loan calculation Worker protocol', () => {
       requestId: 7,
       kind: 'error',
       revision: 'future-protocol',
-      error: 'Неизвестный тип запроса Worker: estimate'
+      error: 'Неизвестный тип запроса фонового расчёта: estimate'
     })
   })
 })

@@ -6,7 +6,6 @@ import type { EarlyRepayment, LoanConfig } from './loanEngine'
 import {
   balanceMoments,
   dayCountBases,
-  fontSizes,
   frequencies,
   graceTypes,
   interestMethods,
@@ -67,7 +66,7 @@ describe('portable schemas', () => {
       expect(validateRepaymentRuleStructure(rule)).toEqual([])
     }
 
-    const normalized = normalizeLoanData({ selectedScenario: scenarioIds.at(-1), termUnit: termUnits.at(-1), appFontSize: fontSizes.at(-1), scheduleFontSize: fontSizes[0], theme: themeNames.at(-1) })
-    expect(normalized).toMatchObject({ selectedScenario: 'combined', termUnit: 'years', appFontSize: 'xlarge', scheduleFontSize: 'normal', theme: 'night' })
+    const normalized = normalizeLoanData({ selectedScenario: scenarioIds.at(-1), termUnit: termUnits.at(-1), theme: themeNames.at(-1) })
+    expect(normalized).toMatchObject({ selectedScenario: 'combined', termUnit: 'years', theme: 'night' })
   })
 })

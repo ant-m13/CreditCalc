@@ -17,7 +17,6 @@ export const repaymentRuleTypes = ['weeklyFixed', 'monthlyFixed', 'bimonthlyFixe
 export const graceTypes = ['full', 'interestOnly', 'reduced', 'custom'] as const
 export const scenarioIds = ['base', 'reduceTerm', 'reducePayment', 'combined'] as const
 export const termUnits = ['months', 'years'] as const
-export const fontSizes = ['normal', 'large', 'xlarge'] as const
 export const themeNames = ['emerald', 'ocean', 'violet', 'graphite', 'warm', 'night'] as const
 
 export const isOneOf = <T extends string>(value: unknown, values: readonly T[]): value is T =>

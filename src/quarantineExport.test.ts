@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { createQuarantineExport, QUARANTINE_EXPORT_LIMITS, sanitizeQuarantineRaw } from './quarantineExport'
 
 describe('quarantine export', () => {
-  it('ограничивает глубину, массивы и строки в raw-данных', () => {
+  it('ограничивает глубину, массивы и строки в исходных данных', () => {
     const circular: Record<string, unknown> = { name: 'root' }
     circular.self = circular
     const sanitized = sanitizeQuarantineRaw({
@@ -12,13 +12,13 @@ describe('quarantine export', () => {
       circular
     }) as any
 
-    expect(sanitized.longText).toContain('[truncated]')
+    expect(sanitized.longText).toContain('[строка сокращена]')
     expect(sanitized.manyItems).toHaveLength(QUARANTINE_EXPORT_LIMITS.maxArrayItems)
-    expect(JSON.stringify(sanitized.deep)).toContain('[max-depth]')
-    expect(sanitized.circular.self).toBe('[circular]')
+    expect(JSON.stringify(sanitized.deep)).toContain('[достигнута предельная глубина]')
+    expect(sanitized.circular.self).toBe('[циклическая ссылка]')
   })
 
-  it('добавляет лимиты в скачиваемый quarantine JSON', () => {
+  it('добавляет лимиты в скачиваемый JSON карантина', () => {
     const exported = createQuarantineExport([{
       id: 'bad',
       name: 'Сбой',
@@ -28,7 +28,7 @@ describe('quarantine export', () => {
 
     expect(exported.limits).toEqual(QUARANTINE_EXPORT_LIMITS)
     expect(exported).toMatchObject({ format: 'sanitized-quarantine-v1', rawIsComplete: false })
-    expect(exported.notice).toContain('не побайтовый backup')
+    expect(exported.notice).toContain('не полная побайтовая копия')
     expect(exported.quarantinedLoans[0].raw).toEqual({ value: 'x' })
   })
 })

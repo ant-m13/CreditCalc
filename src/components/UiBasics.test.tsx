@@ -6,7 +6,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { GracePeriod, LoanConfig } from '../loanEngine'
 import { shortTestConfig } from '../testFixtures'
 import { Empty } from './Empty'
-import { FontControls } from './FontControls'
 import { GraceList } from './GraceList'
 import { Settings } from './Settings'
 import { Field, NumberInput } from './ui'
@@ -17,7 +16,7 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
-const settings = (loanId: string, config: LoanConfig, update = vi.fn(), updateInterest = vi.fn()) => <Settings
+const settings = (loanId: string, config: LoanConfig, update = vi.fn(), updateInterest = vi.fn(), pwa: { installAvailable?: boolean; iosInstallHint?: boolean; install?: () => Promise<'accepted' | 'dismissed' | 'unavailable'> } = {}) => <Settings
   key={loanId}
   config={config}
   update={update}
@@ -26,8 +25,6 @@ const settings = (loanId: string, config: LoanConfig, update = vi.fn(), updateIn
   setTermUnit={vi.fn()}
   displayDecimals={2}
   setDisplayDecimals={vi.fn()}
-  appFontSize="normal"
-  setAppFontSize={vi.fn()}
   theme="emerald"
   setTheme={vi.fn()}
   customAccentColor="#0b9873"
@@ -39,25 +36,19 @@ const settings = (loanId: string, config: LoanConfig, update = vi.fn(), updateIn
   setPersistentStorageEnabled={vi.fn()}
   browserPersistence="available"
   requestBrowserPersistence={vi.fn(async () => true)}
+  installAvailable={pwa.installAvailable ?? false}
+  iosInstallHint={pwa.iosInstallHint ?? false}
+  install={pwa.install ?? vi.fn(async () => 'unavailable' as const)}
 />
 
 describe('basic UI components', () => {
-  it('invokes empty-state and font-size actions at their boundaries', async () => {
+  it('вызывает действие пустого состояния', async () => {
     const user = userEvent.setup()
     const open = vi.fn()
-    const setFontSize = vi.fn()
-    const { rerender } = render(<><Empty title="Нет событий" action={open}/><FontControls fontSize="normal" setFontSize={setFontSize}/></>)
+    render(<Empty title="Нет событий" action={open}/>)
 
     await user.click(screen.getByRole('button', { name: 'Добавить' }))
     expect(open).toHaveBeenCalledOnce()
-    expect((screen.getByRole('button', { name: 'Уменьшить текст приложения' }) as HTMLButtonElement).disabled).toBe(true)
-    await user.click(screen.getByRole('button', { name: 'Увеличить текст приложения' }))
-    expect(setFontSize).toHaveBeenCalledWith('large')
-
-    rerender(<FontControls fontSize="xlarge" setFontSize={setFontSize}/>)
-    expect((screen.getByRole('button', { name: 'Увеличить текст приложения' }) as HTMLButtonElement).disabled).toBe(true)
-    await user.click(screen.getByRole('button', { name: 'Уменьшить текст приложения' }))
-    expect(setFontSize).toHaveBeenLastCalledWith('large')
   })
 
   it('renders grace periods and reports a failed removal without losing the list', async () => {
@@ -135,6 +126,23 @@ describe('basic UI components', () => {
     const nextSection = screen.getByText('Изменение ставки').closest('section')
     const nextRateDate = nextSection?.querySelector('input[type="date"]') as HTMLInputElement | null
     expect(nextRateDate?.value).toBe('')
+  })
+
+  it('показывает режим первого платежа полностью по-русски', () => {
+    render(settings('loan-a', { ...shortTestConfig, firstPaymentInterestOnly: true }))
+
+    expect(screen.getByLabelText('Режим первого платежа только процентами')).toBeTruthy()
+    expect(screen.queryByText('Масштаб текста')).toBeNull()
+    expect(document.body.textContent).not.toMatch(/interest-only|stub/i)
+  })
+
+  it('оставляет ручную установку доступной в настройках', () => {
+    const install = vi.fn(async () => 'accepted' as const)
+    render(settings('loan-a', shortTestConfig, vi.fn(), vi.fn(), { installAvailable: true, install }))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Установить приложение' }))
+
+    expect(install).toHaveBeenCalledOnce()
   })
 
   it('не применяет промежуточный год даты выдачи во время редактирования', () => {

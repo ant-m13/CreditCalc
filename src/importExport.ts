@@ -5,7 +5,7 @@ import type { RepaymentRule } from './repaymentRules'
 import { assertLoanCandidateValid } from './loanCandidate'
 import { MAX_EARLY_REPAYMENTS, MAX_GRACE_PERIODS, MAX_ID_LENGTH, MAX_MONEY_AMOUNT, MAX_PAYMENT_DAY, MAX_PERCENT, MAX_RATE_CHANGES, MAX_REPAYMENT_RULES, MAX_RULE_SKIP_MONTHS, MAX_TERM_MONTHS, MAX_TEXT_FIELD_LENGTH } from './loanEngine/limits'
 import { isISODate, isISOYearMonth } from './utils/dateValidation'
-import { balanceMoments, dayCountBases, firstInterestOnlyModes, fontSizes, frequencies, graceTypes, interestMethods, isOneOf as oneOf, migrateLegacyDayCountBasis, paymentTypes, periodStarts, rateChangeModes, repaymentOperationSources, repaymentRuleTypes, repaymentSources, repaymentStrategies, roundingModes, sameDayOrders, scenarioIds, supportedCurrencies, termUnits, themeNames } from './portableSchemas'
+import { balanceMoments, dayCountBases, firstInterestOnlyModes, frequencies, graceTypes, interestMethods, isOneOf as oneOf, migrateLegacyDayCountBasis, paymentTypes, periodStarts, rateChangeModes, repaymentOperationSources, repaymentRuleTypes, repaymentSources, repaymentStrategies, roundingModes, sameDayOrders, scenarioIds, supportedCurrencies, termUnits, themeNames } from './portableSchemas'
 import { normalizeAccentColor } from './accentColor'
 import { BACKUP_FORMAT_VERSION } from './protocolVersions'
 import { CURRENCY_DECIMAL_PLACES } from './constants'
@@ -19,8 +19,6 @@ export interface LoanBackupData {
   selectedScenario: string
   termUnit: 'months' | 'years'
   displayDecimals: 0 | 2
-  appFontSize?: 'normal' | 'large' | 'xlarge'
-  scheduleFontSize?: 'normal' | 'large' | 'xlarge'
   theme: 'emerald' | 'ocean' | 'violet' | 'graphite' | 'warm' | 'night'
   customAccentColor?: string
   useCustomAccentColor?: boolean
@@ -69,6 +67,9 @@ const optionalText = (value: unknown, label: string) => {
   return value
 }
 const valueOrDefault = <T>(value: unknown, fallback: T) => value === undefined ? fallback : value
+const repaymentAmountModeLabel = (mode: EarlyRepayment['amountMode']) => mode === 'totalWithFee'
+  ? 'общая сумма списания с учётом комиссии'
+  : 'сумма сверх регулярного платежа'
 
 const ensureUniqueIds = (items: { id: string }[], label: string) => {
   const seen = new Set<string>()
@@ -113,7 +114,7 @@ export function parseLoanBackupObject(raw: unknown): ValidatedLoanData {
   const interest = isObject(source.interest) ? source.interest : {}
   const importWarnings: string[] = []
   const dayCountBasisCandidate = migrateLegacyDayCountBasis(interest.dayCountBasis)
-  if (interest.dayCountBasis === '365') importWarnings.push('Legacy-база 365 преобразована в однозначную Actual/365 без изменения расчёта')
+  if (interest.dayCountBasis === '365') importWarnings.push('Устаревшая база 365 преобразована в правило «фактическое количество дней / 365» без изменения расчёта')
   let currency: LoanConfig['currency']
   if (source.currency === undefined) {
     currency = defaultConfig.currency
@@ -122,7 +123,7 @@ export function parseLoanBackupObject(raw: unknown): ValidatedLoanData {
     currency = source.currency
   } else if (source.currency === 'RUR') {
     currency = 'RUB'
-    importWarnings.push('Legacy-код валюты RUR преобразован в RUB без конвертации суммы')
+    importWarnings.push('Устаревший код валюты RUR преобразован в RUB без конвертации суммы')
   } else {
     throw new Error(`Валюта ${String(source.currency)} не поддерживается`)
   }
@@ -196,8 +197,8 @@ export function parseLoanBackupObject(raw: unknown): ValidatedLoanData {
     })
     const amountMode = context.normalizedAmountMode
     if (amountModeErrors.length || amountMode === null) throw new Error(amountModeErrors[0] ?? label)
-    if (item.amountMode === undefined) importWarnings.push(`${label}: отсутствующий legacy amountMode преобразован в ${amountMode}`)
-    else if (item.amountMode === 'total') importWarnings.push(`${label}: legacy amountMode total преобразован в totalWithFee`)
+    if (item.amountMode === undefined) importWarnings.push(`${label}: отсутствующий устаревший режим суммы преобразован в «${repaymentAmountModeLabel(amountMode)}»`)
+    else if (item.amountMode === 'total') importWarnings.push(`${label}: устаревший режим общей суммы преобразован в «${repaymentAmountModeLabel(amountMode)}»`)
     const enabled = item.enabled ?? true
     return {
       id,
@@ -292,12 +293,10 @@ export function parseLoanBackupObject(raw: unknown): ValidatedLoanData {
   const selectedScenario = selectedCandidate
   const termUnit = oneOf(settings.termUnit, termUnits) ? settings.termUnit : 'months'
   const displayDecimals = settings.displayDecimals === 0 ? 0 : CURRENCY_DECIMAL_PLACES
-  const appFontSize = oneOf(settings.appFontSize, fontSizes) ? settings.appFontSize : 'normal'
-  const scheduleFontSize = oneOf(settings.scheduleFontSize, fontSizes) ? settings.scheduleFontSize : 'large'
   const theme = oneOf(settings.theme, themeNames) ? settings.theme : 'emerald'
   const customAccentColor = normalizeAccentColor(hexColor(settings.customAccentColor) ? settings.customAccentColor : undefined)
   const useCustomAccentColor = typeof settings.useCustomAccentColor === 'boolean' ? settings.useCustomAccentColor : false
-  const result: ValidatedLoanData = { __validatedLoanData: VALIDATED_LOAN_DATA_MARKER, name, config, repayments, repaymentRules, gracePeriods, selectedScenario, termUnit, displayDecimals, appFontSize, scheduleFontSize, theme, customAccentColor, useCustomAccentColor, ...(importWarnings.length ? { importWarnings } : {}) }
+  const result: ValidatedLoanData = { __validatedLoanData: VALIDATED_LOAN_DATA_MARKER, name, config, repayments, repaymentRules, gracePeriods, selectedScenario, termUnit, displayDecimals, theme, customAccentColor, useCustomAccentColor, ...(importWarnings.length ? { importWarnings } : {}) }
   assertLoanCandidateValid(config, repayments, repaymentRules, gracePeriods)
   return result
 }
