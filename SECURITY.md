@@ -51,3 +51,9 @@ Export a recovery backup first if the data may still be needed. Then clear the f
 Alternatively, use the browser's “clear site data” control for `ant-m13.github.io`. Because storage is origin-wide, that action may also remove data belonging to other projects on the same GitHub Pages host. Deleting browser storage does not delete downloaded JSON/recovery files, copied parameter codes, shared URLs from browser history or copies already sent to other people; remove those separately.
 
 The same origin-wide clear operation also removes the PWA service worker and Cache Storage. The static shell will be downloaded again on the next online visit; financial data can be restored only from a separately retained JSON export.
+
+## Android Boundary
+
+The Android build embeds the reviewed static application with Capacitor and does not load a remote server URL. It declares no Internet permission, advertising SDK, analytics, crash reporting or Firebase integration. Android cloud backup is disabled so unencrypted WebView storage is not copied to a cloud account by the application manifest.
+
+Native export writes a temporary file in the application cache and opens the Android share sheet after an explicit user action. The receiving application then becomes a separate trust boundary. Release keystores are excluded from Git and supplied to CI only through protected secrets; every GitHub and RuStore APK update must use the same signing identity.
