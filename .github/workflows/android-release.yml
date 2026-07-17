@@ -124,7 +124,9 @@ jobs:
 
       - name: Build signed release APK
         working-directory: android
-        run: ./gradlew --no-daemon clean assembleRelease
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon clean assembleRelease
         env:
           ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/creditcalc-release.jks
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
