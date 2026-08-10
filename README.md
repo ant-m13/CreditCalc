@@ -5,10 +5,18 @@
 [![Version](https://img.shields.io/github/package-json/v/ant-m13/CreditCalc?label=version)](package.json)
 [![License](https://img.shields.io/github/license/ant-m13/CreditCalc)](LICENSE)
 [![Demo](https://img.shields.io/badge/demo-GitHub%20Pages-2ea44f?logo=github)](https://ant-m13.github.io/CreditCalc/)
+[![RuStore](https://img.shields.io/badge/RuStore-%D1%83%D1%81%D1%82%D0%B0%D0%BD%D0%BE%D0%B2%D0%B8%D1%82%D1%8C-0077FF)](https://www.rustore.ru/catalog/app/io.github.antm13.creditcalc)
+[![APK](https://img.shields.io/badge/APK-GitHub%20Release-181717?logo=github)](https://github.com/ant-m13/CreditCalc/releases/latest)
 
 Бесплатное веб- и Android-приложение для расчёта кредитного графика, сверки с банковским графиком и планирования досрочных погашений. В приложении нет рекламы и аналитики. Расчёты выполняются локально, данные сохраняются на устройстве.
 
 Веб-версия публикуется через GitHub Pages и устанавливается как PWA. Android-версия собирается через Capacitor и предназначена для распространения подписанным APK через GitHub Releases и RuStore.
+
+## Установка
+
+- **Android через RuStore (рекомендуется):** [установить CreditCalc из RuStore](https://www.rustore.ru/catalog/app/io.github.antm13.creditcalc).
+- **Android без магазина:** [скачать подписанный APK из последнего GitHub Release](https://github.com/ant-m13/CreditCalc/releases/latest). Рядом с APK опубликован файл `.sha256` для проверки целостности; обновления нужно устанавливать вручную.
+- **Веб-версия / PWA:** [открыть CreditCalc на GitHub Pages](https://ant-m13.github.io/CreditCalc/).
 
 ## Что умеет приложение
 
